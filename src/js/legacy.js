@@ -39740,6 +39740,30 @@ window.printUnifiedRx = function(deptId) {
     : [document.getElementById(deptId+'-advice')?.value || '', document.getElementById(deptId+'-extra-advice')?.value || ''].filter(Boolean).join('\n')) || '';
   const procDoneState = saveDept ? getProcedureDoneStateForDept(saveDept) : null;
   const procDonePrintLine = getProcedureDoneDisplayLabel(procDoneState);
+  const postSurgeryOtCase = postSurgeryRx && typeof findProcedureDoneOTCase === 'function'
+    ? findProcedureDoneOTCase(saveDept)
+    : null;
+  const postSurgerySavedState = latestDeptVisit?.procDone || window.CURRENT_PATIENT?.lastVisit?.procDone || null;
+  const postSurgeryProcedure = String(
+    procDoneState?.procedure || postSurgeryOtCase?.procedure || postSurgerySavedState?.procedure
+    || latestDeptVisit?.procedure || window.CURRENT_PATIENT?.lastVisit?.procedure || 'Surgery'
+  ).trim();
+  const postSurgeryEye = String(
+    procDoneState?.eye || postSurgeryOtCase?.site || postSurgeryOtCase?.eye || postSurgerySavedState?.eye || ''
+  ).trim();
+  const postSurgeryDateRaw = procDoneState?.doneAt || postSurgeryOtCase?.date || postSurgeryOtCase?.surgeryDate
+    || postSurgerySavedState?.doneAt || latestDeptVisit?.procedureDate || printDateValue || new Date();
+  const postSurgeryProcedureWithEye = postSurgeryEye && !/^(n\/?a|none)$/i.test(postSurgeryEye)
+    && !postSurgeryProcedure.toLowerCase().includes(postSurgeryEye.toLowerCase())
+    ? postSurgeryProcedure + ' - ' + postSurgeryEye
+    : postSurgeryProcedure;
+  const postSurgeryAdviceLine = postSurgeryRx
+    ? 'Post Op Medication Advice After ' + postSurgeryProcedureWithEye + ' on ' + (fmtIN(postSurgeryDateRaw) || today)
+    : '';
+  const postSurgeryAdviceSize = postSurgeryAdviceLine.length > 115 ? 8.5 : (postSurgeryAdviceLine.length > 90 ? 9.5 : 10.5);
+  const postSurgeryAdviceHtml = postSurgeryAdviceLine
+    ? '<div class="postop-advice-line" style="font-size:' + postSurgeryAdviceSize + 'px">' + escapeHtmlConsent(postSurgeryAdviceLine) + '</div>'
+    : '';
   const adviceHtml = String(advice || '').trim()
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
     : '';
@@ -39913,7 +39937,7 @@ window.printUnifiedRx = function(deptId) {
     return `<div class="design-rx design-${rxDesign}">
       ${drugs.map(function (d, i) {
         const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand || d.trade || '')) || '—';
-        const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name || d.generic || '')) || '';
+        const gen = ((typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name || d.generic || '')) || '').toUpperCase();
         const form = d.drugType || d.type || '';
         const route = getRxSiteLabel(d);
         const timings = getRxTimingsText(d);
@@ -40003,12 +40027,14 @@ window.printUnifiedRx = function(deptId) {
     return `<div class="design-dx compact">${joined}</div>`;
   };
   const renderAdviceFollowByDesign = function () {
-    if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return '';
+    if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return { advice: '', follow: '' };
     const adviceBlock = incAdvFinal && adviceHtml ? `<div class="design-side-card"><div class="design-side-title">Instructions</div><div class="design-side-body">${adviceHtml}</div></div>` : '';
     const followBlock = fuFormatted ? `<div class="design-follow ${rxDesign}">Next Visit: ${fuFormatted}</div>` : '';
-    if (!adviceBlock && !followBlock) return '';
-    if (rxDesign === 'compact_bilingual') return `<div class="design-bottom compact">${adviceBlock}${followBlock}</div>`;
-    return `<div class="design-bottom">${adviceBlock}${followBlock}</div>`;
+    const compactClass = rxDesign === 'compact_bilingual' ? ' compact' : '';
+    return {
+      advice: adviceBlock ? `<div class="design-bottom single${compactClass}">${adviceBlock}</div>` : '',
+      follow: followBlock ? `<div class="design-bottom single${compactClass}">${followBlock}</div>` : ''
+    };
   };
   const designedDiagnosis = renderDiagnosisByDesign();
   const designedMeds = renderMedsByDesign();
@@ -40049,7 +40075,7 @@ window.printUnifiedRx = function(deptId) {
   const bmhTableRows = function () {
     return drugs.map(function (drug, index) {
       const trade = rxDrugTradeName(drug) || '—';
-      const generic = rxDrugGenericName(drug) || '';
+      const generic = String(rxDrugGenericName(drug) || '').toUpperCase();
       const plain = bmhPlainInstruction(drug);
       const start = fmtIN(drug.dateFrom);
       const end = fmtIN(drug.dateTo);
@@ -40075,7 +40101,7 @@ window.printUnifiedRx = function(deptId) {
   const bmhOldRows = function (compact) {
     return '<ol class="bmh-old-rx-list ' + (compact ? 'compact' : '') + '">' + drugs.map(function (drug) {
       const trade = rxDrugTradeName(drug) || '—';
-      const generic = rxDrugGenericName(drug) || '';
+      const generic = String(rxDrugGenericName(drug) || '').toUpperCase();
       const plain = bmhPlainInstruction(drug);
       const heading = '<strong>' + escapeHtmlConsent(trade) + '</strong> (' + escapeHtmlConsent(bmhMedicineFormLabel(drug.drugType || drug.type)) + ')' + (generic ? ' - <span>' + escapeHtmlConsent(generic) + '</span>' : '');
       const taperLines = bmhTaperRowsForDrug(drug).map(function (taper, taperIndex) {
@@ -40089,6 +40115,7 @@ window.printUnifiedRx = function(deptId) {
   };
   const bmhComplaint = (deptId === 'oe' && incCC && cc) ? cc
     : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint
+    : (deptId === 'psych' && psychChief) ? psychChief
     : (deptId === 'skin' && skinChief) ? skinChief
     : '';
   const bmhObgHistoryHtml = deptId === 'obg' && obgIncObsHistory
@@ -40124,9 +40151,9 @@ window.printUnifiedRx = function(deptId) {
         + '<tr><td><b>OS</b></td>' + (showVA ? '<td>' + escapeHtmlConsent(vaOS || '—') + '</td>' : '') + (showIOP ? '<td>' + escapeHtmlConsent(iopGatOS ? iopGatOS + ' mmHg' : '—') + '</td>' : '') + (showIOP && (iopNctOD || iopNctOS) ? '<td>' + escapeHtmlConsent(iopNctOS ? iopNctOS + ' mmHg' : '—') + '</td>' : '') + (showCorrectedIOP ? '<td>' + escapeHtmlConsent(iopCorrOS || '—') + '</td>' : '') + (showVA ? '<td>' + escapeHtmlConsent(subjOSva || '—') + '</td>' : '') + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOS || '—') + '</td>' : '') + '</tr></tbody></table>')
     : '';
   const bmhEyeGlassHtml = deptId === 'oe' && showGL
-    ? bmhClinicalSection('Glass Prescription', '<table class="bmh-clinical-table"><thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th>' + (showNearAddColumn ? '<th>ADD</th>' : '') + '<th>DVA</th>' + (showNearVaColumn ? '<th>NVA</th>' : '') + '</tr></thead><tbody>'
-        + '<tr><td><b>OD</b></td><td>' + escapeHtmlConsent(rfODSph || '0') + '</td><td>' + escapeHtmlConsent(rfODCyl || '0') + '</td><td>' + escapeHtmlConsent(rfODAx || '0°') + '</td>' + (showNearAddColumn ? '<td>' + escapeHtmlConsent(addOD || '—') + '</td>' : '') + '<td>' + escapeHtmlConsent(subjODva || vaOD || '—') + '</td>' + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOD || '—') + '</td>' : '') + '</tr>'
-        + '<tr><td><b>OS</b></td><td>' + escapeHtmlConsent(rfOSSph || '0') + '</td><td>' + escapeHtmlConsent(rfOSCyl || '0') + '</td><td>' + escapeHtmlConsent(rfOSAx || '0°') + '</td>' + (showNearAddColumn ? '<td>' + escapeHtmlConsent(addOS || '—') + '</td>' : '') + '<td>' + escapeHtmlConsent(subjOSva || vaOS || '—') + '</td>' + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOS || '—') + '</td>' : '') + '</tr></tbody></table>' + (showIpdLine ? '<div class="bmh-clinical-note"><b>IPD:</b> ' + escapeHtmlConsent(ipdVal) + '</div>' : ''))
+    ? bmhClinicalSection('Glass Prescription', '<table class="bmh-clinical-table"><thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th><th>DVA</th>' + (showNearAddColumn ? '<th>ADD</th>' : '') + (showNearVaColumn ? '<th>NVA</th>' : '') + '</tr></thead><tbody>'
+        + '<tr><td><b>OD</b></td><td>' + escapeHtmlConsent(rfODSph || '0') + '</td><td>' + escapeHtmlConsent(rfODCyl || '0') + '</td><td>' + escapeHtmlConsent(rfODAx || '0°') + '</td><td>' + escapeHtmlConsent(subjODva || vaOD || '—') + '</td>' + (showNearAddColumn ? '<td>' + escapeHtmlConsent(addOD || '—') + '</td>' : '') + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOD || '—') + '</td>' : '') + '</tr>'
+        + '<tr><td><b>OS</b></td><td>' + escapeHtmlConsent(rfOSSph || '0') + '</td><td>' + escapeHtmlConsent(rfOSCyl || '0') + '</td><td>' + escapeHtmlConsent(rfOSAx || '0°') + '</td><td>' + escapeHtmlConsent(subjOSva || vaOS || '—') + '</td>' + (showNearAddColumn ? '<td>' + escapeHtmlConsent(addOS || '—') + '</td>' : '') + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOS || '—') + '</td>' : '') + '</tr></tbody></table>' + (showIpdLine ? '<div class="bmh-clinical-note"><b>IPD:</b> ' + escapeHtmlConsent(ipdVal) + '</div>' : ''))
     : '';
   const bmhColourVisionHtml = deptId === 'oe' && showCV
     ? bmhClinicalSection('Colour Vision', '<b>OD:</b> ' + escapeHtmlConsent(colorVision.od) + ' &nbsp; | &nbsp; <b>OS:</b> ' + escapeHtmlConsent(colorVision.os))
@@ -40137,8 +40164,8 @@ window.printUnifiedRx = function(deptId) {
   const bmhPositiveFindingsHtml = bmhPositiveFindings.length
     ? bmhClinicalSection('Positive Findings', bmhPositiveFindings.map(escapeHtmlConsent).join('; '))
     : '';
-  const bmhApprovedPreRxHtml = (bmhComplaint ? bmhClinicalSection('Chief Complaints', escapeHtmlConsent(bmhComplaint)) : '')
-    + bmhObgHistoryHtml + bmhObgPresentHtml + bmhObgVitalsHtml
+  const bmhComplaintHtml = bmhComplaint ? bmhClinicalSection('Chief Complaints', escapeHtmlConsent(bmhComplaint)) : '';
+  const bmhApprovedPreRxHtml = bmhObgHistoryHtml + bmhObgPresentHtml + bmhObgVitalsHtml
     + bmhEyeVitalsHtml + bmhEyeGlassHtml + bmhColourVisionHtml + bmhPositiveFindingsHtml;
   const bmhProcedureDoneHtml = procDonePrintLine
     ? bmhClinicalSection('Procedure Done', escapeHtmlConsent(procDonePrintLine))
@@ -40151,21 +40178,27 @@ window.printUnifiedRx = function(deptId) {
   const bmhApprovedMeds = rxDesign === 'tabular_1' || rxDesign === 'tabular_2'
     ? '<table class="bmh-approved-table ' + (rxDesign === 'tabular_2' ? 'roomy' : 'compact') + '"><thead>' + bmhTableHeader() + '</thead><tbody>' + bmhTableRows() + '</tbody></table>'
     : bmhOldRows(rxDesign === 'old_software_compact');
+  const bmhProcedureAdvisedHtml = !psychPrescriptionPrintOnly && incPrcFinal && procs.length
+    ? '<div class="sec-divider"><span class="sec-label">Procedure / Surgery Advised</span></div>'
+      + procs.map(function (proc) { return '<div class="proc-item">&#9890; ' + escapeHtmlConsent(expandProcedureLabelForPrint(proc)) + '</div>'; }).join('')
+    : '';
   const bmhApprovedLayoutHtml = isBmhPrescriptionLayout ? `
     <section class="bmh-approved-layout bmh-${rxDesign}">
       <div class="bmh-approved-identity">
         <div><div class="bmh-approved-patient">${escapeHtmlConsent(ptName)}</div><div><strong>Age/Sex:</strong> ${escapeHtmlConsent(ptAge)}</div><div><strong>BMSH ID:</strong> ${escapeHtmlConsent(ptId)}</div>${ptMob ? `<div><strong>Phone:</strong> ${escapeHtmlConsent(ptMob)}</div>` : ''}<div class="bmh-approved-date"><strong>Date:</strong> ${escapeHtmlConsent(today)}</div></div>
         <div class="bmh-approved-doctor"><div>${escapeHtmlConsent(doctorName)}</div>${doctorSpec ? `<span>${escapeHtmlConsent(doctorSpec)}</span>` : ''}${doctorDegrees ? `<span>${escapeHtmlConsent(doctorDegrees)}</span>` : ''}${doctorReg ? `<span>Regd. No.: ${escapeHtmlConsent(doctorReg)}</span>` : ''}</div>
       </div>
+      ${bmhComplaintHtml}
       ${dxList.length ? `<div class="bmh-approved-diagnosis"><strong>Diagnosis</strong><div>${bmhDiagnosisHtml}</div></div>` : ''}
+      ${postSurgeryAdviceHtml}
       ${bmhApprovedPreRxHtml}
       <div class="bmh-approved-rx-mark">Rx</div>
       ${bmhApprovedMeds}
+      ${incAdvFinal && adviceHtml ? `<div class="bmh-approved-advice"><strong>Instructions</strong><div>${adviceHtml}</div></div>` : ''}
+      ${bmhProcedureAdvisedHtml}
       ${bmhProcedureDoneHtml}
       ${bmhInvestigationsHtml}
       ${fuFormatted ? `<div class="bmh-approved-follow"><strong>Follow-up:</strong> ${escapeHtmlConsent(fuFormatted)}</div>` : ''}
-      ${incAdvFinal && adviceHtml ? `<div class="bmh-approved-advice"><strong>Instructions</strong><div>${adviceHtml}</div></div>` : ''}
-      ${!psychPrescriptionPrintOnly && incPrcFinal && procs.length ? `<div class="bmh-approved-procedures"><strong>Procedure / Surgery Advised</strong><div>${procs.map(function (proc) { return escapeHtmlConsent(expandProcedureLabelForPrint(proc)); }).join('<br>')}</div></div>` : ''}
     </section>` : '';
   // option_a and option_b are CSS-only variants of the 'current' rx-list layout.
   // They must use the same inline rx-list renderer — NOT the designedMeds block.
@@ -40184,7 +40217,7 @@ body{zoom:.94}
 .watermark{display:none!important}
 }
 body > *:not(.lh-img){filter:grayscale(1)}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:0;filter:none!important}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:-6px;filter:none!important}
 .bmh-approved-layout{color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35;margin-top:0}
 .bmh-approved-layout *{color:#000!important;background:#fff!important;border-color:#000!important;box-shadow:none!important}
 .bmh-approved-identity{display:grid;grid-template-columns:1fr minmax(190px,.7fr);gap:28px;border-bottom:1.5px solid #000;padding:2px 0 8px;margin-bottom:9px}
@@ -40221,7 +40254,7 @@ body > *:not(.lh-img){filter:grayscale(1)}
 .diag-text{font-size:11.2px;font-weight:700;text-align:left;color:#111;padding:2px 0 2px 50%;line-height:1.35}
 .diag-line{display:block;margin:0 0 2px;break-inside:avoid}
 /* Post-surgery flag */
-.postsurg-flag{font-size:10px;font-weight:800;color:#222;border:1.5px solid #555;display:inline-block;padding:2px 10px;border-radius:3px;margin-bottom:4px;letter-spacing:.3px}
+.postop-advice-line{display:block;width:100%;margin:4px 0 6px;padding:4px 0;border-top:1px solid #000;border-bottom:1px solid #000;color:#000;font-family:Arial,Helvetica,sans-serif;font-weight:900;line-height:1.25;letter-spacing:0;white-space:nowrap;text-align:left}
 /* Complaint / plain text block */
 .cc-text{font-size:9.6px;color:#333;font-style:italic;margin:1px 0 2px;padding-left:6px}
 /* Dept card (OBG summary, PSY MSE, skin exam) */
@@ -40383,6 +40416,7 @@ tr:nth-child(even) td{background:#fafafa}
 .design-taper.editorial_columns,.design-taper.left_label_ledger,.design-taper.vertical_dx_column,.design-taper.mono_chart{border-radius:10px;background:#f6f6f6;border:1px solid #d2d2d2;padding:9px 10px}
 .design-taper.editorial_columns .design-taper-title,.design-taper.left_label_ledger .design-taper-title,.design-taper.vertical_dx_column .design-taper-title,.design-taper.mono_chart .design-taper-title{color:#333}
 .design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin-top:8px;page-break-inside:avoid;break-inside:avoid}
+.design-bottom.single{grid-template-columns:1fr}
 .design-bottom.compact{grid-template-columns:1fr}
 .design-bottom.vertical_dx_column{grid-template-columns:1fr 240px}
 .design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:11px 12px;background:#fff}
@@ -40414,8 +40448,6 @@ ${bmhApprovedLayoutHtml}
 </div>
 <div class="pt-subline">${ptMob ? `&#9990; ${ptMob} &nbsp;|&nbsp; ` : ''}BMSH ID: ${ptId}</div>
 
-${postSurgeryRx ? `<div style="margin:4px 0"><span class="postsurg-flag">POST-SURGERY PRESCRIPTION</span></div>` : ''}
-
 ${(!psychPrescriptionPrintOnly && ((incCC && cc) || (deptId==='obg' && obgIncComplaint && obgComplaint) || (deptId==='psych' && psychChief) || (deptId==='skin' && skinChief))) ? `
 <div class="sec-divider"><span class="sec-label">Chief Complaints</span></div>
 <div class="cc-text">${escapeHtmlConsent(
@@ -40431,6 +40463,7 @@ ${(!psychPrescriptionPrintOnly && deptId!=='skin' && dxList.length && rxDesign =
 <div class="diag-text">${dxList.map(function (d) { return '<span class="diag-line">' + escapeHtmlConsent(d) + '</span>'; }).join('')}</div>
 <div class="diag-rule-bot"></div>` : ''}
 ${(!psychPrescriptionPrintOnly && deptId!=='skin' && rxDesign !== 'current') ? designedDiagnosis : ''}
+${postSurgeryAdviceHtml}
 
 ${deptId==='obg' && obgIncObsHistory && obgPrescriptionPregnancySummary.historyLines.length ? `
 <div class="obg-print-box">
@@ -40491,10 +40524,10 @@ ${showGL ? `
 <div class="oe-eye-block">
 <div class="sec-divider"><span class="sec-label">Glass Prescription</span></div>
 <table class="oe-eye-table">
-  <thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th>${showNearAddColumn?'<th>ADD</th>':''}<th>DVA</th>${showNearVaColumn?'<th>NVA</th>':''}</tr></thead>
+  <thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th><th>DVA</th>${showNearAddColumn?'<th>ADD</th>':''}${showNearVaColumn?'<th>NVA</th>':''}</tr></thead>
   <tbody>
-    <tr><td><b>OD (Right)</b></td><td>${rfODSph||'0'}</td><td>${rfODCyl||'0'}</td><td>${rfODAx||'0°'}</td>${showNearAddColumn?`<td>${addOD||'—'}</td>`:''}<td>${subjODva||vaOD||'—'}</td>${showNearVaColumn?`<td>${nvOD||'—'}</td>`:''}</tr>
-    <tr><td><b>OS (Left)</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td>${showNearAddColumn?`<td>${addOS||'—'}</td>`:''}<td>${subjOSva||vaOS||'—'}</td>${showNearVaColumn?`<td>${nvOS||'—'}</td>`:''}</tr>
+    <tr><td><b>OD (Right)</b></td><td>${rfODSph||'0'}</td><td>${rfODCyl||'0'}</td><td>${rfODAx||'0°'}</td><td>${subjODva||vaOD||'—'}</td>${showNearAddColumn?`<td>${addOD||'—'}</td>`:''}${showNearVaColumn?`<td>${nvOD||'—'}</td>`:''}</tr>
+    <tr><td><b>OS (Left)</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td><td>${subjOSva||vaOS||'—'}</td>${showNearAddColumn?`<td>${addOS||'—'}</td>`:''}${showNearVaColumn?`<td>${nvOS||'—'}</td>`:''}</tr>
   </tbody>
 </table>
 ${showIpdLine ? `<div class="oe-ipd-line">IPD - ${escapeHtmlConsent(ipdVal)}</div>` : ''}
@@ -40511,7 +40544,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && isListDesign ? (
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
-    const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
+    const gen = ((typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—').toUpperCase();
     const form = d.drugType || d.type || '';
     const route = getRxSiteLabel(d);
     const timings = getRxTimingsText(d);
@@ -40559,7 +40592,7 @@ ${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && isListDesign ? (
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
-    const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
+    const gen = ((typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—').toUpperCase();
     const form = d.drugType || d.type || '';
     const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
@@ -40596,6 +40629,11 @@ ${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && isListDesign ? (
 
 ${!incRxFinal || !drugs.length ? rxEmptyNote : ''}
 
+${incAdvFinal && adviceHtml && isListDesign ? `
+<div class="sec-divider"><span class="sec-label">Instructions</span></div>
+<div class="advice-block">${adviceHtml}</div>` : ''}
+${!isListDesign ? designedAdviceFollow.advice : ''}
+
 ${!psychPrescriptionPrintOnly && incPrcFinal && procs.length ? `
 <div class="sec-divider"><span class="sec-label">Procedure / Surgery Advised</span></div>
 ${procs.map(p=>`<div class="proc-item">&#9890; ${expandProcedureLabelForPrint(p)}</div>`).join('')}` : ''}
@@ -40610,12 +40648,8 @@ ${!psychPrescriptionPrintOnly && incInvFinal && patientInvestigationPrintRows.le
 ${patientInvestigationPrintRows.map((o,oi)=>`<div class="inv-chip"><span style="font-weight:400;color:#888;margin-right:4px">${oi+1}.</span>${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
 </div>` : ''}
 
-${incAdvFinal && adviceHtml && isListDesign ? `
-<div class="sec-divider"><span class="sec-label">Instructions</span></div>
-<div class="advice-block">${adviceHtml}</div>` : ''}
-
 ${fuFormatted && isListDesign ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fuFormatted}</span></div>` : ''}
-${!isListDesign ? designedAdviceFollow : ''}
+${!isListDesign ? designedAdviceFollow.follow : ''}
 
 <div class="sig-row">
   <div></div>
@@ -46684,7 +46718,8 @@ body{font-family:${fonts.body}}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .rx-item-name,.design-med-name,.bmh-old-med-heading strong,.bmh-rx-med strong{font-family:${fonts.heading};font-size:${t.medicineSize}px!important;overflow-wrap:anywhere;word-break:normal}
-.rx-item-gen,.design-med-sub,.bmh-old-med-heading span,.bmh-rx-med>span,.bmh-rx-med small{font-size:${genericSize}px!important;overflow-wrap:anywhere;word-break:normal}
+.rx-item-gen,.design-med-sub,.bmh-old-med-heading span,.bmh-rx-med small{font-family:Arial,Helvetica,sans-serif!important;font-size:${genericSize}px!important;font-style:normal!important;text-transform:uppercase!important;overflow-wrap:anywhere;word-break:normal}
+.bmh-rx-med>span{font-family:Arial,Helvetica,sans-serif!important;font-size:${genericSize}px!important;text-transform:uppercase!important;overflow-wrap:anywhere;word-break:normal}
 .diag-text,.design-dx-body,.design-dx-lines{font-family:${fonts.body};font-size:${diagnosisSize}px!important}
 .rx-item-instr,.design-med-instr,.bmh-old-med-line,.bmh-old-taper-line,.bmh-approved-table td.bmh-rx-instructions{font-size:${instructionSize}px!important;line-height:1.48!important;overflow-wrap:anywhere;word-break:normal;white-space:normal}
 .bmh-approved-table th{font-size:${t.headingSize}px!important}
@@ -47075,7 +47110,7 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
 body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.34;overflow:hidden}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:0}
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
 .pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
 .pt-meta{font-size:10px;font-weight:300;color:#555;margin-left:8px;font-style:italic}
