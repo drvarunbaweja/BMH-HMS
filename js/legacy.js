@@ -39201,15 +39201,15 @@ function rxDurationPlainEn(dur) {
 function rxDurationPlain(dur, lang) {
   const en = rxDurationPlainEn(dur);
   if (lang === 'hi') {
-    return en.replace(/(\d+)\s*day/gi, '$1 दिन')
-      .replace(/(\d+)\s*week/gi, '$1 सप्ताह')
-      .replace(/(\d+)\s*month/gi, '$1 महीना')
+    return en.replace(/(\d+)\s*days?/gi, function (_, count) { return count + ' दिन'; })
+      .replace(/(\d+)\s*weeks?/gi, function (_, count) { return count + (Number(count) === 1 ? ' हफ्ता' : ' हफ्ते'); })
+      .replace(/(\d+)\s*months?/gi, function (_, count) { return count + (Number(count) === 1 ? ' महीना' : ' महीने'); })
       .replace(/as directed/i, 'जैसा बताया गया है');
   }
   if (lang === 'pa') {
-    return en.replace(/(\d+)\s*day/gi, '$1 ਦਿਨ')
-      .replace(/(\d+)\s*week/gi, '$1 ਹਫ਼ਤਾ')
-      .replace(/(\d+)\s*month/gi, '$1 ਮਹੀਨਾ')
+    return en.replace(/(\d+)\s*days?/gi, function (_, count) { return count + ' ਦਿਨ'; })
+      .replace(/(\d+)\s*weeks?/gi, function (_, count) { return count + (Number(count) === 1 ? ' ਹਫ਼ਤਾ' : ' ਹਫ਼ਤੇ'); })
+      .replace(/(\d+)\s*months?/gi, function (_, count) { return count + (Number(count) === 1 ? ' ਮਹੀਨਾ' : ' ਮਹੀਨੇ'); })
       .replace(/as directed/i, 'ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ');
   }
   return en;
@@ -40206,7 +40206,7 @@ window.printUnifiedRx = function(deptId) {
     return line;
   };
   const bmhTableHeader = function () {
-    return '<tr><th class="bmh-rx-no">Rx</th><th class="bmh-rx-med">Medicine</th>' + (deptId === 'oe' ? '<th class="bmh-rx-eye">Eye</th>' : '') + '<th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th class="bmh-rx-instructions">Instructions</th></tr>';
+    return '<tr><th class="bmh-rx-no">S.No.</th><th class="bmh-rx-med">Medicine</th>' + (deptId === 'oe' ? '<th class="bmh-rx-eye">Eye</th>' : '') + '<th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th class="bmh-rx-instructions">Instructions</th></tr>';
   };
   const bmhTableRows = function () {
     return drugs.map(function (drug, index) {
@@ -40353,7 +40353,7 @@ body{zoom:.94}
 .watermark{display:none!important}
 }
 body > *:not(.lh-img){filter:grayscale(1)}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:-6px;filter:none!important}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:-14px;filter:none!important}
 .bmh-approved-layout{color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35;margin-top:0}
 .bmh-approved-layout *{color:#000!important;background:#fff!important;border-color:#000!important;box-shadow:none!important}
 .bmh-approved-identity{display:grid;grid-template-columns:1fr minmax(190px,.7fr);gap:28px;border-bottom:1.5px solid #000;padding:2px 0 8px;margin-bottom:9px}
@@ -40368,8 +40368,8 @@ body > *:not(.lh-img){filter:grayscale(1)}
 .bmh-old-med-line{font-size:11.7px;line-height:1.45;margin:3px 0 0 22px}
 .bmh-old-taper-line{font-size:10.8px;line-height:1.42;margin:2px 0 0 34px}.bmh-old-taper-line strong{font-weight:900}
 .bmh-approved-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5px;margin:0}.bmh-approved-table th,.bmh-approved-table td{border:1px solid #000;padding:5px;vertical-align:top;text-align:left}.bmh-approved-table th{text-align:center;font-weight:900;text-transform:none}.bmh-approved-table.roomy td{padding:7px 6px;height:58px}
-.bmh-approved-table .bmh-rx-no{width:25px;text-align:center;vertical-align:middle}.bmh-approved-table .bmh-rx-eye{width:74px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:105px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:92px;text-align:center}
-.bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px}
+.bmh-approved-table .bmh-rx-no{width:34px;text-align:center;vertical-align:middle}.bmh-approved-table .bmh-rx-med{width:27%}.bmh-approved-table .bmh-rx-eye{width:68px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:96px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:138px;text-align:center}
+.bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px;white-space:nowrap}
 .bmh-taper-row td{border-top:1.5px solid #000}.bmh-taper-row .bmh-rx-frequency small{display:block;font-size:8px;font-weight:900;text-transform:uppercase;margin-bottom:3px}
 .bmh-approved-follow{font-size:12px;border-top:1px solid #000;border-bottom:1px solid #000;padding:6px 0;margin-top:9px}
 .bmh-approved-advice,.bmh-approved-procedures{border:1.5px solid #000;padding:7px 9px;margin-top:8px;font-size:11px;break-inside:avoid}.bmh-approved-advice>strong,.bmh-approved-procedures>strong{display:block;text-transform:uppercase;font-size:11px;margin-bottom:4px}.bmh-approved-advice>div{font-weight:800;font-size:12px;line-height:1.5}
@@ -47177,7 +47177,7 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
       return `<div class="bmh-approved-layout bmh-${designKey}"><div class="bmh-approved-rx-mark">Rx</div><ol class="bmh-old-rx-list ${designKey === 'old_software_compact' ? 'compact' : ''}"><li><div class="bmh-old-med-heading"><strong>ELINAC OD</strong> (EYEDROPS) - <span>Nepafenac 0.3%</span></div><div class="bmh-old-med-line">Instil one eyedrop once daily in both eyes for 1 month from 11-Sep-2026 to 10-Oct-2026.</div></li><li><div class="bmh-old-med-heading"><strong>VITAMIN D3</strong> (CAPSULE) - <span>Cholecalciferol</span></div><div class="bmh-old-med-line">Take one capsule once weekly after breakfast for 3 months.</div></li></ol></div>`;
     }
     if (designKey === 'tabular_1' || designKey === 'tabular_2') {
-      return `<table class="bmh-approved-table ${designKey === 'tabular_2' ? 'roomy' : 'compact'}"><thead><tr><th class="bmh-rx-med">Medicine</th><th class="bmh-rx-eye">Eye</th><th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th class="bmh-rx-instructions">Instructions</th></tr></thead><tbody><tr><td class="bmh-rx-med"><strong>ELINAC OD</strong><span>EYEDROPS</span><small>Nepafenac 0.3%</small></td><td class="bmh-rx-eye">Both Eyes</td><td class="bmh-rx-frequency">Once daily</td><td class="bmh-rx-duration"><strong>1 month</strong><small>Start: 11-Sep<br>End: 10-Oct</small></td><td class="bmh-rx-instructions">Instil one eyedrop once daily.</td></tr></tbody></table>`;
+      return `<table class="bmh-approved-table ${designKey === 'tabular_2' ? 'roomy' : 'compact'}"><thead><tr><th class="bmh-rx-no">S.No.</th><th class="bmh-rx-med">Medicine</th><th class="bmh-rx-eye">Eye</th><th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th class="bmh-rx-instructions">Instructions</th></tr></thead><tbody><tr><td class="bmh-rx-no">1</td><td class="bmh-rx-med"><strong>ELINAC OD</strong><span>EYEDROPS</span><small>Nepafenac 0.3%</small></td><td class="bmh-rx-eye">Both Eyes</td><td class="bmh-rx-frequency">Once daily</td><td class="bmh-rx-duration"><strong>1 month</strong><small>Start: 11-Sep<br>End: 10-Oct</small></td><td class="bmh-rx-instructions">Instil one eyedrop once daily.</td></tr></tbody></table>`;
     }
     if (designKey === 'editorial_columns') {
       return `<div class="design-rx design-editorial_columns">
@@ -47246,7 +47246,7 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
 body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.34;overflow:hidden}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:0}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:-8px}
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
 .pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
 .pt-meta{font-size:10px;font-weight:300;color:#555;margin-left:8px;font-style:italic}
@@ -47275,8 +47275,8 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .bmh-old-med-line{font-size:11.7px;line-height:1.45;margin:3px 0 0 22px}
 .bmh-approved-table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,Helvetica,sans-serif;font-size:9.5px;margin-top:8px}
 .bmh-approved-table th,.bmh-approved-table td{border:1px solid #000;padding:5px;vertical-align:top;text-align:left;overflow:hidden;overflow-wrap:anywhere;word-break:normal;white-space:normal}.bmh-approved-table th{text-align:center;font-weight:900}.bmh-approved-table.roomy td{padding:7px 6px;height:58px}
-.bmh-approved-table .bmh-rx-eye{width:74px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:105px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:92px;text-align:center}
-.bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px}
+.bmh-approved-table .bmh-rx-no{width:34px;text-align:center}.bmh-approved-table .bmh-rx-med{width:27%}.bmh-approved-table .bmh-rx-eye{width:68px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:96px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:138px;text-align:center}
+.bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px;white-space:nowrap}
 .taper-card{margin:4px 0 5px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9.5px;background:#fbfbfb}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
