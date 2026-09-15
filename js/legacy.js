@@ -4630,7 +4630,7 @@ function openPatientForDept(bmhId, dept, xrefId) {
   }
   // Use freshStart (blank form) only when cross-ref hasn't been consulted yet.
   // If already marked seen (consultation done and saved), load today's saved visit for that dept.
-  const freshStart = !(xref && (xref.seenAt || xref.lastVisitKey));
+  const freshStart = !(xref && isCrossRefSeenInTargetDept(xref));
   // Store the active cross-ref context so save / done affects only this referred dept row.
   window._activeXrefContext = xrefId ? {
     bmhId: bmhId,
@@ -20651,7 +20651,7 @@ function doXRef(){
     id:'XR'+Date.now(), bmhId, ptName, toDoctor, toDept,
     fromDept: p?.dept || CURRENT_USER?.dept || '',
     fee, feeAmount: xrFee, amount: xrFee, paid: !fee, reason, time: now,
-    status: 'waiting', seen: false, seenAt: '', active: true,
+    status: 'waiting', seen: false, seenAt: '', seenDept: '', completedDept: '', active: true,
     queueDate: localDateKey(new Date()),
     createdBy: CURRENT_USER?.name || '—',
     createdAt: nowIso
@@ -20688,6 +20688,8 @@ function doXRef(){
       status: 'waiting',
       seen: false,
       seenAt: '',
+      seenDept: '',
+      completedDept: '',
       reason: reason,
       queueDate: xref.queueDate,
       createdAt: xref.createdAt
@@ -50048,7 +50050,7 @@ function getReceptionBasePts() {
     });
     const xrefs = getActiveCrossRefsForPatient(p).filter(function(xr) {
       // Only include active (not yet fully seen) cross-refs
-      return !xr.seenAt && crossRefQueueDateMatchesToday(xr);
+      return !isCrossRefSeenInTargetDept(xr) && crossRefQueueDateMatchesToday(xr);
     });
     if (!xrefs.length) return;
 
@@ -50608,7 +50610,7 @@ function buildQCard(p, sno) {
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${isPreCheckin
           ? `<button title="Check In & Collect Fee" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check In</button>`
-          : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : (p._deptQueueId ? `markDeptQueueSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `markSeen('${p.bmhId}','${String(p.dept || '').replace(/'/g, "\\'")}')`)}">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : (p._deptQueueId ? `restoreDeptQueueToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `restorePatientToActiveQueue('${p.bmhId}')`)}">↩ Active</button>`}
+          : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}','${String(p.dept || '').replace(/'/g, "\\'")}')` : (p._deptQueueId ? `markDeptQueueSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `markSeen('${p.bmhId}','${String(p.dept || '').replace(/'/g, "\\'")}')`)}">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : (p._deptQueueId ? `restoreDeptQueueToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `restorePatientToActiveQueue('${p.bmhId}')`)}">↩ Active</button>`}
         ${isOphtho&&!p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${String(p.name||p.patient||'Patient').replace(/'/g,"\\'")}')">💧</button>`:''}
         ${isOphtho&&p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
         ${isOphtho&&!isQueueRowMarkedSeen(p)?`<button title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
@@ -50689,7 +50691,7 @@ function buildQTableRow(p, sno, opts) {
   // Badge showing active cross-refers OUT from this patient's row (originating dept view)
   const deptShort = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin'};
   const activeCrossRefsOut = !p._xrefEntry && typeof getActiveCrossRefsForPatient === 'function'
-    ? getActiveCrossRefsForPatient(p).filter(function(r) { return !r.seenAt && crossRefQueueDateMatchesToday(r); })
+    ? getActiveCrossRefsForPatient(p).filter(function(r) { return !isCrossRefSeenInTargetDept(r) && crossRefQueueDateMatchesToday(r); })
     : [];
   const xrefOutBadge = activeCrossRefsOut.length
     ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#e0f7fa;color:#00796b;border-radius:4px;font-weight:800;vertical-align:middle">↔ ${activeCrossRefsOut.map(function(r){return deptShort[r.toDept]||r.toDept||r.toDoctor||'?';}).join(', ')}</span>`
@@ -50703,7 +50705,7 @@ function buildQTableRow(p, sno, opts) {
     ? '<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#eef3fb;color:var(--bmh-blue);border-radius:4px;font-weight:800;vertical-align:middle">Also OPD</span>'
     : '';
   const markSeenClick = p._xrefId
-    ? `event.stopPropagation();markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')`
+    ? `event.stopPropagation();markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}','${String(p.dept || '').replace(/'/g, "\\'")}')`
     : (p._deptQueueId ? `event.stopPropagation();markDeptQueueSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `markSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${String(p.dept || '').replace(/'/g, "\\'")}')`);
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
@@ -50858,16 +50860,23 @@ function applyReceptionDeptChange() {
 window.reassignReceptionPatientDept = reassignReceptionPatientDept;
 window.applyReceptionDeptChange = applyReceptionDeptChange;
 /** Mark one cross-refer queue row as seen for that department (does not clear other departments' queues). */
-function markCrossRefSeen(bmhId, xrefId) {
+function markCrossRefSeen(bmhId, xrefId, deptOverride) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p || !Array.isArray(p.crossRefs) || !xrefId) {
     showToast('Cross-refer entry not found', 'w');
     return;
   }
   const nowIso = new Date().toISOString();
+  const targetRef = p.crossRefs.find(function (r) { return r && String(r.id) === String(xrefId); });
+  const targetDept = normalizeDeptKeyForQueue(targetRef?.toDept || '');
+  const actionDept = normalizeDeptKeyForQueue(deptOverride || activeClinicDeptKey() || '');
+  if (!targetRef || !targetDept || actionDept !== targetDept) {
+    showToast('Referral can only be completed from its destination department', 'w');
+    return;
+  }
   const refs = p.crossRefs.map(function (r) {
     if (!r || String(r.id) !== String(xrefId)) return r;
-    return Object.assign({}, r, { seen: true, status: 'seen', seenAt: nowIso, updatedAt: nowIso });
+    return Object.assign({}, r, { seen: true, status: 'seen', seenAt: nowIso, seenDept: targetDept, completedDept: targetDept, updatedAt: nowIso });
   });
   p.crossRefs = refs;
   fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
@@ -50926,7 +50935,7 @@ function restoreCrossRefToActive(bmhId, xrefId) {
   }
   const refs = p.crossRefs.map(function (r) {
     if (!r || String(r.id) !== String(xrefId)) return r;
-    const next = Object.assign({}, r, { seen: false, status: 'waiting', seenAt: '', restoredAt: new Date().toISOString() });
+    const next = Object.assign({}, r, { seen: false, status: 'waiting', seenAt: '', seenDept: '', completedDept: '', restoredAt: new Date().toISOString() });
     return next;
   });
   p.crossRefs = refs;
@@ -51022,7 +51031,7 @@ function markCurrentPatientSeen() {
   const activeDept = activeClinicDeptKey();
   const xrefCtx = window._activeXrefContext;
   if (xrefCtx && xrefCtx.bmhId === bmhId && normalizeDeptKeyForQueue(xrefCtx.dept || '') === activeDept && xrefCtx.xrefId) {
-    markCrossRefSeen(bmhId, xrefCtx.xrefId);
+    markCrossRefSeen(bmhId, xrefCtx.xrefId, activeDept);
     if (typeof nav === 'function') setTimeout(function () { nav('doctor-queue', null); }, 80);
     return;
   }
@@ -51036,7 +51045,7 @@ function markCurrentPatientSeen() {
   const pt = PATIENTS.find(function (row) { return row && row.bmhId === bmhId; }) || window.CURRENT_PATIENT;
   const inferredXref = findActiveCrossRefForDept(pt, activeDept);
   if (inferredXref && inferredXref.id) {
-    markCrossRefSeen(bmhId, inferredXref.id);
+    markCrossRefSeen(bmhId, inferredXref.id, activeDept);
     window._activeXrefContext = null;
     window._currentXrefId = null;
     if (typeof nav === 'function') setTimeout(function () { nav('doctor-queue', null); }, 80);
@@ -51516,12 +51525,20 @@ function getActiveCrossRefsForPatient(p) {
   else if (p?.xrefTo) refs.push({ id: 'legacy-xref', toDept: p.xrefTo, toDoctor: p.xrefDoctor, paid: !!p.xrefPaid, active: true });
   return refs.filter(function (r) { return r && r.toDept && r.active !== false; });
 }
+function isCrossRefSeenInTargetDept(xref) {
+  if (!xref || !xref.seenAt) return false;
+  const targetDept = normalizeDeptKeyForQueue(xref.toDept || '');
+  const completedDept = normalizeDeptKeyForQueue(xref.seenDept || xref.completedDept || '');
+  if (targetDept && completedDept) return targetDept === completedDept;
+  // Older destination saves wrote lastVisitKey but did not yet store seenDept.
+  return !!(targetDept && xref.lastVisitKey);
+}
 function findActiveCrossRefForDept(p, dept) {
   const deptKey = normalizeDeptKeyForQueue(dept || '');
   if (!p || !deptKey) return null;
   const refs = getActiveCrossRefsForPatient(p).filter(function (r) {
     return r
-      && !r.seenAt
+      && !isCrossRefSeenInTargetDept(r)
       && crossRefQueueDateMatchesToday(r)
       && normalizeDeptKeyForQueue(r.toDept || '') === deptKey;
   }).sort(function (a, b) {
@@ -51539,7 +51556,7 @@ function patientHasUnseenCrossRefForDept(p, dept) {
   if (!p || !deptKey) return false;
   return getActiveCrossRefsForPatient(p).some(function (xref) {
     return xref
-      && !xref.seenAt
+      && !isCrossRefSeenInTargetDept(xref)
       && crossRefQueueDateMatchesToday(xref)
       && normalizeDeptKeyForQueue(xref.toDept || '') === deptKey;
   });
@@ -51594,7 +51611,7 @@ function getDoctorQueueCrossRefLogRows(effectiveDept) {
 }
 function buildCrossRefQueuePatient(p, xref, fallbackDept) {
   const toKey = normalizeDeptKeyForQueue(xref?.toDept || fallbackDept || '');
-  const xrefSeen = !!xref?.seenAt;
+  const xrefSeen = isCrossRefSeenInTargetDept(xref);
   const pendingPay = !!(xref?.fee && xref.paid === false);
   const dedupeKey = [
     String(p?.bmhId || ''),
@@ -51608,7 +51625,7 @@ function buildCrossRefQueuePatient(p, xref, fallbackDept) {
     doctor: xref?.toDoctor || p?.doctor,
     seen: xrefSeen,
     status: xrefSeen ? 'seen' : 'waiting',
-    seenAt: xref?.seenAt || '',
+    seenAt: xrefSeen ? (xref?.seenAt || '') : '',
     queueDate: xref?.queueDate || localDateKey(xref?.createdAt || new Date()),
     visitDate: xref?.queueDate || localDateKey(xref?.createdAt || new Date()),
     queueAddedAt: xref?.createdAt || p?.queueAddedAt || '',
@@ -52542,7 +52559,7 @@ function saveVisit(dept, opts) {
             const refs = pt.crossRefs.map(function (r) {
               if (!r || String(r.id) !== String(activeXrefId)) return r;
               if (!crossRefTargetsDept(r, dept)) return r;
-              return Object.assign({}, r, { seenAt: r.seenAt || nowSeen, lastVisitKey: visitKey, lastSavedAt: nowSeen });
+              return Object.assign({}, r, { seen: true, status: 'seen', seenAt: r.seenAt || nowSeen, seenDept: dept, completedDept: dept, lastVisitKey: visitKey, lastSavedAt: nowSeen, updatedAt: nowSeen });
             });
             pt.crossRefs = refs;
             fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
