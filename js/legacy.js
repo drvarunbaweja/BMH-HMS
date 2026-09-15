@@ -20651,9 +20651,24 @@ function doXRef(){
     id:'XR'+Date.now(), bmhId, ptName, toDoctor, toDept,
     fromDept: p?.dept || CURRENT_USER?.dept || '',
     fee, feeAmount: xrFee, amount: xrFee, paid: !fee, reason, time: now,
+    status: 'waiting', seen: false, seenAt: '', active: true,
+    queueDate: localDateKey(new Date()),
     createdBy: CURRENT_USER?.name || '—',
-    createdAt: new Date().toISOString()
+    createdAt: nowIso
   };
+  const existingTodayTarget = p && (
+    (patientQueueDateMatchesToday(p) && normalizeDeptKeyForQueue(p.dept || p.department || '') === toDept)
+    || getDeptQueueEntriesForPatient(p).some(function (entry) {
+      return normalizeDeptKeyForQueue(entry.dept || '') === toDept;
+    })
+    || getActiveCrossRefsForPatient(p).some(function (entry) {
+      return crossRefQueueDateMatchesToday(entry) && normalizeDeptKeyForQueue(entry.toDept || '') === toDept;
+    })
+  );
+  if (existingTodayTarget) {
+    showToast(ptName + ' is already in today\'s ' + bmhDeptLabel(toDept) + ' queue', 'i');
+    return;
+  }
   if(!window.XREF_LOG) window.XREF_LOG = [];
   window.XREF_LOG.unshift(xref);
 
@@ -20670,7 +20685,11 @@ function doXRef(){
       amount: xrFee,
       paid: !fee,
       active: true,
+      status: 'waiting',
+      seen: false,
+      seenAt: '',
       reason: reason,
+      queueDate: xref.queueDate,
       createdAt: xref.createdAt
     });
     p.crossRefs = refs;
@@ -27680,11 +27699,25 @@ function findSamePatientInTodayReceptionDeptQueue(formIdentity, existingPatient,
   const form = Object.assign({}, formIdentity || {});
   return getAllKnownPatientRecords().find(function (row) {
     if (!row || isMergedPatientRecord(row) || row.queueRemoved || String(row.status || '').toLowerCase() === 'removed') return false;
-    if (!patientQueueDateMatchesToday(row)) return false;
     if (targetCentre && patientCentreKey(row.centre) !== targetCentre) return false;
-    if (targetDept && normalizeDeptKeyForQueue(row.dept || row.department || '') !== targetDept) return false;
-    if (targetId && String(row.bmhId || '').trim() === targetId) return true;
-    return samePersonRecordVsForm(row, form);
+    const samePatient = targetId && String(row.bmhId || '').trim() === targetId
+      ? true
+      : samePersonRecordVsForm(row, form);
+    if (!samePatient) return false;
+    const directMatch = patientQueueDateMatchesToday(row)
+      && (!targetDept || normalizeDeptKeyForQueue(row.dept || row.department || '') === targetDept);
+    const deptEntryMatch = (Array.isArray(row.deptQueueEntries) ? row.deptQueueEntries : []).some(function (entry) {
+      if (!entry || entry.active === false) return false;
+      const entryCentre = patientCentreKey(entry.centre || row.centre);
+      return (!targetCentre || entryCentre === targetCentre)
+        && (!targetDept || normalizeDeptKeyForQueue(entry.dept || '') === targetDept)
+        && localDateKey(entry.queueDate || entry.createdAt || entry.date) === localDateKey(new Date());
+    });
+    const crossRefMatch = getActiveCrossRefsForPatient(row).some(function (xref) {
+      return crossRefQueueDateMatchesToday(xref)
+        && (!targetDept || normalizeDeptKeyForQueue(xref.toDept || '') === targetDept);
+    });
+    return directMatch || deptEntryMatch || crossRefMatch;
   }) || null;
 }
 
@@ -27797,6 +27830,7 @@ async function _registerPatientImpl() {
   ));
   const previousDeptSnapshot = existingPt ? {
     dept: normalizeDeptKeyForQueue(existingPt.dept || existingPt.department || ''),
+    centre: patientCentreKey(existingPt.centre || centre),
     doctor: existingPt.assignedDoctor || existingPt.doctor || '',
     purpose: existingPt.purpose || 'Consultation',
     queueAddedAt: existingPt.queueAddedAt || existingPt.checkinAt || existingPt.updatedAt || '',
@@ -27862,6 +27896,18 @@ async function _registerPatientImpl() {
     const refreshed = PATIENTS.find(function (p) { return p.bmhId === uid; });
     if (refreshed && Array.isArray(refreshed.deptQueueEntries)) patient.deptQueueEntries = refreshed.deptQueueEntries;
   }
+  bmhRememberSameDayDeptQueueEntry(uid, {
+    dept: dept,
+    doctor: dr,
+    purpose: purposeVal || 'Consultation',
+    queueAddedAt: currentIso,
+    createdAt: currentIso,
+    seenAt: '',
+    source: 'reception',
+    centre: currentCentre
+  });
+  const queuePatient = PATIENTS.find(function (p) { return p.bmhId === uid; });
+  if (queuePatient && Array.isArray(queuePatient.deptQueueEntries)) patient.deptQueueEntries = queuePatient.deptQueueEntries;
 
   syncBmhSequenceFloor(uid);
 
@@ -38404,10 +38450,10 @@ function getQueueRowDeptKey(row) {
   return normalizeDeptKeyForQueue(row?.dept || row?.department || '');
 }
 function getQueueRowFreshness(row) {
-  return Date.parse(row?._deptQueueCreatedAt || row?._xrefCreatedAt || row?.updatedAt || row?.createdAt || row?.queueDate || '') || Number(row?.checkinAt || 0) || 0;
+  return Date.parse(row?._deptQueueUpdatedAt || row?._xrefUpdatedAt || row?._deptQueueCreatedAt || row?._xrefCreatedAt || row?.updatedAt || row?.createdAt || row?.queueDate || '') || Number(row?.checkinAt || 0) || 0;
 }
 function getQueueRowPatientIdentityKey(row) {
-  if (!row || row._xrefEntry || row._deptQueueEntry) return '';
+  if (!row) return '';
   const nameKey = patientNameIdentityKey(row.name || row.patient || '');
   const phoneKeys = getPatientPhoneKeys(row).sort();
   if (!nameKey || !phoneKeys.length) return '';
@@ -50834,7 +50880,7 @@ function markCrossRefSeen(bmhId, xrefId) {
   const nowIso = new Date().toISOString();
   const refs = p.crossRefs.map(function (r) {
     if (!r || String(r.id) !== String(xrefId)) return r;
-    return Object.assign({}, r, { seenAt: nowIso });
+    return Object.assign({}, r, { seen: true, status: 'seen', seenAt: nowIso, updatedAt: nowIso });
   });
   p.crossRefs = refs;
   fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
@@ -50893,8 +50939,7 @@ function restoreCrossRefToActive(bmhId, xrefId) {
   }
   const refs = p.crossRefs.map(function (r) {
     if (!r || String(r.id) !== String(xrefId)) return r;
-    const next = Object.assign({}, r, { restoredAt: new Date().toISOString() });
-    delete next.seenAt;
+    const next = Object.assign({}, r, { seen: false, status: 'waiting', seenAt: '', restoredAt: new Date().toISOString() });
     return next;
   });
   p.crossRefs = refs;
@@ -50912,12 +50957,22 @@ function markDeptQueueSeen(bmhId, queueId) {
     return;
   }
   const nowIso = new Date().toISOString();
+  let seenDept = '';
   const rows = p.deptQueueEntries.map(function (row) {
     if (!row || String(row.id) !== String(queueId)) return row;
-    return Object.assign({}, row, { seenAt: nowIso, updatedAt: nowIso });
+    seenDept = normalizeDeptKeyForQueue(row.dept || '');
+    return Object.assign({}, row, { seen: true, status: 'seen', seenAt: nowIso, updatedAt: nowIso });
   });
   p.deptQueueEntries = rows;
-  fbUpdate && fbUpdate('patients/' + bmhId, { deptQueueEntries: sanitizeFirebaseValue(rows) }).catch(function () {});
+  const patch = { deptQueueEntries: sanitizeFirebaseValue(rows) };
+  if (seenDept && seenDept === normalizeDeptKeyForQueue(p.dept || p.department || '')) {
+    p.seen = true;
+    p.status = 'seen';
+    p.seenAt = nowIso;
+    p.seenByDept = Object.assign({}, p.seenByDept || {}, { [seenDept]: nowIso });
+    Object.assign(patch, { seen: true, status: 'seen', seenAt: nowIso, seenByDept: sanitizeFirebaseValue(p.seenByDept) });
+  }
+  fbUpdate && fbUpdate('patients/' + bmhId, patch).catch(function () {});
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
@@ -50930,14 +50985,23 @@ function restoreDeptQueueToActive(bmhId, queueId) {
     showToast('Department queue entry not found', 'w');
     return;
   }
+  let restoredDept = '';
   const rows = p.deptQueueEntries.map(function (row) {
     if (!row || String(row.id) !== String(queueId)) return row;
-    const next = Object.assign({}, row, { updatedAt: new Date().toISOString() });
-    delete next.seenAt;
+    restoredDept = normalizeDeptKeyForQueue(row.dept || '');
+    const next = Object.assign({}, row, { seen: false, status: 'waiting', seenAt: '', updatedAt: new Date().toISOString() });
     return next;
   });
   p.deptQueueEntries = rows;
-  fbUpdate && fbUpdate('patients/' + bmhId, { deptQueueEntries: sanitizeFirebaseValue(rows) }).catch(function () {});
+  const patch = { deptQueueEntries: sanitizeFirebaseValue(rows) };
+  if (restoredDept && restoredDept === normalizeDeptKeyForQueue(p.dept || p.department || '')) {
+    p.seen = false;
+    p.status = 'waiting';
+    p.seenAt = null;
+    p.seenByDept = clearPatientSeenStateForDept(p, restoredDept);
+    Object.assign(patch, { seen: false, status: 'waiting', seenAt: null, seenByDept: sanitizeFirebaseValue(p.seenByDept) });
+  }
+  fbUpdate && fbUpdate('patients/' + bmhId, patch).catch(function () {});
   showToast('Department queue entry moved back to active ✓', 's');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
@@ -51514,6 +51578,9 @@ function buildCrossRefQueuePatient(p, xref, fallbackDept) {
     seen: xrefSeen,
     status: xrefSeen ? 'seen' : 'waiting',
     seenAt: xref?.seenAt || '',
+    queueDate: xref?.queueDate || localDateKey(xref?.createdAt || new Date()),
+    visitDate: xref?.queueDate || localDateKey(xref?.createdAt || new Date()),
+    queueAddedAt: xref?.createdAt || p?.queueAddedAt || '',
     purpose: (xref?.reason ? xref.reason + ' — ' : '') + (p?.purpose || '') + purposeSuffix,
     _xrefEntry: true,
     _xrefId: String(xref?.id || ''),
@@ -51523,12 +51590,17 @@ function buildCrossRefQueuePatient(p, xref, fallbackDept) {
     _xrefFeeAmount: Number(xref?.amount || xref?.feeAmount || 0) || 0,
     _xrefPendingPay: pendingPay,
     _xrefCreatedAt: xref?.createdAt || '',
+    _xrefUpdatedAt: xref?.updatedAt || xref?.createdAt || '',
     _queueKey: dedupeKey
   });
 }
 function getDeptQueueEntriesForPatient(p) {
+  const effectiveCentre = patientCentreKey(getEffectiveCentre?.() || CURRENT_USER?.centre || p?.centre);
   return (Array.isArray(p?.deptQueueEntries) ? p.deptQueueEntries : []).filter(function (row) {
-    return row && row.active !== false && row.dept && localDateKey(row.createdAt || row.queueDate || row.date) === localDateKey(new Date());
+    const rowCentre = patientCentreKey(row?.centre || p?.centre);
+    return row && row.active !== false && row.dept
+      && (!effectiveCentre || rowCentre === effectiveCentre)
+      && localDateKey(row.createdAt || row.queueDate || row.date) === localDateKey(new Date());
   });
 }
 function buildDeptQueuePatient(p, entry) {
@@ -51555,6 +51627,7 @@ function buildDeptQueuePatient(p, entry) {
     _deptQueueId: String(entry?.id || ''),
     _queueDept: deptKey,
     _deptQueueCreatedAt: entry?.createdAt || '',
+    _deptQueueUpdatedAt: entry?.updatedAt || entry?.createdAt || '',
     _deptQueueSeenAt: entry?.seenAt || '',
     _queueKey: dedupeKey
   });
@@ -51571,6 +51644,8 @@ function bmhRememberSameDayDeptQueueEntry(bmhId, snapshot) {
     return row && row.active !== false && normalizeDeptKeyForQueue(row.dept || '') === dept && localDateKey(row.createdAt || row.queueDate || row.date) === today;
   });
   const previous = existingIdx >= 0 ? rows[existingIdx] : {};
+  const snapshotOwnsSeenState = Object.prototype.hasOwnProperty.call(snapshot || {}, 'seenAt');
+  const nextSeenAt = snapshotOwnsSeenState ? (snapshot?.seenAt || '') : (previous.seenAt || '');
   const next = Object.assign({}, previous, {
     id: previous.id || ('DQ' + Date.now() + Math.floor(Math.random() * 1000)),
     dept: dept,
@@ -51578,9 +51653,12 @@ function bmhRememberSameDayDeptQueueEntry(bmhId, snapshot) {
     purpose: snapshot?.purpose || previous.purpose || p.purpose || 'Consultation',
     queueDate: today,
     source: snapshot?.source || previous.source || 'reception',
+    centre: patientCentreKey(snapshot?.centre || previous.centre || p.centre),
     createdAt: previous.createdAt || snapshot?.queueAddedAt || snapshot?.createdAt || nowIso,
     active: true,
-    seenAt: snapshot?.seenAt || previous.seenAt || '',
+    seen: !!nextSeenAt,
+    status: nextSeenAt ? 'seen' : 'waiting',
+    seenAt: nextSeenAt,
     updatedAt: nowIso
   });
   if (existingIdx >= 0) rows[existingIdx] = next;
