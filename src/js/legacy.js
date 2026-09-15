@@ -35274,7 +35274,24 @@ function getAppointmentDoctor(a) {
   return String(a?.doctor || a?.doctorName || a?.doctorId || '').trim();
 }
 function getAppointmentCentre(a) {
-  return normalizeAppointmentCentreValue(a?.centre || a?.location || 'CHD');
+  const physicalCentre = function (value) {
+    if (!String(value || '').trim()) return '';
+    const normalized = normalizeAppointmentCentreValue(value);
+    return normalized === 'CHD' || normalized === 'RPR' ? normalized : '';
+  };
+  const storedCentre = [a?.centre, a?.patientCentre, a?.clinicCentre, a?.location, a?.branch]
+    .map(physicalCentre).find(Boolean);
+  if (storedCentre) return storedCentre;
+  const bmhId = getAppointmentBmhId(a);
+  const patient = bmhId ? (PATIENTS || []).find(function (row) {
+    return String(row?.bmhId || '') === bmhId;
+  }) || (Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE.find(function (row) {
+    return String(row?.bmhId || '') === bmhId;
+  }) : null) : null;
+  const patientCentre = physicalCentre(patient?.centre || patient?.registrationCentre || patient?.lastVisit?.centre);
+  if (patientCentre) return patientCentre;
+  const activeCentre = physicalCentre(getEffectiveCentre?.() || window.CURRENT_USER?.centre);
+  return activeCentre || 'CHD';
 }
 function getAppointmentSourceLabel(a) {
   const raw = String(a?.source || a?.leadSource || a?.createdBy || '').trim();
@@ -35339,17 +35356,18 @@ function appointmentListRow(a, opts) {
   const source = escapeHtmlConsent(getAppointmentSourceLabel(a));
   const mode = escapeHtmlConsent(getAppointmentMode(a));
   const dateLine = options.showDate && date ? ' · ' + formatDateDDMMYYYY(date) : '';
-  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:64px minmax(0,1.45fr) 82px 92px minmax(0,1fr) minmax(0,.95fr) 56px 88px 72px 104px;gap:6px;align-items:start;max-width:100%;overflow:hidden">'
-    + '<div style="font-size:12px;font-weight:900;color:var(--bmh-blue);padding-top:2px">' + time + '</div>'
-    + '<div style="min-width:0"><div style="font-size:13px;font-weight:900;line-height:1.25;overflow-wrap:anywhere">' + patient + '</div><div style="font-size:10.5px;color:var(--g1);line-height:1.2;overflow-wrap:anywhere">' + bmhId + dateLine + '</div></div>'
+  const cellStyle = 'min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+  return '<div class="apt-slot booked apt-list-grid" style="font-size:12px;padding:7px 8px">'
+    + '<div style="' + cellStyle + ';font-size:11.5px;font-weight:900;color:var(--bmh-blue)" title="' + escapeHtmlConsent(time) + '">' + time + '</div>'
+    + '<div style="' + cellStyle + ';font-size:12.5px;font-weight:900" title="' + patient + dateLine + '">' + patient + dateLine + '</div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + bmhId + '</div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(phone) + '</div>'
-    + '<div style="font-size:11px;color:var(--tx);line-height:1.25;overflow-wrap:anywhere">' + purpose + '</div>'
-    + '<div style="font-size:11px;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + doctor + '</div>'
-    + '<span class="badge bd-blue" style="font-size:9.5px;text-align:center;align-self:start">' + centre + '</span>'
-    + '<div style="font-size:10.5px;font-weight:800;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + source + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + mode + '</div>'
-    + '<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><button class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();sendAppointmentReminderByKey(\'' + key + '\')">WhatsApp</button><button class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
+    + '<div style="' + cellStyle + ';font-size:10.5px;color:var(--tx)" title="' + purpose + '">' + purpose + '</div>'
+    + '<div style="' + cellStyle + ';font-size:10.5px;color:var(--tx3)" title="' + doctor + '">' + doctor + '</div>'
+    + '<span class="badge bd-blue" style="font-size:9px;text-align:center;justify-self:start;white-space:nowrap">' + centre + '</span>'
+    + '<div style="' + cellStyle + ';font-size:10px;font-weight:800;color:var(--tx3)" title="' + source + '">' + source + '</div>'
+    + '<div style="' + cellStyle + ';font-size:10px;color:var(--tx3)" title="' + mode + '">' + mode + '</div>'
+    + '<div style="display:flex;align-items:center;gap:3px;min-width:0;white-space:nowrap"><button class="btn btn-xs btn-outline" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();sendAppointmentReminderByKey(\'' + key + '\')">WhatsApp</button><button class="btn btn-xs btn-outline" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
     + '</div>';
 }
 function findAppointmentByKey(key) {
