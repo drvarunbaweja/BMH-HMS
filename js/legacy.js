@@ -27896,19 +27896,6 @@ async function _registerPatientImpl() {
     const refreshed = PATIENTS.find(function (p) { return p.bmhId === uid; });
     if (refreshed && Array.isArray(refreshed.deptQueueEntries)) patient.deptQueueEntries = refreshed.deptQueueEntries;
   }
-  bmhRememberSameDayDeptQueueEntry(uid, {
-    dept: dept,
-    doctor: dr,
-    purpose: purposeVal || 'Consultation',
-    queueAddedAt: currentIso,
-    createdAt: currentIso,
-    seenAt: '',
-    source: 'reception',
-    centre: currentCentre
-  });
-  const queuePatient = PATIENTS.find(function (p) { return p.bmhId === uid; });
-  if (queuePatient && Array.isArray(queuePatient.deptQueueEntries)) patient.deptQueueEntries = queuePatient.deptQueueEntries;
-
   syncBmhSequenceFloor(uid);
 
   restoreReceptionFeeChoiceMeta(lockedFeeChoice);
@@ -51596,9 +51583,13 @@ function buildCrossRefQueuePatient(p, xref, fallbackDept) {
 }
 function getDeptQueueEntriesForPatient(p) {
   const effectiveCentre = patientCentreKey(getEffectiveCentre?.() || CURRENT_USER?.centre || p?.centre);
+  const currentDept = normalizeDeptKeyForQueue(p?.dept || p?.department || '');
+  const currentDirectRowIsToday = patientQueueDateMatchesToday(p);
   return (Array.isArray(p?.deptQueueEntries) ? p.deptQueueEntries : []).filter(function (row) {
     const rowCentre = patientCentreKey(row?.centre || p?.centre);
+    const rowDept = normalizeDeptKeyForQueue(row?.dept || '');
     return row && row.active !== false && row.dept
+      && !(currentDirectRowIsToday && currentDept && rowDept === currentDept)
       && (!effectiveCentre || rowCentre === effectiveCentre)
       && localDateKey(row.createdAt || row.queueDate || row.date) === localDateKey(new Date());
   });
