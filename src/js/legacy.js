@@ -50626,7 +50626,7 @@ function toggleQueueSidebarCollapse(forceExpand) {
 
 function markSeen(bmhId, deptOverride) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
-  if (p && p.preRegistered) {
+  if (p && isQueuePreCheckinPatient(p)) {
     checkInPatient(bmhId);
     return;
   }
@@ -50911,11 +50911,24 @@ function checkInPatient(bmhId) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
   if(!p) return;
   const alreadyPaidToday = patientHasTodayPaidQueueEvidence(bmhId);
-  const fee = alreadyPaidToday ? 0 : (parseFloat(prompt(`Check in ${p.name}\nConsultation fee (₹):`, '200')||'200')||200);
+  const feeInput = alreadyPaidToday ? '0' : prompt(`Check in ${p.name}\nConsultation fee (₹):\nEnter 0 for a no-fee consultation.`, '200');
+  if (feeInput === null) return;
+  const feeText = String(feeInput).trim();
+  const fee = alreadyPaidToday ? 0 : (feeText === '' ? 200 : Number(feeText));
+  if (!Number.isFinite(fee) || fee < 0) {
+    showToast('Enter a valid consultation fee (0 or more)', 'w');
+    return;
+  }
+  const noFeeCheckIn = !alreadyPaidToday && fee === 0;
+  const nowIso = new Date().toISOString();
+  const today = localDateKey(new Date());
+  const checkedInPurpose = /need\s*to\s*check\s*in|not\s*checked\s*in/i.test(String(p.purpose || ''))
+    ? (Number(p.visitCount || 0) > 1 ? 'Follow-up' : 'Consultation')
+    : (p.purpose || 'Consultation');
   if(fee > 0) {
     const txnId = 'TXN'+Date.now();
     const txn = {
-      id:txnId, patient:p.name, bmhId, service: p.purpose||'Consultation', amount:fee,
+      id:txnId, patient:p.name, bmhId, service: checkedInPurpose, amount:fee,
       mode:'Cash', collected:true, dept:p.dept,
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       date:new Date().toISOString(), centre:p.centre||'CHD',
@@ -50926,16 +50939,47 @@ function checkInPatient(bmhId) {
       consultationFeeLabel: p.consultationFeeLabel || 'Consultation',
       billCats: ['consultation']
     };
-    addBmhPatientCharge(bmhId, buildPaidReceptionChargeRow(txnId, p.purpose || 'Consultation', fee, 'consultation', p.dept || p.department || ''));
+    addBmhPatientCharge(bmhId, buildPaidReceptionChargeRow(txnId, checkedInPurpose, fee, 'consultation', p.dept || p.department || ''));
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
+  } else if (noFeeCheckIn) {
+    const txnId = 'TXN' + Date.now();
+    const txn = {
+      id: txnId, patient: p.name, bmhId, service: 'No Fee Consultation - ' + checkedInPurpose, amount: 0,
+      mode: 'No Fee', collected: true, dept: p.dept,
+      time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+      date: nowIso, centre: p.centre || 'CHD', createdBy: CURRENT_USER?.name || 'Reception',
+      source: 'reception', noFee: true, consultationFeeType: 'no-fee',
+      consultationFeeLabel: 'No Fee Consultation', billCats: ['consultation']
+    };
+    addBmhPatientCharge(bmhId, {
+      id: 'chg-' + txnId, cat: 'consultation', desc: txn.service, qty: 1, rate: 0, amount: 0,
+      source: 'reception', dept: p.dept || p.department || '', ref: txnId, ts: nowIso, noFee: true
+    }, { deferPersistence: true });
+    TRANSACTIONS.push(txn);
+    saveTransactionToFirebase && saveTransactionToFirebase(txn);
   }
-  const nowIso = new Date().toISOString();
-  const today = localDateKey(new Date());
-  const queueAddedAt = p.queueAddedAt || nowIso;
-  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.seenByDept=clearPatientSeenStateForDept(p, p.dept || p.department || ''); p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=queueAddedAt; p.queueSource='reception'; p.updatedAt=nowIso;
-  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,seenByDept:sanitizeFirebaseValue(p.seenByDept || {}),checkinAt:p.checkinAt,queueAddedAt:queueAddedAt,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso});
-  showToast(`✅ ${p.name} checked in${alreadyPaidToday ? ' — payment already recorded' : ' — Token issued'}`,'s');
+  const checkedInDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.seenByDept=clearPatientSeenStateForDept(p, checkedInDept); p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=nowIso; p.queueSource='reception'; p.updatedAt=nowIso; p.purpose=checkedInPurpose; p.purposeUpdatedAt=nowIso; p.purposeUpdatedBy=CURRENT_USER?.name||'Reception';
+  if (noFeeCheckIn) {
+    p.consultationNoFee=true; p.consultationFee=0; p.consultationFeeType='no-fee'; p.consultationFeeLabel='No Fee Consultation'; p.consultationPaymentMode='No Fee';
+  } else if (!alreadyPaidToday) {
+    p.consultationNoFee=false; p.consultationFee=fee;
+    if (String(p.consultationFeeType || '').toLowerCase() === 'no-fee') p.consultationFeeType='';
+    if (/no fee/i.test(String(p.consultationFeeLabel || ''))) p.consultationFeeLabel='Consultation';
+    p.consultationPaymentMode=p.consultationPaymentMode||'Cash';
+  }
+  if (Array.isArray(p.deptQueueEntries)) {
+    p.deptQueueEntries = p.deptQueueEntries.map(function (entry) {
+      if (!entry || normalizeDeptKeyForQueue(entry.dept || '') !== checkedInDept || localDateKey(entry.queueDate || entry.createdAt || entry.date) !== today) return entry;
+      return Object.assign({}, entry, { purpose: checkedInPurpose, preRegistered: false, status: 'waiting', seen: false, seenAt: '', updatedAt: nowIso });
+    });
+  }
+  const patch = {status:'waiting',preRegistered:false,seen:false,seenAt:null,seenByDept:sanitizeFirebaseValue(p.seenByDept || {}),checkinAt:p.checkinAt,queueAddedAt:nowIso,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso,purpose:checkedInPurpose,purposeUpdatedAt:nowIso,purposeUpdatedBy:p.purposeUpdatedBy,consultationNoFee:!!p.consultationNoFee,consultationFee:Number(p.consultationFee || 0),consultationFeeType:p.consultationFeeType,consultationFeeLabel:p.consultationFeeLabel,consultationPaymentMode:p.consultationPaymentMode,deptQueueEntries:sanitizeFirebaseValue(p.deptQueueEntries || [])};
+  fbUpdate && fbUpdate('patients/'+bmhId, patch).catch(function () {});
+  if (typeof window.patchPatientFirestore === 'function') window.patchPatientFirestore(bmhId, patch).catch(function () {});
+  rememberPendingLocalPatientQueueWrite && rememberPendingLocalPatientQueueWrite(p);
+  showToast(`✅ ${p.name} checked in${alreadyPaidToday ? ' — payment already recorded' : noFeeCheckIn ? ' — no fee consultation' : ' — Token issued'}`,'s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
