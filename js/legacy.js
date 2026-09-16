@@ -13547,6 +13547,38 @@ function bmhGetCollectionTransactionsForRange(centreOrCentres, fromKey, toKey) {
   }
   return Object.values(out);
 }
+async function bmhLoadReportTransactions(fromKey, toKey) {
+  if (typeof fbOnce !== 'function') return { failed: 0 };
+  const cache = window._bmhReportTransactionDays || (window._bmhReportTransactionDays = new Map());
+  const days = [];
+  const cursor = new Date(fromKey + 'T12:00:00+05:30');
+  const end = new Date(toKey + 'T12:00:00+05:30');
+  for (let count = 0; cursor <= end && count < 370; count++, cursor.setDate(cursor.getDate() + 1)) {
+    days.push(localDateKey(cursor));
+  }
+  let next = 0;
+  let failed = 0;
+  let permissionDenied = false;
+  async function worker() {
+    while (next < days.length && !permissionDenied) {
+      const day = days[next++];
+      if (cache.has(day) && Date.now() - cache.get(day).at < 60000) continue;
+      try {
+        const data = await fbOnce('transactions/' + day);
+        cache.set(day, { at: Date.now(), rows: Object.entries(data || {}).map(function ([id, row]) {
+          return Object.assign({}, row, { id: row?.id || id });
+        }) });
+      } catch (e) {
+        failed++;
+        console.warn('Financial report transactions unavailable for ' + day, e);
+        if (e?.code === 'PERMISSION_DENIED' || e?.code === 'permission-denied') permissionDenied = true;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, days.length) }, worker));
+  return { failed: permissionDenied ? Math.max(failed, days.filter(function (day) { return !cache.has(day); }).length) : failed,
+    rows: days.flatMap(function (day) { return cache.get(day)?.rows || []; }) };
+}
 function bmhHandleBillPrintingChoice(bill, choice) {
   const printChoice = choice || 'none';
   if (printChoice === 'bill' || printChoice === 'both') bmhPrintSavedBill(bill);
@@ -25663,6 +25695,7 @@ function refreshOTCasesOnceForReports() {
     return changed;
   }).catch(function (e) {
     console.warn('OT report refresh failed:', e);
+    window._bmhOTCasesLastReportRefreshAt = Date.now();
     return false;
   }).finally(function () {
     window._bmhOTCasesRefreshInFlight = null;
@@ -32367,99 +32400,16 @@ function getProcedureReportRows() {
   const fromVal = document.getElementById('rep-surg-from')?.value || '';
   const toVal = document.getElementById('rep-surg-to')?.value || '';
   const proc = (document.getElementById('rep-surg-name')?.value || '').trim().toLowerCase();
-  const statusFilter = document.getElementById('rep-surg-status')?.value || '';
-  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
   const centreFilter = document.getElementById('rep-centre')?.value || '';
   const deptFilter = normalizeDeptKeyForQueue(document.getElementById('rep-surg-dept')?.value || '');
   const dateOk = function(v) {
     const d = auditKeyDate(v || '');
-    if (!d) return true;
+    if (!d) return !(fromVal || toVal);
     if (fromVal && d < fromVal) return false;
     if (toVal && d > toVal) return false;
     return true;
   };
-  const otRows = OT_CASES.map(normalizeOTCaseRecord);
-  const advised = [];
-  const seen = new Set();
-  const pushRow = function (row, idx, pt, deptKey, visitDate) {
-    const rowCentre = row.centre || pt.centre || '';
-    if (centreFilter && normalizeAppointmentCentreValue(rowCentre || 'CHD') !== centreFilter) return;
-    const rowDept = normalizeDeptKeyForQueue(row.dept || deptKey || pt.dept || '');
-    if (deptFilter && rowDept !== deptFilter) return;
-    const key = row.id || ('adv-' + idx + '-' + row.bmhId + '-' + row.proc);
-    const normalizedProc = expandProcedureLabelForPrint(row.proc);
-    if (!normalizedProc) return;
-    const dedupe = [row.bmhId, String(normalizedProc).toLowerCase(), String(visitDate || row.date || row.createdAt || '').slice(0, 10)].join('|');
-    if (seen.has(dedupe)) return;
-    seen.add(dedupe);
-    const completion = getProcedureReportCompletionMatch({
-      bmhId: row.bmhId,
-      proc: normalizedProc,
-      date: row.date || visitDate || row.createdAt || ''
-    }, otRows);
-    const advDate = row.date || visitDate || row.createdAt || '';
-    advised.push({
-      key,
-      patient: row.patient || pt.name || '—',
-      bmhId: row.bmhId,
-      proc: normalizedProc,
-      date: completion.date || advDate,
-      advisedDate: advDate,
-      doctor: row.doctor || pt.assignedDoctor || pt.doctor || '',
-      status: completion.status || 'advised',
-      otProcedure: completion.otProcedure || '',
-      source: row.source || 'saved',
-      mobile: row.mobile || pt.mob || '',
-      ageSex: row.ageSex || ((pt.age || '—') + '/' + (pt.sex || '—')),
-      centre: rowCentre,
-      referredBy: row.referredBy || pt.referredBy || '',
-      advice: row.advice || pt.lastVisit?.advice || '',
-      dept: rowDept,
-      eye: row.eye || '',
-      iol: row.iol || '',
-      iolPower: row.iolPower || ''
-    });
-  };
-  PROCEDURE_ADVISED_LOG.forEach(function (row, idx) {
-    const pt = PATIENTS.find(function (p) { return p.bmhId === row.bmhId; }) || {};
-    pushRow(row, idx, pt, row.dept || normalizeDeptKeyForQueue(pt.dept || ''), row.date || row.createdAt || '');
-  });
-  PATIENTS.forEach(function (pt) {
-    if (!pt || !pt.bmhId) return;
-    const visitMap = Object.assign({}, getCachedPatientVisits(pt.bmhId) || {});
-    if (pt.lastVisitKey && pt.lastVisit) visitMap[pt.lastVisitKey] = pt.lastVisit;
-    else if (pt.lastVisit && !Object.keys(visitMap).length) visitMap.last = pt.lastVisit;
-    Object.entries(visitMap).forEach(function (entry) {
-      const visit = entry[1] || {};
-      const visitDate = visit.date || visit.createdAt || pt.lastVisitDate || '';
-      const visitDept = normalizeDeptKeyForQueue(visit.dept || pt.lastDeptVisit || pt.dept || '');
-      [
-        { list: Array.isArray(visit.procedures) ? visit.procedures : [], dept: visitDept || 'ophtho' },
-        { list: Array.isArray(visit.obgProcAdvised) ? visit.obgProcAdvised : [], dept: 'obg' },
-        { list: Array.isArray(visit.psychProcAdvised) ? visit.psychProcAdvised : [], dept: 'psych' },
-        { list: Array.isArray(visit.skinProcAdvised) ? visit.skinProcAdvised : [], dept: 'skin' }
-      ].forEach(function (grp) {
-        grp.list.forEach(function (procName, idx) {
-          pushRow({
-            id: 'saved-' + pt.bmhId + '-' + entry[0] + '-' + idx,
-            bmhId: pt.bmhId,
-            patient: pt.name,
-            proc: procName,
-            date: visitDate,
-            doctor: visit.doctor || pt.assignedDoctor || pt.doctor || '',
-            mobile: pt.mob || '',
-            ageSex: ((pt.age || '—') + '/' + (pt.sex || '—')),
-            centre: visit.centre || pt.centre || '',
-            referredBy: pt.referredBy || '',
-            advice: visit.advice || visit.obgAdvice || visit.psychAdvice || visit.skinAdvice || '',
-            dept: grp.dept,
-            source: 'saved'
-          }, idx, pt, grp.dept, visitDate);
-        });
-      });
-    });
-  });
-  const otReportRows = otRows.map(function (c, idx) {
+  return (OT_CASES || []).map(normalizeOTCaseRecord).map(function (c, idx) {
     const pt = PATIENTS.find(function (p) { return p.bmhId === c.bmhId; }) || {};
     const rowCentre = c.centre || pt.centre || '';
     const normalizedProc = expandProcedureLabelForPrint(c.procedure || c.procedureMain || c.proc || '');
@@ -32490,26 +32440,11 @@ function getProcedureReportRows() {
   }).filter(function (row) {
     if (centreFilter && normalizeAppointmentCentreValue(row.centre || 'CHD') !== centreFilter) return false;
     if (deptFilter && row.dept !== deptFilter) return false;
-    if (!row.proc) return false;
-    return true;
-  });
-  const combinedRows = sourceFilter === 'ot'
-    ? otReportRows
-    : sourceFilter === 'all'
-      ? advised.concat(otReportRows)
-      : advised;
-  return combinedRows.filter(function (row) {
     if (proc && ![row.proc, row.iol, row.iolPower, row.patient, row.bmhId, row.eye].join(' ').toLowerCase().includes(proc)) return false;
-    if (statusFilter) {
-      const status = String(row.status || '').toLowerCase();
-      if (statusFilter === 'done') {
-        if (status !== 'done' && status !== 'completed') return false;
-      } else if (status !== statusFilter) {
-        return false;
-      }
-    }
     if (!dateOk(row.date)) return false;
     return true;
+  }).sort(function (a, b) {
+    return String(b.date || '').localeCompare(String(a.date || '')) || String(a.patient || '').localeCompare(String(b.patient || ''));
   });
 }
 function procedureReportStatusLabel(status) {
@@ -32615,15 +32550,14 @@ function buildExpectedDeliveryReportHtml(rows, title) {
 
 function buildProcedureReportHtml(rows, title) {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900} .muted{color:#666;font-size:10px} @page{size:A4 portrait;margin:8mm}</style></head><body>'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:8mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:5px 6px;font-size:10px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900}.muted{color:#666;font-size:10px}@page{size:A4 landscape;margin:7mm}</style></head><body>'
     + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title) + '</div>'
-    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Department</th><th>Procedure</th><th>Eye</th><th>IOL Implanted</th><th>IOL Power</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
+    + '<div class="muted" style="margin-bottom:8px">All entries saved in the OT module are included, irrespective of workflow status.</div>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>OT Date</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Department</th><th>Procedure</th><th>Eye</th><th>IOL Implanted</th><th>IOL Power</th><th>Doctor</th><th>Centre</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
     + rows.map(function (p, i) {
         const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
-        const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
-        const isDone = p.status === 'done' || p.status === 'completed';
-        const surgDate = isDone ? esc(p.date || '—') : '—';
-        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.dept || '—') + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.eye || '—') + '</td><td>' + esc(p.iol || '—') + '</td><td>' + esc(p.iolPower || '—') + '</td><td>' + esc(p.advisedDate || p.date || '—') + '</td><td style="font-weight:' + (isDone ? '900' : '400') + ';color:' + (isDone ? '#1a7c3a' : '#666') + '">' + surgDate + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+        const remark = [follow.remark, follow.nextDate].filter(Boolean).join(' · ');
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(formatDateIN(p.date) || p.date || '—') + '</td><td style="font-weight:800">' + esc(p.patient) + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.dept || '—') + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.eye || '—') + '</td><td>' + esc(p.iol || '—') + '</td><td>' + esc(p.iolPower || '—') + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
       }).join('')
     + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
     + '</body></html>';
@@ -33561,7 +33495,7 @@ function searchReportPatients(val) {
 function generateSurgeryReport() {
   const proc=document.getElementById('rep-surg-name')?.value||'';
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
-  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'ot';
   if (sourceFilter === 'deliveries') {
     const rows = getExpectedDeliveryRows();
     const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
@@ -33576,9 +33510,9 @@ function generateSurgeryReport() {
     </div>`;
     return;
   }
-  const needsOTRows = sourceFilter === 'ot' || sourceFilter === 'all';
+  const needsOTRows = sourceFilter !== 'deliveries';
   const lastRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
-  if (needsOTRows && !window._bmhGeneratingSurgeryReportAfterOTRefresh && (!OT_CASES.length || sourceFilter === 'ot' || Date.now() - lastRefresh > 5000) && typeof refreshOTCasesOnceForReports === 'function') {
+  if (needsOTRows && !window._bmhGeneratingSurgeryReportAfterOTRefresh && Date.now() - lastRefresh > 30000 && typeof refreshOTCasesOnceForReports === 'function') {
     window._bmhGeneratingSurgeryReportAfterOTRefresh = true;
     el.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading OT list from database...</div></div>';
     refreshOTCasesOnceForReports().then(function () {
@@ -33591,16 +33525,16 @@ function generateSurgeryReport() {
   const filtered = getProcedureReportRows();
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
-    <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const isDone = p.status==='done'||p.status==='completed'; const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">${String(p.source||'')==='ot'?'OT:':'✅'} ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'||p.status==='in-progress'?`<span style="font-size:10px;color:var(--blue)">${p.status==='in-progress'?'In Progress':'Scheduled'}</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); const surgDateCell = isDone ? `<span style="font-weight:800;color:var(--green)">${esc(p.date||'—')}</span>` : (p.status==='scheduled'||p.status==='in-progress' ? `<span style="color:var(--blue);font-size:11px">${esc(p.date||'—')}</span>` : '<span style="color:var(--g1);font-size:11px">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td style="font-size:11px">${esc(p.advisedDate||p.date||'—')}</td><td>${surgDateCell}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    <div class="card-hd"><div><div class="card-title">⚕️ ${esc(proc)||'All OT Procedures'} — ${filtered.length} entries</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
+    ${filtered.length?`<table><thead><tr><th>#</th><th>OT Date</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Department</th><th>Procedure</th><th>Eye</th><th>IOL Implanted</th><th>IOL Power</th><th>Doctor</th><th>Centre</th><th>Counsellor</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(formatDateIN(p.date)||p.date||'—')}</td><td style="font-weight:800">${esc(p.patient)}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.dept||'—')}</td><td>${esc(p.proc)}</td><td>${esc(p.eye||'—')}</td><td>${esc(p.iol||'—')}</td><td>${esc(p.iolPower||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.remark?`<span style="font-size:10px;color:var(--g1)">${esc(follow.remark)}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
 
 function openSurgeryReportWindow() {
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
-  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'ot';
   const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
   const w = window.open('', '_blank', 'width=1200,height=800');
   if (!w) { showToast('Popup blocked — allow popups to open report window', 'w'); return; }
@@ -33612,7 +33546,7 @@ function openSurgeryReportWindow() {
 
 function printSurgeryReportCurrent() {
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
-  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'ot';
   const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
   safePrint(sourceFilter === 'deliveries'
     ? buildExpectedDeliveryReportHtml(rows, 'Deliveries Expected')
@@ -33632,14 +33566,28 @@ function generateInvestigationReport() {
     </tbody></table></div>`;
 }
 
-function generateFinancialReport() {
+async function generateFinancialReport() {
   const el=document.getElementById('rep-financial-result'); if(!el) return;
   const fromVal = document.getElementById('rep-fin-from')?.value || todayKey();
   const toVal   = document.getElementById('rep-fin-to')?.value   || todayKey();
+  if (fromVal > toVal) { showToast('Date From must be on or before Date To', 'w'); return false; }
+  if ((new Date(toVal) - new Date(fromVal)) / 86400000 >= 370) { showToast('Select a date range of at most 370 days', 'w'); return false; }
   const repFinCentre = document.getElementById('rep-centre')?.value || '';
-  const txAll = bmhGetCollectionTransactionsForRange(repFinCentre || ['RPR', 'CHD'], fromVal, toVal).filter(function (t) {
+  const selectedDept = normalizeDeptKeyForQueue(document.getElementById('rep-fin-dept')?.value || '');
+  const reportId = window._bmhFinancialReportRequestId = (window._bmhFinancialReportRequestId || 0) + 1;
+  el.innerHTML = '<div style="padding:18px">Loading collections for the selected dates...</div>';
+  const remote = await bmhLoadReportTransactions(fromVal, toVal);
+  if (reportId !== window._bmhFinancialReportRequestId) return false;
+  const allRows = bmhGetCollectionTransactionsForRange(repFinCentre || ['RPR', 'CHD'], fromVal, toVal).concat(remote.rows || []);
+  const txAll = ['RPR', 'CHD', ''].flatMap(function (centre) {
+    return bmhDedupeCollectionTransactions(allRows.filter(function (t) {
+      const code = String(t.centre || '').trim() ? normalizeAppointmentCentreValue(t.centre) : '';
+      return code === centre;
+    }));
+  }).filter(function (t) {
     if (repFinCentre && normalizeAppointmentCentreValue(t.centre || 'CHD') !== repFinCentre) return false;
-    return isCollectionDashboardTxn(t);
+    const txnDate = txnIsoDate(t);
+    return txnDate >= fromVal && txnDate <= toVal && isCollectionDashboardTxn(t) && (!selectedDept || normalizeDeptKeyForQueue(t.dept || '') === selectedDept);
   });
   const deptLabel = function (dept) {
     const d = String(dept || '').toLowerCase();
@@ -33658,7 +33606,7 @@ function generateFinancialReport() {
   });
   const byDept = {};
   txAll.forEach(function (t) {
-    const key = String(t.dept || 'general').toLowerCase();
+    const key = normalizeDeptKeyForQueue(t.dept || '') || 'general';
     if (!byDept[key]) byDept[key] = { count: 0, amount: 0, modes: {} };
     const mode = normalizePaymentMode(t.mode);
     byDept[key].count += 1;
@@ -33668,8 +33616,19 @@ function generateFinancialReport() {
   const cash  = (byMode['Cash']?.amount) || 0;
   const upi   = ((byMode['UPI']?.amount) || 0) + ((byMode['Card']?.amount) || 0) + ((byMode['Bank Transfer']?.amount) || 0);
   const ins   = (byMode['Insurance/TPA']?.amount) || 0;
-  const total = cash+upi+ins;
-  const pending = PAY_REQUESTS.filter(pr=>!pr.collected).reduce((s,pr)=>s+(parseFloat(pr.amount)||0),0);
+  const total = txAll.reduce(function (sum, t) { return sum + getNetTransactionAmount(t); }, 0);
+  const pending = (PAY_REQUESTS || []).filter(function (pr) {
+    if (!pr || pr.collected || ['paid','cancelled','canceled'].includes(String(pr.status || '').toLowerCase())) return false;
+    if (repFinCentre && normalizeAppointmentCentreValue(pr.centre || 'CHD') !== repFinCentre) return false;
+    if (selectedDept && normalizeDeptKeyForQueue(pr.dept || '') !== selectedDept) return false;
+    const day = localDateKey(pr.date || pr.createdAt || '');
+    return day >= fromVal && day <= toVal;
+  }).reduce(function (sum, pr) { return sum + (Number(pr.amount) || 0); }, 0);
+  const byCategory = { consultation: 0, diagnostic: 0, surgery: 0, other: 0 };
+  txAll.forEach(function (t) {
+    const category = getTransactionPrimaryChargeCategory(t);
+    byCategory[Object.prototype.hasOwnProperty.call(byCategory, category) ? category : 'other'] += getNetTransactionAmount(t);
+  });
   const modeRows = Object.entries(byMode).sort(function (a, b) { return b[1].amount - a[1].amount; }).map(function (entry) {
     return `<tr><td style="font-weight:800">${entry[0]}</td><td>${entry[1].count}</td><td style="font-weight:900">₹${entry[1].amount.toLocaleString('en-IN')}</td></tr>`;
   }).join('');
@@ -33680,16 +33639,22 @@ function generateFinancialReport() {
     return `<tr><td style="font-weight:800">${deptLabel(entry[0])}</td><td>${entry[1].count}</td><td style="font-weight:900">₹${entry[1].amount.toLocaleString('en-IN')}</td><td style="font-size:10px;line-height:1.35">${modeText || '—'}</td></tr>`;
   }).join('');
   el.innerHTML=`<div class="card">
-    <div class="card-hd"><div class="card-title">💰 Financial Summary</div><button class="btn btn-gold btn-xs" onclick="window.print()">🖨️</button></div>
+    ${remote.failed ? `<div style="padding:10px;border:1px solid #a33;color:#a00;font-weight:800">Incomplete report: ${remote.failed} day(s) could not be loaded from the database. Do not use these totals for reconciliation.</div>` : ''}
+    <div class="card-hd"><div><div class="card-title">💰 ${selectedDept ? deptLabel(selectedDept) + ' Financials' : 'Financial Summary'}</div><div class="card-sub">${escapeHtmlConsent(fromVal)} to ${escapeHtmlConsent(toVal)} · ${repFinCentre || 'Both Centres'} · ${txAll.length} collections</div></div><button class="btn btn-gold btn-xs" onclick="printFinancialReportCurrent()">🖨️ Print</button></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       ${[
-        ['Total Billed','₹'+total.toLocaleString('en-IN'),'green'],
+        ['Total Collected','₹'+total.toLocaleString('en-IN'),'green'],
         ['Cash Received','₹'+cash.toLocaleString('en-IN'),'blue'],
         ['UPI/Card','₹'+upi.toLocaleString('en-IN'),'blue'],
         ['Insurance/TPA','₹'+ins.toLocaleString('en-IN'),'orange'],
         ['Pending','₹'+pending.toLocaleString('en-IN'),'red'],
-        ['Refunds','₹0','gray']
+        ['Other Payments','₹'+byCategory.other.toLocaleString('en-IN'),'gray']
       ].map(([l,v,c])=>`<div style="background:var(--${c==='gray'?'g6':`${c}-lt`});border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:var(--g1)">${l}</span><span style="font-size:16px;font-weight:900;color:var(--${c==='gray'?'tx':c})">${v}</span></div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px">
+      ${[['Consultations',byCategory.consultation],['Investigations',byCategory.diagnostic],['Surgeries / Procedures',byCategory.surgery],['Other Payments',byCategory.other]].map(function (entry) {
+        return `<div style="background:var(--g6);padding:10px;border-radius:7px"><div style="font-size:11px;font-weight:800">${entry[0]}</div><div style="font-size:16px;font-weight:900">₹${entry[1].toLocaleString('en-IN')}</div></div>`;
+      }).join('')}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <div style="background:var(--g6);border-radius:10px;padding:12px">
@@ -33707,10 +33672,21 @@ function generateFinancialReport() {
       <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Department-wise financials</div>
       ${deptRows ? `<table><thead><tr><th>Department</th><th>Patients / Txns</th><th>Total ₹</th><th>Payment modes</th></tr></thead><tbody>${deptRows}</tbody></table>` : '<div style="font-size:12px;color:var(--g1)">No department-wise financial data for this date range.</div>'}
     </div>
-    ${txAll.length?`<table><thead><tr><th>Patient</th><th>Mode</th><th>Amount ₹</th><th>Dept</th><th>Date</th></tr></thead>
-    <tbody>${txAll.slice(0,80).map(t=>{ const mode=normalizePaymentMode(t.mode); return `<tr><td style="font-weight:700">${t.patient||'—'}</td><td><span class="badge ${mode==='Cash'?'bd-blue':mode==='Insurance/TPA'?'bd-orange':'bd-green'}">${mode}</span></td><td style="font-weight:900">₹${parseFloat(t.amount||0).toLocaleString('en-IN')}</td><td>${t.dept||'—'}</td><td>${localDateKey(t.date || t.createdAt || t.updatedAt || t.ts) || ''}</td></tr>`; }).join('')}
+    ${txAll.length?`<table><thead><tr><th>Date</th><th>Patient</th><th>Service</th><th>Category</th><th>Mode</th><th>Amount ₹</th><th>Dept</th></tr></thead>
+    <tbody>${txAll.slice().sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''));}).map(t=>{ const mode=normalizePaymentMode(t.mode); return `<tr><td>${escapeHtmlConsent(localDateKey(t.date || t.createdAt || t.updatedAt || t.ts) || '')}</td><td style="font-weight:700">${escapeHtmlConsent(t.patient||'—')}</td><td>${escapeHtmlConsent(t.service||t.for||t.desc||'—')}</td><td>${escapeHtmlConsent(getTransactionPrimaryChargeCategory(t))}</td><td>${escapeHtmlConsent(mode)}</td><td style="font-weight:900">₹${getNetTransactionAmount(t).toLocaleString('en-IN')}</td><td>${escapeHtmlConsent(deptLabel(normalizeDeptKeyForQueue(t.dept||'')||'general'))}</td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1);font-size:12.5px">No transactions recorded for this period.<br><span style="font-size:11px">Payments collected at reception will appear here.</span></div>'}
   </div>`;
+  return !remote.failed;
+}
+
+async function printFinancialReportCurrent() {
+  if (!await generateFinancialReport()) return;
+  const report = document.getElementById('rep-financial-result');
+  if (!report || !report.innerHTML.trim()) { showToast('Generate the financial report first', 'w'); return; }
+  if (report.textContent.includes('Incomplete report:')) { showToast('Cannot print an incomplete financial report', 'w'); return; }
+  const title = escapeHtmlConsent(document.getElementById('rep-fin-dept')?.selectedOptions?.[0]?.textContent || 'All Departments');
+  const period = escapeHtmlConsent((document.getElementById('rep-fin-from')?.value || todayKey()) + ' to ' + (document.getElementById('rep-fin-to')?.value || todayKey()));
+  safePrint('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #555;padding:5px;text-align:left}button{display:none}div{break-inside:avoid}.card{margin:0 0 12px}.card-hd{margin-bottom:10px}.card-title{font-size:18px;font-weight:bold}</style></head><body><h2>Department Financial Report - ' + title + '</h2><p>' + period + '</p>' + report.innerHTML + '</body></html>');
 }
 
 function generatePendingDuesReport() {
@@ -52794,17 +52770,13 @@ function loadPastVisits(bmhId, dept) {
   const getOphthoOTCasesForPatient = function () {
     ensureLocalOTCasesForHistory();
     const pt = window.CURRENT_PATIENT || (PATIENTS || []).find(function (p) { return p.bmhId === bmhId; }) || {};
-    const nameKey = String(pt.name || '').trim().toLowerCase();
-    const mobileKey = String(pt.mob || pt.mobile || '').replace(/\D/g, '');
     return (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
       const caseKind = normalizeDeptKeyForQueue(c.caseKind || c.dept || '');
       const procedureText = String(c.procedure || c.procedureMain || c.surgery || '').toLowerCase();
+      if (c.dept && normalizeDeptKeyForQueue(c.dept) !== 'ophtho' && !/cataract|pmics|phaco|iol|lasik|glaucoma|trab|ivt|intravitreal|retina|yag|capsulotomy|iridotomy|eye|ophth/i.test(procedureText)) return false;
       if (caseKind === 'obg' && !/cataract|pmics|phaco|iol|lasik|glaucoma|trab|ivt|intravitreal|retina|yag|capsulotomy|iridotomy|eye|ophth/i.test(procedureText)) return false;
       if (String(c.bmhId || '').trim() === String(bmhId || '').trim()) return true;
-      if (pt.otCaseId && c.id === pt.otCaseId) return true;
-      if (nameKey && String(c.patient || c.name || '').trim().toLowerCase() === nameKey) return true;
-      const cMobile = String(c.mobile || c.mob || c.phone || '').replace(/\D/g, '');
-      return !!(mobileKey && cMobile && mobileKey === cMobile);
+      return !!(pt.otCaseId && String(c.id || '') === String(pt.otCaseId));
     }).sort(function (a,b) {
       return String(getOTCaseDateKey(b) || b.date || b.createdAt || '').localeCompare(String(getOTCaseDateKey(a) || a.date || a.createdAt || ''));
     });
@@ -52814,15 +52786,8 @@ function loadPastVisits(bmhId, dept) {
       .filter(function (visit) { return dept === 'ophtho' ? true : visitMatchesDept(visit, dept); })
       .sort((a,b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
     if (dept === 'ophtho') {
-      const chargeLines = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).filter(function (row) {
-        const cat = String(row.cat || '').toLowerCase();
-        const text = [row.desc, row.name, row.service, row.for, row.parent].filter(Boolean).join(' ').toLowerCase();
-        const ref = String(row.ref || row.id || '').toLowerCase();
-        if (ref.startsWith('pr') || ref.startsWith('pr-') || String(row.source || '').toLowerCase() === 'doctor') return false;
-        return cat === 'diagnostic' || cat === 'surgery' || /oct|hvf|fundus|biomet|yag|capsulotomy|laser|topograph|specular|procedure|surgery|ivt|injection|pmics|phaco|trab|iol/.test(text);
-      });
-      const surgeries = getOphthoOTCasesForPatient().slice(0, 10);
-      if (!visits.length && !chargeLines.length && !surgeries.length) {
+      const surgeries = getOphthoOTCasesForPatient();
+      if (!visits.length && !surgeries.length) {
         container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--g2);font-size:12px"><div style="font-size:28px;margin-bottom:8px">📋</div>No past visits saved yet</div>`;
         return;
       }
@@ -52867,30 +52832,12 @@ function loadPastVisits(bmhId, dept) {
       };
       recentVisits.forEach(function (v) {
         const vDateKey = fmtVisitDate(v.date || v.createdAt || v.dateLabel);
-        const doneItems = chargeLines.filter(function (row) {
-          return fmtVisitDate(row.ts || row.date) === vDateKey;
-        }).map(function (row) {
-          return expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—') + ' (Done)';
-        });
-        const savedProc = Array.isArray(v.procedures) ? v.procedures.map(function (proc) {
-          return expandProcedureLabelForPrint(proc) + ' (Advised)';
-        }).filter(Boolean) : [];
         const procDone = summarizeProcedureDoneLine(v);
         const consumables = summarizeProcedureDoneConsumables(v);
-        const combinedDone = Array.from(new Set(doneItems.concat(savedProc).concat(procDone ? [procDone] : []).concat(consumables ? ['Consumables: ' + consumables] : []))).filter(Boolean);
+        const combinedDone = Array.from(new Set((procDone ? [procDone] : []).concat(consumables ? ['Consumables: ' + consumables] : []))).filter(Boolean);
         combinedDone.forEach(function (item) {
           pushHistoryItem(v.date || v.createdAt || v.dateLabel || vDateKey, v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN'), item);
         });
-      });
-      chargeLines.forEach(function (row) {
-        const dateKey = row.ts || row.date || row.createdAt || '';
-        pushHistoryItem(dateKey, fmtVisitDate(dateKey), expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—') + ' (Done)');
-      });
-      surgeries.forEach(function (c) {
-        const dateKey = getOTCaseDateKey(c) || c.date || c.createdAt || '';
-        const procedure = expandProcedureLabelForPrint(c.procedure || c.procedureMain || 'Surgery');
-        const details = [(c.site || c.eye || '').replace(/right/ig,'RE').replace(/left/ig,'LE').replace(/both/ig,'BE'), c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ');
-        pushHistoryItem(dateKey, formatDateIN(dateKey || c.date), 'OT: ' + procedure + (details ? ' (' + details + ')' : ''));
       });
       const rightHistory = Object.values(historyByDate).sort(function (a, b) {
         return String(b.dateKey || b.date || '').localeCompare(String(a.dateKey || a.date || ''));
@@ -52926,7 +52873,7 @@ function loadPastVisits(bmhId, dept) {
           </table>` : '<div style="border:1px dashed var(--g4);border-radius:10px;background:var(--g6);padding:18px;text-align:center;color:var(--g1);font-size:12px">No saved eye examination visits yet. OT surgery and diagnostic history is shown on the right.</div>'}
         </div>
         <div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:10px;align-self:start">
-          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Surgery History</div>
+          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">OT History</div>
           ${surgeries.length ? surgeries.map(function (c) {
             const caseDate = getOTCaseDateKey(c) || c.date || c.scheduledDate || c.otDate || c.surgeryDate || c.createdAt || '';
             return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
@@ -52934,14 +52881,14 @@ function loadPastVisits(bmhId, dept) {
               <div>${expandProcedureLabelForPrint(c.procedure || c.procedureMain || '—')}</div>
               <div style="color:var(--g1)">${[(c.site || c.eye || '—').replace(/right/ig,'RE').replace(/left/ig,'LE').replace(/both/ig,'BE'), c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ')}</div>
             </div>`;
-          }).join('') : '<div style="font-size:11px;color:var(--g1)">No surgery history saved yet.</div>'}
-          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin:12px 0 8px">Procedures / Diagnostics</div>
+          }).join('') : '<div style="font-size:11px;color:var(--g1)">No OT module entries saved for this patient.</div>'}
+          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin:12px 0 8px">Examination procedures</div>
           ${rightHistory.length ? rightHistory.map(function (entry) {
             return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
               <div style="font-weight:800;color:var(--bmh-blue)">${entry.date}</div>
               <div style="color:var(--tx)">${entry.items.join(', ')}</div>
             </div>`;
-          }).join('') : '<div style="font-size:11px;color:var(--g1)">No completed procedures or diagnostics logged yet.</div>'}
+          }).join('') : '<div style="font-size:11px;color:var(--g1)">No procedures recorded in past examinations.</div>'}
         </div>
       </div>`;
       return;
