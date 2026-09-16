@@ -5082,9 +5082,9 @@
 <!-- SURGERY / PROCEDURE REPORT -->
   <div class="tab-content" id="rep-surgery">
     <div class="card" style="margin-bottom:14px">
-      <div class="card-hd"><div class="card-title">⚕️ Patients Advised Surgery / Procedure</div></div>
+      <div class="card-hd"><div class="card-title">⚕️ OT Surgery / Procedure Register</div></div>
       <div class="fg">
-        <div class="form-group"><label class="fl">Report View</label><select id="rep-surg-source"><option value="all">Advised + OT list</option><option value="advised">Procedure advised list only</option><option value="ot">OT list only</option><option value="deliveries">Deliveries Expected</option></select></div>
+        <div class="form-group"><label class="fl">Report View</label><select id="rep-surg-source"><option value="ot">All OT module entries</option><option value="deliveries">Deliveries Expected</option></select></div>
         <div class="form-group"><label class="fl">Procedure / Surgery</label>
           <input type="text" id="rep-surg-name" placeholder="e.g. Phaco, Trabeculectomy, LSCS…" list="rep-surg-list">
           <datalist id="rep-surg-list">
@@ -5096,7 +5096,6 @@
         <div class="form-group"><label class="fl">Date Range From</label><input type="date" id="rep-surg-from"></div>
         <div class="form-group"><label class="fl">Date Range To</label><input type="date" id="rep-surg-to"></div>
         <div class="form-group"><label class="fl">Department</label><select id="rep-surg-dept"><option value="">All Departments</option><option value="ophtho">Ophthalmology</option><option value="obg">Obs &amp; Gynae</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option></select></div>
-        <div class="form-group"><label class="fl">Status</label><select id="rep-surg-status"><option value="">All</option><option value="advised">Advised — Not Done</option><option value="scheduled">Scheduled</option><option value="pending">OT Pending</option><option value="in-progress">OT In Progress</option><option value="done">Completed</option><option value="postponed">Postponed</option></select></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-gold btn-sm" onclick="generateSurgeryReport()">📋 Generate List</button>
@@ -5136,6 +5135,9 @@
       </div>
       <div class="form-group"><label class="fl">Group By</label>
         <select id="rep-fin-group"><option>Day</option><option>Week</option><option>Month</option><option>Doctor</option><option>Department</option></select>
+      </div>
+      <div class="form-group"><label class="fl">Department</label>
+        <select id="rep-fin-dept"><option value="">All Departments</option><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin &amp; Cosmetology</option></select>
       </div>
     </div>
     <button class="btn btn-gold" onclick="generateFinancialReport()">💰 Generate Report</button>
@@ -6778,7 +6780,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js?v=20260915-appointment-grid-v31"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20260916-ot-financial-reports-v32"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 <script type="module" src="./js/qr-decoder.js"></script>
