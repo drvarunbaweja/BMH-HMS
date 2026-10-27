@@ -23265,6 +23265,7 @@ function renderInvestigationChooser() {
     }).join('');
   });
   syncSelectedInvestigationCheckboxes();
+  if (typeof window.bmhRenderLabPanelsAndMoreTests === 'function') window.bmhRenderLabPanelsAndMoreTests();
 }
 function getInvestigationCategoryLabel(catId) {
   const labels = { haem:'Haematology', coag:'Coagulogram', chem:'Chemistry', rft:'Renal Function', lft:'Liver Function', lipid:'Lipid Profile', electro:'Electrolytes', sero:'Serology', urine:'Urine Exam', stool:'Stool Exam', hcg:'Pregnancy Test', semen:'Semen Analysis', rafq:'RA Factor', thyroid:'Thyroid' };
@@ -40091,7 +40092,8 @@ window.printUnifiedRx = function(deptId) {
     const seenTemplates = new Set();
     patientInvestigationOrders.forEach(function (o) {
       const tplName = String(o.templateName || '').trim();
-      if (tplName && String(o.mode || 'advise') === 'advise') {
+      // Templates print as one line when advised; lab panels (CBC, RFT…) always print as the panel name.
+      if (tplName && (String(o.mode || 'advise') === 'advise' || String(o.templateKey || '').indexOf('panel-') === 0)) {
         const key = String(o.templateKey || tplName).toLowerCase();
         if (!seenTemplates.has(key)) {
           seenTemplates.add(key);
@@ -54331,4 +54333,226 @@ window.addEventListener('DOMContentLoaded', function() {
       refreshBanner();
     } catch (e) { /* never let the reminder affect the rest of the app */ }
   }, 30000);
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAB PANELS & MORE LAB TESTS — Order Investigations window
+// • "⭐ Panels" tab: one tap selects every component test of a panel (CBC, RFT,
+//   LFT, Thyroid Profile…). The lab receives each component exactly as if they
+//   were ticked one by one; the prescription prints only the panel name.
+// • "➕ More lab tests" tab: lab tests added in Settings → Charges (or lab
+//   groups) that have no tab of their own, so doctors can select them.
+// Uses the existing selection, template and order code; writes nothing itself.
+// Rollback: delete this block, the bmhRenderLabPanelsAndMoreTests line in
+// renderInvestigationChooser, and the `panel-` condition in printUnifiedRx.
+// ═══════════════════════════════════════════════════════════════════════════
+(function () {
+  const PANELS = [
+    { key: 'cbc', name: 'CBC (Complete Blood Count)', short: 'CBC', alias: /\bcbc\b|complete blood count|h(a)?emogram|\bhmg\b/i,
+      tests: ['Hb (Haemoglobin)', 'T.L.C. (Total Leukocytes Count)', 'Neutrophils', 'Lymphocytes', 'Monocytes', 'Eosinophils', 'Basophils',
+        'Platelets Count', 'R.B.C. (Red Blood Cells)', 'P.C.V. (Packed Cell Volume)', 'M.C.V. (Mean Cell Volume)',
+        'M.C.H. (Mean Cell Haemoglobin)', 'M.C.H.C. (Mean Cell Haemoglobin Conc.)'] },
+    { key: 'rft', name: 'RFT (Renal Function Test)', short: 'RFT', alias: /\brft\b|\bkft\b|renal function|kidney function/i,
+      tests: ['B. Urea', 'S. Creatinine', 'S. Uric Acid', 'Sodium (Na+)', 'Potassium (K+)', 'Chloride (Cl-)'] },
+    { key: 'lft', name: 'LFT (Liver Function Test)', short: 'LFT', alias: /\blft\b|liver function/i,
+      tests: ['Total Bilirubin', 'Direct Bilirubin', 'Indirect Bilirubin', 'Total Proteins', 'Albumin', 'Globulin', 'A/G Ratio',
+        'S.G.O.T. (AST)', 'S.G.P.T. (ALT)', 'Alkaline Phosphatase'] },
+    { key: 'thyroid', name: 'Thyroid Profile (T3, T4, TSH)', short: 'Thyroid Profile', alias: /thyroid profile|thyroid function|\btft\b|t3\s*\/?\s*t4\s*\/?\s*tsh/i,
+      tests: ['T3 (Triiodothyronine)', 'T4 (Thyroxine)', 'TSH'] },
+    { key: 'lipid', name: 'Lipid Profile', short: 'Lipid Profile', alias: /lipid profile/i,
+      tests: ['Total Cholesterol', 'Triglycerides', 'HDL Cholesterol', 'LDL', 'VLDL', 'Cholesterol/HDL Ratio', 'LDL/HDL Ratio', 'Non-HDL Cholesterol'] },
+    { key: 'coag', name: 'Coagulation Profile', short: 'Coagulation Profile', alias: /coagulation profile|coagulogram/i,
+      tests: ['B.T. (Bleeding Time)', 'C.T. (Clotting Time)', 'P.T. (Prothrombin Time)', 'P.T.I. (Prothrombin Time Index)',
+        'I.N.R. (International Normalised Ratio)', 'A.P.T.T (Activated Partial Thrombin Time)'] },
+    { key: 'electro', name: 'Serum Electrolytes', short: 'Serum Electrolytes', alias: /serum electrolytes|^electrolytes$/i,
+      tests: ['Sodium (Na+)', 'Potassium (K+)', 'Chloride (Cl-)'] },
+    { key: 'sugar', name: 'Blood Sugar (Fasting & PP)', short: 'Blood Sugar F & PP', alias: /blood sugar \(?f(asting)? ?& ?pp/i,
+      tests: ['Fasting Glucose', 'Post Prandial Glucose'] },
+    { key: 'diabetic', name: 'Diabetic Profile (FBS, PPBS, HbA1c)', short: 'Diabetic Profile', alias: /diabetic profile/i,
+      tests: ['Fasting Glucose', 'Post Prandial Glucose', 'Glycosylated Haemoglobin (HbA1c)'] },
+    { key: 'urine', name: 'Urine Routine & Microscopy', short: 'Urine R/M', alias: /urine routine|urine r\s*\/\s*m|urine re\b/i,
+      tests: ['Urine Colour', 'Urine Appearance', 'Urine Proteins', 'Urine Sugar', 'Urine pH', 'Specific Gravity', 'Acetone/Ketones',
+        'Bile Salt', 'Bile Pigment', 'Urine Pus Cells', "Urine RBC's", 'Epithelial Cells', 'Calcium Oxalate Crystals',
+        'Triple Phosphate Crystals', 'Uric Acid Crystals', 'Amorphous Deposits', 'Budding Yeast', 'Fungal Hyphae', 'Mucus Fibers', 'Urine Bacteria'] },
+    { key: 'stool', name: 'Stool Routine & Microscopy', short: 'Stool R/M', alias: /stool routine|stool r\s*\/\s*m|stool re\b/i,
+      tests: ['Stool Colour', 'Stool Consistency', 'Stool Blood', 'Stool Mucous', 'Stool Parasite', 'Stool pH', 'Veg. Form of Protozoa',
+        'Cyst of Protozoa', 'Ova/Eggs of Helminths', 'Stool Pus Cells', 'Stool Mucus Fibers', 'Fat Cells'] },
+    { key: 'viral', name: 'Viral Markers (HIV, HBsAg, HCV)', short: 'Viral Markers', alias: /viral markers?/i,
+      tests: ['H.I.V. I & II', 'HBsAg', 'H.C.V. (Tridot)'] },
+    { key: 'bgrh', name: 'Blood Group & Rh', short: 'Blood Group & Rh', alias: /blood group/i,
+      tests: ['Blood Group (ABO)', 'Rh. Anti-D'] },
+    { key: 'semen', name: 'Semen Analysis', short: 'Semen Analysis', alias: /semen analysis/i,
+      tests: ['Semen Volume', 'Semen Colour', 'Semen Reaction', 'Semen Viscosity', 'Liquefaction Time', 'Semen Pus Cells', "Semen RBC's",
+        'Spermatogonia', 'Total Sperm Count', 'Normal Morphology', 'Active Motile (1st Hr)', 'Active Motile (2nd Hr)',
+        'Sluggish Motility (1st Hr)', 'Non-Motile (1st Hr)'] }
+  ];
+
+  function norm(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function allCategoryTests() {
+    const map = new Map();
+    (Array.isArray(INVESTIGATION_CATEGORIES) ? INVESTIGATION_CATEGORIES : []).forEach(function (cat) {
+      (cat.tests || []).forEach(function (t) { if (!map.has(norm(t))) map.set(norm(t), String(t)); });
+    });
+    return map;
+  }
+  // Use the exact name shown in the chooser when one matches, so the tick boxes line up.
+  function resolvePanelTests(panel) {
+    const known = allCategoryTests();
+    return Array.from(new Set(panel.tests.map(function (t) { return known.get(norm(t)) || t; })));
+  }
+  function templateKey(panel) { return 'panel-' + panel.key; }
+  function selectedNames() { return new Set(SELECTED_INVESTIGATIONS.map(function (i) { return i.name; })); }
+  function isPanelSelected(panel) {
+    const sel = selectedNames();
+    const inTemplates = (window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS || []).some(function (t) { return t && t.key === templateKey(panel); });
+    return inTemplates && resolvePanelTests(panel).every(function (t) { return sel.has(t); });
+  }
+  function togglePanel(key) {
+    const panel = PANELS.find(function (p) { return p.key === key; });
+    if (!panel) return;
+    const tests = resolvePanelTests(panel);
+    window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS = window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS || [];
+    const tplList = window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS;
+    if (isPanelSelected(panel)) {
+      // Unselect: remove the panel and its tests (keep tests still needed by another selected panel)
+      const idx = tplList.findIndex(function (t) { return t && t.key === templateKey(panel); });
+      if (idx > -1) tplList.splice(idx, 1);
+      const stillNeeded = new Set();
+      tplList.forEach(function (t) { (t && t.names || []).forEach(function (n) { stillNeeded.add(n); }); });
+      for (let i = SELECTED_INVESTIGATIONS.length - 1; i >= 0; i--) {
+        const n = SELECTED_INVESTIGATIONS[i].name;
+        if (tests.indexOf(n) > -1 && !stillNeeded.has(n)) SELECTED_INVESTIGATIONS.splice(i, 1);
+      }
+    } else {
+      const sel = selectedNames();
+      tests.forEach(function (t) { if (!sel.has(t)) SELECTED_INVESTIGATIONS.push({ name: t, price: 0 }); });
+      if (!tplList.some(function (t) { return t && t.key === templateKey(panel); })) {
+        tplList.push({ key: templateKey(panel), name: panel.short, names: tests.slice() });
+      }
+    }
+    syncSelectedInvestigationCheckboxes();
+    renderPanelCards();
+  }
+  function renderPanelCards() {
+    const host = document.getElementById('inv-panels-list');
+    if (!host) return;
+    host.innerHTML = PANELS.map(function (panel) {
+      const on = isPanelSelected(panel);
+      const tests = resolvePanelTests(panel);
+      return '<div onclick="bmhToggleLabPanel(\'' + panel.key + '\')" style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none;background:' + (on ? 'var(--blue-lt)' : 'var(--g6)') + ';border:1.5px solid ' + (on ? 'var(--blue,#0B5FA5)' : 'transparent') + '">'
+        + '<input type="checkbox" tabindex="-1" aria-hidden="true" ' + (on ? 'checked' : '') + ' style="width:16px;height:16px;flex-shrink:0;pointer-events:none;margin-top:2px">'
+        + '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:800">' + esc(panel.name) + '</div>'
+        + '<div style="font-size:10px;color:var(--g1);line-height:1.35;margin-top:2px">Prints as “' + esc(panel.short) + '” · ' + tests.length + ' tests to lab</div></div></div>';
+    }).join('');
+  }
+
+  // Lab tests that exist in Settings → Charges (or lab groups) but have no tab in the chooser.
+  function moreLabTests() {
+    const known = allCategoryTests();
+    const tabbed = new Set(Array.from(document.querySelectorAll('#m-order-invest [id^="inv-"][id$="-list"]')).map(function (el) { return el.id; }));
+    const groups = new Map();
+    const add = function (heading, name) {
+      const clean = String(name || '').trim();
+      if (!clean || known.has(norm(clean))) return;
+      if (PANELS.some(function (p) { return p.alias.test(clean); })) return; // covered by a panel
+      const h = String(heading || 'Other lab tests').trim() || 'Other lab tests';
+      if (!groups.has(h)) groups.set(h, new Map());
+      if (!groups.get(h).has(norm(clean))) groups.get(h).set(norm(clean), clean);
+    };
+    // 1. Lab charges. A row that is only a heading for other rows is not a test.
+    const rows = (typeof CHARGES_DATA !== 'undefined' && Array.isArray(CHARGES_DATA)) ? CHARGES_DATA : [];
+    const labRows = rows.filter(function (r) { return r && (String(r.cat || '').toLowerCase() === 'lab' || String(r.kind || '').toLowerCase() === 'lab'); });
+    const headingNames = new Set(labRows.map(function (r) { return norm(r.parent); }).filter(Boolean));
+    (Array.isArray(INVESTIGATION_CATEGORIES) ? INVESTIGATION_CATEGORIES : []).forEach(function (cat) {
+      headingNames.add(norm(getLabHeadingPlainLabel(cat.label || cat.id)));
+      headingNames.add(norm(cat.id));
+    });
+    labRows.forEach(function (r) {
+      if (!r.parent && headingNames.has(norm(r.name))) return;
+      add(r.parent || 'Other lab tests', r.name);
+    });
+    // 2. Lab groups added from charges / templates that have no tab of their own.
+    (Array.isArray(INVESTIGATION_CATEGORIES) ? INVESTIGATION_CATEGORIES : []).forEach(function (cat) {
+      if (tabbed.has('inv-' + cat.id + '-list')) return;
+      (cat.tests || []).forEach(function (t) {
+        const clean = String(t || '').trim();
+        if (!clean || PANELS.some(function (p) { return p.alias.test(clean); })) return;
+        const h = getLabHeadingPlainLabel(cat.label || cat.id) || 'Other lab tests';
+        if (!groups.has(h)) groups.set(h, new Map());
+        if (!groups.get(h).has(norm(clean))) groups.get(h).set(norm(clean), clean);
+      });
+    });
+    return groups;
+  }
+  function renderMoreTests() {
+    const host = document.getElementById('inv-more-list');
+    if (!host) return;
+    const groups = moreLabTests();
+    const headings = Array.from(groups.keys()).sort(function (a, b) {
+      if (a === 'Other lab tests') return 1;
+      if (b === 'Other lab tests') return -1;
+      return a.localeCompare(b);
+    });
+    host.innerHTML = headings.length ? headings.map(function (h) {
+      const tests = Array.from(groups.get(h).values()).sort(function (a, b) { return a.localeCompare(b); });
+      return '<div style="grid-column:1/-1;font-size:10.5px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-top:4px">' + esc(h) + '</div>'
+        + tests.map(function (name) {
+          return '<div class="invest-option" data-investigation-name="' + esc(name) + '" data-price="0" data-inv-cat="more" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">' + esc(name) + '</div><div style="font-size:10px;color:var(--g1)">' + esc(h) + '</div></div></div>';
+        }).join('');
+    }).join('') : '<div style="grid-column:1/-1;padding:12px;color:var(--g1);font-size:12px">All lab tests from Settings → Charges are already in the other tabs.</div>';
+  }
+
+  // Adds the two tabs to the Order Investigations window once.
+  function ensureTabs() {
+    const modal = document.getElementById('m-order-invest');
+    if (!modal) return false;
+    const tabsBar = modal.querySelector('.ptabs');
+    const firstContent = modal.querySelector('.tab-content');
+    if (!tabsBar || !firstContent) return false;
+    if (document.getElementById('inv-panels')) return true;
+    const panelsTab = document.createElement('div');
+    panelsTab.className = 'ptab';
+    panelsTab.setAttribute('onclick', "ptab(this,'inv-panels')");
+    panelsTab.style.fontWeight = '800';
+    panelsTab.textContent = '⭐ Panels';
+    tabsBar.insertBefore(panelsTab, tabsBar.firstChild);
+    const moreTab = document.createElement('div');
+    moreTab.className = 'ptab';
+    moreTab.setAttribute('onclick', "ptab(this,'inv-more')");
+    moreTab.textContent = '➕ More lab tests';
+    tabsBar.appendChild(moreTab);
+    const panelsContent = document.createElement('div');
+    panelsContent.className = 'tab-content';
+    panelsContent.id = 'inv-panels';
+    panelsContent.innerHTML = '<div style="font-size:11px;color:var(--g1);margin:8px 0">Tap a panel to select all its tests. The lab receives every test; the prescription shows only the panel name.</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-panels-list"></div>';
+    firstContent.parentNode.insertBefore(panelsContent, firstContent);
+    const allContents = modal.querySelectorAll('.tab-content');
+    const lastContent = allContents[allContents.length - 1];
+    const moreContent = document.createElement('div');
+    moreContent.className = 'tab-content';
+    moreContent.id = 'inv-more';
+    moreContent.innerHTML = '<div style="font-size:11px;color:var(--g1);margin:8px 0">Lab tests added in Settings → Charges that are not in the other tabs.</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-more-list"></div>';
+    lastContent.parentNode.insertBefore(moreContent, lastContent.nextSibling);
+    // Open on Panels — the quickest way to order common tests.
+    ptab(panelsTab, 'inv-panels');
+    return true;
+  }
+
+  window.bmhToggleLabPanel = togglePanel;
+  window.bmhLabPanels = PANELS;
+  window.bmhRenderLabPanelsAndMoreTests = function () {
+    try {
+      if (!ensureTabs()) return;
+      renderPanelCards();
+      renderMoreTests();
+      syncSelectedInvestigationCheckboxes();
+    } catch (e) { console.warn('lab panels render skipped', e); }
+  };
+  // Keep panel cards in step when tests are ticked/unticked one by one.
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#m-order-invest .invest-option')) setTimeout(renderPanelCards, 0);
+  });
 })();
