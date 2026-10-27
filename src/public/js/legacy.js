@@ -52515,6 +52515,8 @@ function saveVisit(dept, opts) {
     ])
       .then(() => {
       try { if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit); } catch (e) { console.warn('post-save populateOphthoForm failed', e); }
+      // Advised Procedures list: record newly advised procedures (runs only after the visit has saved; never blocks it).
+      try { if (!opts.autosave && typeof window.bmhRecordAdvisedFromVisit === 'function') window.bmhRecordAdvisedFromVisit(bmhId, dept, visit, localPt); } catch (e) { console.warn('advised record skipped', e); }
       // Auto-create follow-up appointment from prescription follow-up date
       try {
         const rawFuD = visit.rxFuDate || visit.followupDate || '';
@@ -53469,13 +53471,18 @@ window.addEventListener('DOMContentLoaded', function() {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ADVISED PROCEDURES — follow-up list, call log & due-call reminder
-// Self-contained block. READS: each patient's latest plan per department
-// (lastVisitByDept / lastVisit) and the OT register (OT_CASES).
-// WRITES ONLY: procedureFollowups/<key> and procedureFollowupReasons/<key>.
-// Rollback: delete this block and the three `sourceFilter === 'advised'`
-// hooks in generateSurgeryReport / openSurgeryReportWindow /
-// printSurgeryReportCurrent, plus the "advised" <option> in index.html.
+// ADVISED PROCEDURES — permanent advised list, call log & due-call reminder
+// Each advised procedure gets its own record in procedureFollowups/<key> and
+// stays on the list until staff mark it "Drop from list" (or the OT register
+// shows it done). Records are created (a) when a doctor saves a visit,
+// (b) by the one-time admin "fill from visit history" button.
+// READS: patients' plans, visits/ (fill only), OT register (OT_CASES).
+// WRITES ONLY: procedureFollowups/, procedureFollowupReasons/,
+//              procedureFollowupsMeta/.
+// Rollback: delete this block, the `sourceFilter === 'advised'` hooks in
+// generateSurgeryReport / openSurgeryReportWindow / printSurgeryReportCurrent,
+// the bmhRecordAdvisedFromVisit line in saveVisit, and the "advised"
+// <option> in index.html.
 // ═══════════════════════════════════════════════════════════════════════════
 (function () {
   const DEPTS = [
@@ -53498,6 +53505,7 @@ window.addEventListener('DOMContentLoaded', function() {
     'Fear / anxiety about surgery', 'Distance / travel difficulty', 'No attendant available',
     'Busy with work / season', 'Got it done elsewhere', 'Not reachable on phone', 'Symptoms improved / feels no need'
   ];
+  const FILL_FROM = '2026-04-01';
   // Investigations / tests that sometimes sit in the "procedures advised" list.
   const TEST_RE = /\b(oct|fundus|field|perimetry|pentacam|topograph\w*|refraction|cycloplegic|cylcloplegic|biometry|iol ?master|a ?-?scan|b ?-?scan|usg|ultrasound|ultrasonography|gonioscopy|ffa|angiograph\w*|specular|next visit|blood|ecg|x ?-?ray|investigations?|review|dilat\w*)\b/i;
   // Procedure families — first match wins (order matters).
@@ -53530,13 +53538,17 @@ window.addEventListener('DOMContentLoaded', function() {
   ];
   const STOP = new Set(['right', 'left', 'both', 'eyes', 'under', 'with', 'surgery', 'procedure', 'implantation',
     'advised', 'treatment', 'local', 'anaesthesia', 'anesthesia', 'aseptic', 'precaution', 'technique', 'touch', 'from', 'next', 'visit']);
+  const META_FIELDS = ['bmhId', 'patient', 'mobile', 'ageSex', 'centre', 'dept', 'proc', 'eye', 'advisedDate', 'doctor'];
 
   let followups = {};
+  let followupsLoaded = false;
   let customReasons = {};
+  let fillMeta = null;
   let listening = false;
   let lastRows = [];
   let currentRow = null;
   let selectedNext = null; // '' = no further follow-up, 'YYYY-MM-DD' = date, null = not chosen
+  let fillRunning = false;
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -53557,6 +53569,10 @@ window.addEventListener('DOMContentLoaded', function() {
   }
   function currentUser() {
     return (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER : (window.CURRENT_USER || null);
+  }
+  function isAdminUser() {
+    const cu = currentUser();
+    return !!(cu && (cu.isAdmin || String(cu.role || '').toLowerCase() === 'admin'));
   }
   function asList(value) {
     if (Array.isArray(value)) return value;
@@ -53591,6 +53607,23 @@ window.addEventListener('DOMContentLoaded', function() {
     wa.forEach(function (w) { if (wb.has(w)) shared += 1; });
     return shared >= Math.min(2, wa.size, wb.size);
   }
+  function deptOf(key) { return DEPTS.find(function (d) { return d.key === key; }) || null; }
+  function deptLabel(key) { const d = deptOf(key); return d ? d.label : (key || '—'); }
+  function advisedProcsOf(visit, deptKey) {
+    const d = deptOf(deptKey);
+    if (!d || !visit || typeof visit !== 'object') return [];
+    return Array.from(new Set(asList(visit[d.field]).map(function (x) { return String(x || '').trim(); }).filter(Boolean)));
+  }
+  function metaFor(p, deptKey, proc, visit) {
+    p = p || {};
+    return {
+      key: rowKey(p.bmhId, deptKey, proc), bmhId: String(p.bmhId || ''), patient: p.name || p.patient || '—',
+      mobile: p.mob || p.mobile || p.phone || '', ageSex: [p.age || '—', p.sex || '—'].join('/'),
+      centre: p.centre || '', dept: deptKey, proc: proc, eye: eyeOf(proc),
+      advisedDate: localDateKey((visit && (visit.date || visit.visitDate || visit.createdAt)) || '') || today(),
+      doctor: String((visit && visit.doctor) || p.assignedDoctor || p.doctor || '').split('·')[0].trim()
+    };
+  }
 
   function patientPool() {
     const cache = window._BMH_ALL_PATIENTS_CACHE;
@@ -53604,7 +53637,7 @@ window.addEventListener('DOMContentLoaded', function() {
     const lv = p.lastVisit;
     if (lv && typeof lv === 'object') {
       const dk = normalizeDeptKeyForQueue(lv.dept || p.lastDeptVisit || '');
-      if (dk && !out[dk] && DEPTS.some(function (d) { return d.key === dk; })) out[dk] = lv;
+      if (dk && !out[dk] && deptOf(dk)) out[dk] = lv;
     }
     return out;
   }
@@ -53630,8 +53663,8 @@ window.addEventListener('DOMContentLoaded', function() {
   }
   function otDone(o) { return o.status === 'completed' || o.status === 'done'; }
   function findOtMatch(row, ots) {
-    // Only an OT entry on/after the advice counts (2 days' slack for entry dates);
-    // an earlier operation is usually the other eye or a previous injection.
+    // Only an OT entry on/after the first advice counts (2 days' slack for entry
+    // dates); an earlier operation is usually the other eye or a previous injection.
     const earliest = row.advisedDate ? shiftDate(row.advisedDate, -2) : '';
     const hits = ots.filter(function (o) {
       return o.bmhId === row.bmhId && namesMatch(row.proc, o.proc) && eyesCompatible(row.eye, o.eye)
@@ -53646,46 +53679,156 @@ window.addEventListener('DOMContentLoaded', function() {
     return otDone(o) ? 'done' : 'scheduled';
   }
   function isDue(rec) {
-    return !!(rec && rec.status === 'open' && rec.nextDate && rec.nextDate <= today());
+    return !!(rec && !rec.dropped && rec.status === 'open' && rec.nextDate && rec.nextDate <= today());
   }
 
+  // ── Creating permanent records ──────────────────────────────────────────
+  // Writes only the descriptive fields of records that do not exist yet, so an
+  // existing record's first advice date, call log and drop state are never touched.
+  function writeNewRecords(metas, source) {
+    if (!window.FBDB || !metas.length) return Promise.resolve(0);
+    const now = new Date().toISOString();
+    const updates = {};
+    metas.forEach(function (m) {
+      const base = 'procedureFollowups/' + m.key;
+      META_FIELDS.forEach(function (f) { updates[base + '/' + f] = m[f] == null ? '' : String(m[f]); });
+      updates[base + '/createdAt'] = now;
+      updates[base + '/createdFrom'] = source;
+      followups[m.key] = Object.assign({}, m, { createdAt: now, createdFrom: source });
+    });
+    return window.FBDB.ref().update(updates).then(function () { return metas.length; });
+  }
+  function recordAdvisedFromVisit(bmhId, deptKey, visit, patient) {
+    if (!window.FBDB || !bmhId || !deptOf(deptKey)) return Promise.resolve(0);
+    const procs = advisedProcsOf(visit, deptKey).filter(function (proc) { return !isTestName(proc); });
+    if (!procs.length) return Promise.resolve(0);
+    const p = Object.assign({}, patient || {}, { bmhId: bmhId });
+    const metas = procs.map(function (proc) { return metaFor(p, deptKey, proc, visit); });
+    return Promise.all(metas.map(function (m) {
+      return window.FBDB.ref('procedureFollowups/' + m.key + '/advisedDate').once('value').then(function (snap) {
+        return snap.exists() ? null : m;
+      });
+    })).then(function (checked) {
+      return writeNewRecords(checked.filter(Boolean), 'visit-save');
+    });
+  }
+
+  // ── One-time fill from visit history (admin) ─────────────────────────────
+  function fillFromHistory() {
+    if (fillRunning) return;
+    if (!isAdminUser()) { showToast('Only admin can run this', 'w'); return; }
+    if (!window.FBDB) { showToast('Not connected to the database', 'e'); return; }
+    if (!window.confirm('Fill the advised list from visit history since April?\n\nThis reads every patient\'s past visits once (about 70 MB) and can take several minutes. Best run after clinic hours. Existing entries and call notes are not changed.')) return;
+    fillRunning = true;
+    const status = document.getElementById('adv-fill-status');
+    const say = function (t) { if (status) status.textContent = t; };
+    const ids = Array.from(new Set(patientPool().filter(function (p) { return p && p.bmhId && (p.lastVisit || p.lastVisitByDept); }).map(function (p) { return p.bmhId; })));
+    const byId = new Map(patientPool().filter(Boolean).map(function (p) { return [p.bmhId, p]; }));
+    const found = new Map();
+    let done = 0;
+    const scanOne = function (id) {
+      return window.FBDB.ref('visits/' + id).once('value').then(function (snap) {
+        const visits = asList(snap.val()).filter(function (v) { return v && typeof v === 'object'; })
+          .sort(function (a, b) { return String(a.date || '').localeCompare(String(b.date || '')); });
+        visits.forEach(function (v) {
+          const vDate = localDateKey(v.date || v.visitDate || v.createdAt || '');
+          if (vDate && vDate < FILL_FROM) return;
+          // Each department saves its advised list in its own field, so the field decides the department.
+          DEPTS.forEach(function (d) {
+            advisedProcsOf(v, d.key).forEach(function (proc) {
+              if (isTestName(proc)) return;
+              const m = metaFor(Object.assign({}, byId.get(id) || {}, { bmhId: id }), d.key, proc, v);
+              if (!found.has(m.key)) found.set(m.key, m); // visits are oldest-first, so this keeps the first advice
+            });
+          });
+        });
+      }).catch(function () {}).finally(function () {
+        done += 1;
+        if (done % 50 === 0 || done === ids.length) say('Reading visit history… ' + done + ' / ' + ids.length + ' patients · ' + found.size + ' advised procedures found');
+      });
+    };
+    let next = 0;
+    const worker = function () {
+      if (next >= ids.length) return Promise.resolve();
+      const id = ids[next++];
+      return scanOne(id).then(worker);
+    };
+    say('Reading visit history… 0 / ' + ids.length + ' patients');
+    Promise.all([0, 1, 2, 3, 4, 5].map(worker)).then(function () {
+      return window.FBDB.ref('procedureFollowups').once('value');
+    }).then(function (snap) {
+      const existing = snap.val() || {};
+      const fresh = Array.from(found.values()).filter(function (m) { return !existing[m.key]; });
+      say('Saving ' + fresh.length + ' new entries…');
+      const chunks = [];
+      for (let i = 0; i < fresh.length; i += 200) chunks.push(fresh.slice(i, i + 200));
+      return chunks.reduce(function (p, chunk) {
+        return p.then(function () { return writeNewRecords(chunk, 'history-fill'); });
+      }, Promise.resolve()).then(function () {
+        return window.FBDB.ref('procedureFollowupsMeta').update({
+          historyFilledAt: new Date().toISOString(),
+          historyFilledBy: (currentUser() && currentUser().name) || 'Admin',
+          historyFilledCount: fresh.length
+        }).then(function () { return fresh.length; });
+      });
+    }).then(function (n) {
+      fillRunning = false;
+      showToast('Advised list filled from visit history — ' + n + ' entries added ✓', 's');
+      rerenderReportIfOpen();
+    }).catch(function (err) {
+      fillRunning = false;
+      console.warn('advised history fill failed', err);
+      say('Stopped — ' + (err && err.message ? err.message : 'error') + '. It is safe to run again.');
+      showToast('History fill stopped — safe to run again', 'e');
+    });
+  }
+
+  // ── Building the list ────────────────────────────────────────────────────
   function buildRows() {
     const ots = otRows();
     const usedOt = new Set();
-    const rows = [];
-    const seen = new Set();
+    const byKey = new Map();
+    const poolById = new Map(patientPool().filter(Boolean).map(function (p) { return [p.bmhId, p]; }));
+    // 1. Permanent records (stay until dropped)
+    Object.keys(followups || {}).forEach(function (key) {
+      const rec = followups[key];
+      if (!rec || !rec.bmhId || !rec.proc) return;
+      const p = poolById.get(rec.bmhId) || {};
+      byKey.set(key, {
+        key: key, bmhId: rec.bmhId, patient: p.name || rec.patient || '—', mobile: p.mob || rec.mobile || '',
+        ageSex: rec.ageSex || '—', centre: rec.centre || p.centre || '', dept: rec.dept, proc: rec.proc,
+        eye: rec.eye || eyeOf(rec.proc), advisedDate: rec.advisedDate || '', doctor: rec.doctor || '',
+        isTest: isTestName(rec.proc), dropped: !!rec.dropped, source: 'record'
+      });
+    });
+    // 2. Latest plans not yet recorded (e.g. before the history fill has been run)
     patientPool().forEach(function (p) {
-      if (!p || !p.bmhId || seen.has(p.bmhId)) return;
-      seen.add(p.bmhId);
+      if (!p || !p.bmhId) return;
       const plans = latestPlanByDept(p);
       Object.keys(plans).forEach(function (dk) {
-        const v = plans[dk];
-        const d = DEPTS.find(function (x) { return x.key === dk; });
-        const procs = Array.from(new Set(asList(v[d.field]).map(function (x) { return String(x || '').trim(); }).filter(Boolean)));
-        procs.forEach(function (proc) {
-          const row = {
-            key: rowKey(p.bmhId, dk, proc), bmhId: p.bmhId, patient: p.name || p.patient || '—',
-            mobile: p.mob || p.mobile || p.phone || '', ageSex: [p.age || '—', p.sex || '—'].join('/'),
-            centre: p.centre || '', dept: dk, proc: proc, eye: eyeOf(proc),
-            advisedDate: localDateKey(v.date || v.visitDate || v.createdAt || ''),
-            doctor: String(v.doctor || p.assignedDoctor || p.doctor || '').split('·')[0].trim(),
-            isTest: isTestName(proc), source: 'plan'
-          };
-          const ot = findOtMatch(row, ots);
-          if (ot) usedOt.add(ot);
-          row.ot = ot;
-          row.status = statusFromOt(ot);
-          rows.push(row);
+        advisedProcsOf(plans[dk], dk).forEach(function (proc) {
+          const m = metaFor(p, dk, proc, plans[dk]);
+          if (byKey.has(m.key)) return;
+          byKey.set(m.key, Object.assign(m, { isTest: isTestName(proc), dropped: false, source: 'plan' }));
         });
       });
     });
-    // Operated / booked patients whose latest plan no longer lists the procedure
+    const rows = Array.from(byKey.values());
+    rows.forEach(function (row) {
+      const ot = row.isTest ? null : findOtMatch(row, ots);
+      if (ot) usedOt.add(ot);
+      row.ot = ot;
+      row.status = statusFromOt(ot);
+    });
+    // 3. Operated / booked patients with no advice on record
     ots.forEach(function (o) {
       if (usedOt.has(o)) return;
+      const key = rowKey(o.bmhId, o.dept, o.proc);
+      if (byKey.has(key)) return;
       rows.push({
-        key: rowKey(o.bmhId, o.dept, o.proc), bmhId: o.bmhId, patient: o.patient || '—', mobile: o.mobile || '',
-        ageSex: '—', centre: o.centre, dept: o.dept, proc: o.proc, eye: o.eye, advisedDate: '',
-        doctor: o.surgeon, isTest: false, source: 'ot', ot: o, status: statusFromOt(o)
+        key: key, bmhId: o.bmhId, patient: o.patient || '—', mobile: o.mobile || '', ageSex: '—', centre: o.centre,
+        dept: o.dept, proc: o.proc, eye: o.eye, advisedDate: '', doctor: o.surgeon, isTest: false, dropped: false,
+        source: 'ot', ot: o, status: statusFromOt(o)
       });
     });
     return rows;
@@ -53713,6 +53856,8 @@ window.addEventListener('DOMContentLoaded', function() {
       if (f.to && (!d || d > f.to)) return false;
       if (f.text && ![r.proc, r.patient, r.bmhId, r.mobile, r.doctor].join(' ').toLowerCase().includes(f.text)) return false;
       if (ignoreStatus) return true;
+      if (f.status === 'dropped') return r.dropped;
+      if (r.dropped) return false;
       if (f.status === 'due') return isDue(followups[r.key]);
       if (f.status === 'pending') return r.status === 'advised';
       if (f.status !== 'all' && r.status !== f.status) return false;
@@ -53729,8 +53874,12 @@ window.addEventListener('DOMContentLoaded', function() {
       return kb.localeCompare(ka) || String(a.patient).localeCompare(String(b.patient));
     });
   }
-  function deptLabel(key) { const d = DEPTS.find(function (x) { return x.key === key; }); return d ? d.label : (key || '—'); }
   function statusCell(r) {
+    if (r.dropped) {
+      const rec = followups[r.key] || {};
+      return '<span class="badge bd-gray">Dropped ' + esc(fmt(localDateKey(rec.droppedAt || ''))) + '</span>'
+        + (rec.dropReason ? '<div style="font-size:10px;color:var(--g1);margin-top:3px">' + esc(rec.dropReason) + '</div>' : '');
+    }
     if (r.status === 'done') {
       return '<span class="badge bd-green">Done ' + esc(fmt(r.ot.date)) + '</span>'
         + '<div style="font-size:10px;color:var(--g1);margin-top:3px">' + esc([r.ot.surgeon, r.ot.iol && r.ot.iol !== 'N/A' ? r.ot.iol : ''].filter(Boolean).join(' · ')) + '</div>';
@@ -53742,10 +53891,10 @@ window.addEventListener('DOMContentLoaded', function() {
     const rec = followups[r.key];
     const due = isDue(rec);
     const last = rec ? [rec.lastOutcome, rec.lastReason].filter(Boolean).join(' — ') : '';
-    const next = rec && rec.status === 'open' && rec.nextDate ? 'Next call: ' + fmt(rec.nextDate) : (rec && rec.status === 'closed' ? 'Closed' : '');
+    const next = rec && !rec.dropped && rec.status === 'open' && rec.nextDate ? 'Next call: ' + fmt(rec.nextDate) : (rec && rec.status === 'closed' && !rec.dropped ? 'No further calls' : '');
     return '<div style="display:flex;gap:8px;align-items:flex-start">'
       + '<button type="button" class="btn btn-xs ' + (due ? 'btn-red bmh-adv-flash' : 'btn-outline') + '" title="Open follow-up sheet" onclick="bmhOpenAdvisedFollowup(\'' + r.key + '\')">📞' + (due ? ' Due' : '') + '</button>'
-      + '<div style="font-size:10.5px;line-height:1.35">' + (last ? esc(last) : (r.status === 'done' ? '' : '<span style="color:var(--g1)">No call logged</span>'))
+      + '<div style="font-size:10.5px;line-height:1.35">' + (last ? esc(last) : (r.status === 'done' || r.dropped ? '' : '<span style="color:var(--g1)">No call logged</span>'))
       + (next ? '<div style="color:' + (due ? '#c62828;font-weight:800' : 'var(--g1)') + '">' + esc(next) + '</div>' : '') + '</div></div>';
   }
 
@@ -53755,12 +53904,14 @@ window.addEventListener('DOMContentLoaded', function() {
     const all = buildRows();
     lastRows = all;
     const base = applyFilters(all, f, true);
+    const live = base.filter(function (r) { return !r.dropped; });
     const counts = {
-      advised: base.filter(function (r) { return r.status === 'advised'; }).length,
-      scheduled: base.filter(function (r) { return r.status === 'scheduled'; }).length,
-      done: base.filter(function (r) { return r.status === 'done'; }).length,
-      due: base.filter(function (r) { return isDue(followups[r.key]); }).length,
-      all: base.length
+      advised: live.filter(function (r) { return r.status === 'advised'; }).length,
+      scheduled: live.filter(function (r) { return r.status === 'scheduled'; }).length,
+      done: live.filter(function (r) { return r.status === 'done'; }).length,
+      due: live.filter(function (r) { return isDue(followups[r.key]); }).length,
+      dropped: base.filter(function (r) { return r.dropped; }).length,
+      all: live.length
     };
     const rows = sortRows(applyFilters(all, f, false));
     const chip = function (value, label, n) {
@@ -53768,14 +53919,21 @@ window.addEventListener('DOMContentLoaded', function() {
       return '<button type="button" class="btn btn-xs ' + (on ? 'btn-blue' : 'btn-outline') + '" onclick="bmhSetAdvisedFilter(\'status\',\'' + value + '\')">' + label + ' <b>' + n + '</b></button>';
     };
     const smallPool = patientPool().length < 10000;
+    const showFill = isAdminUser() && !(fillMeta && fillMeta.historyFilledAt);
     el.innerHTML = '<div class="card">'
       + '<div class="card-hd"><div><div class="card-title">📋 Advised Procedures &amp; Follow-up — ' + rows.length + ' shown</div>'
-      + '<div class="card-sub">From each patient\'s latest plan in every department, checked against the OT register.</div></div>'
+      + '<div class="card-sub">Every procedure advised in any department stays here until it is done in OT or marked "Drop from list".</div></div>'
       + '<button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>'
+      + (!followupsLoaded ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Loading saved follow-ups…</div>' : '')
       + (smallPool ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff7e0;font-size:11.5px">This login has only part of the patient list loaded. Open this report from the admin login to see every advised patient.</div>' : '')
+      + (showFill ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#eef3fb;font-size:11.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+        + '<span>One-time step: add procedures advised at earlier visits since April (from visit history).</span>'
+        + '<button type="button" class="btn btn-xs btn-blue" onclick="bmhFillAdvisedFromHistory()">Fill from visit history</button>'
+        + '<span id="adv-fill-status" style="color:var(--g1)"></span></div>' : '')
       + '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">'
       + chip('pending', 'Not done yet', counts.advised) + chip('due', '📞 Calls due', counts.due)
-      + chip('scheduled', 'OT booked', counts.scheduled) + chip('done', 'Done', counts.done) + chip('all', 'All', counts.all)
+      + chip('scheduled', 'OT booked', counts.scheduled) + chip('done', 'Done', counts.done)
+      + chip('all', 'All', counts.all) + chip('dropped', 'Dropped', counts.dropped)
       + '<label style="margin-left:auto;font-size:11.5px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ' + (f.tests ? 'checked' : '') + ' onchange="bmhSetAdvisedFilter(\'tests\',this.checked)"> Include tests (OCT, fields, etc.)</label>'
       + '</div>'
       + (rows.length ? '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>Dept</th><th>Procedure advised</th><th>Doctor</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>'
@@ -53794,6 +53952,7 @@ window.addEventListener('DOMContentLoaded', function() {
     const f = readFilters();
     const rows = sortRows(applyFilters(lastRows.length ? lastRows : buildRows(), f, false));
     const statusText = function (r) {
+      if (r.dropped) return 'Dropped';
       if (r.status === 'done') return 'Done ' + fmt(r.ot.date);
       if (r.status === 'scheduled') return 'OT booked ' + fmt(r.ot.date);
       return 'Not done yet';
@@ -53805,7 +53964,8 @@ window.addEventListener('DOMContentLoaded', function() {
         const rec = followups[r.key] || {};
         return '<tr><td>' + (i + 1) + '</td><td>' + esc(fmt(r.advisedDate)) + '</td><td>' + esc(r.patient) + '</td><td>' + esc(r.bmhId) + '</td><td>' + esc(r.mobile || '—') + '</td><td>'
           + esc(deptLabel(r.dept)) + '</td><td>' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td><td>' + esc(statusText(r)) + '</td><td>'
-          + esc([rec.lastOutcome, rec.lastReason, rec.lastRemark].filter(Boolean).join(' — ') || '—') + '</td><td>' + esc(rec.status === 'open' ? fmt(rec.nextDate) : (rec.status === 'closed' ? 'Closed' : '—')) + '</td></tr>';
+          + esc([rec.lastOutcome, rec.lastReason, rec.lastRemark].filter(Boolean).join(' — ') || '—') + '</td><td>'
+          + esc(rec.status === 'open' && !rec.dropped ? fmt(rec.nextDate) : '—') + '</td></tr>';
       }).join('') + '</tbody></table></body></html>';
   }
 
@@ -53838,7 +53998,10 @@ window.addEventListener('DOMContentLoaded', function() {
       + '<div class="form-group" style="margin-top:8px"><label class="fl">Notes of the conversation</label><textarea id="adv-fu-remark" style="min-height:70px" placeholder="What the patient said"></textarea></div>'
       + '<div class="form-group" style="margin-top:8px"><label class="fl">Follow up again in</label><div id="adv-fu-intervals" style="display:flex;flex-wrap:wrap;gap:6px"></div>'
       + '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:11.5px">or on date <input type="date" id="adv-fu-date" style="max-width:170px" onchange="bmhAdvisedPickDate(this.value)"></div></div>'
-      + '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-gold" style="flex:1" id="adv-fu-save" onclick="bmhSaveAdvisedFollowup()">💾 Save follow-up</button><button class="btn btn-gray" onclick="closeM(\'m-adv-followup\')">Cancel</button></div>'
+      + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-gold" style="flex:1" id="adv-fu-save" onclick="bmhSaveAdvisedFollowup(\'call\')">💾 Save follow-up</button>'
+      + '<button class="btn btn-outline" id="adv-fu-drop" onclick="bmhSaveAdvisedFollowup(\'drop\')">🗑 Drop from list</button>'
+      + '<button class="btn btn-outline" id="adv-fu-restore" style="display:none" onclick="bmhSaveAdvisedFollowup(\'restore\')">↩ Restore to list</button>'
+      + '<button class="btn btn-gray" onclick="closeM(\'m-adv-followup\')">Cancel</button></div>'
       + '</div>';
     document.body.appendChild(ov);
   }
@@ -53861,7 +54024,8 @@ window.addEventListener('DOMContentLoaded', function() {
     const rec = followups[key];
     if (!rec) return null;
     return { key: key, bmhId: rec.bmhId, patient: rec.patient, mobile: rec.mobile, ageSex: rec.ageSex || '—', centre: rec.centre,
-      dept: rec.dept, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate, doctor: rec.doctor, status: 'advised', source: 'record' };
+      dept: rec.dept, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate, doctor: rec.doctor, status: 'advised',
+      dropped: !!rec.dropped, source: 'record' };
   }
   function openFollowup(key) {
     ensureListening();
@@ -53871,7 +54035,7 @@ window.addEventListener('DOMContentLoaded', function() {
     selectedNext = null;
     ensureModal();
     const rec = followups[key] || {};
-    const statusLine = row.status === 'done' ? 'Done ' + fmt(row.ot && row.ot.date) : (row.status === 'scheduled' ? 'OT booked ' + fmt(row.ot && row.ot.date) : 'Not done yet');
+    const statusLine = row.dropped ? 'Dropped from list' : row.status === 'done' ? 'Done ' + fmt(row.ot && row.ot.date) : (row.status === 'scheduled' ? 'OT booked ' + fmt(row.ot && row.ot.date) : 'Not done yet');
     document.getElementById('adv-fu-head').innerHTML = '<div style="font-size:15px;font-weight:900;color:var(--bmh-blue)">' + esc(row.patient) + '</div>'
       + '<div>' + esc(row.bmhId) + ' · ' + esc(row.ageSex || '—') + (row.mobile ? ' · <a href="tel:' + esc(String(row.mobile).replace(/[^0-9+]/g, '')) + '">📱 ' + esc(row.mobile) + '</a>' : '') + '</div>'
       + '<div><b>' + esc(row.proc) + '</b> · ' + esc(deptLabel(row.dept)) + '</div>'
@@ -53881,12 +54045,14 @@ window.addEventListener('DOMContentLoaded', function() {
       const when = e.at ? new Date(e.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
       return '<div style="padding:5px 0;border-bottom:1px solid var(--g5,#eee)"><b>' + esc(when) + '</b> · ' + esc(e.by || '') + '<br>'
         + esc([e.outcome, e.reason].filter(Boolean).join(' — ') || '—') + (e.remark ? '<br><i>' + esc(e.remark) + '</i>' : '')
-        + '<br><span style="color:var(--g1)">' + (e.nextDate ? 'Next call ' + esc(fmt(e.nextDate)) : 'No further follow-up') + '</span></div>';
+        + (e.action === 'drop' || e.action === 'restore' ? '' : '<br><span style="color:var(--g1)">' + (e.nextDate ? 'Next call ' + esc(fmt(e.nextDate)) : 'No further follow-up') + '</span>') + '</div>';
     }).join('') : '<div style="color:var(--g1);padding:4px 0">No calls logged yet.</div>';
     document.getElementById('adv-fu-reasons').innerHTML = reasonOptions().map(function (r) { return '<option value="' + esc(r) + '">'; }).join('');
     document.getElementById('adv-fu-outcome').value = '';
     document.getElementById('adv-fu-reason').value = rec.lastReason || '';
     document.getElementById('adv-fu-remark').value = '';
+    document.getElementById('adv-fu-drop').style.display = row.dropped ? 'none' : '';
+    document.getElementById('adv-fu-restore').style.display = row.dropped ? '' : 'none';
     renderIntervals();
     openM('m-adv-followup');
   }
@@ -53894,38 +54060,60 @@ window.addEventListener('DOMContentLoaded', function() {
     selectedNext = value || '';
     renderIntervals();
   }
-  function saveFollowup() {
+  function saveFollowup(mode) {
+    mode = mode || 'call';
     const row = currentRow;
     if (!row) return;
     const outcome = document.getElementById('adv-fu-outcome')?.value || '';
     const reason = (document.getElementById('adv-fu-reason')?.value || '').trim();
     const remark = (document.getElementById('adv-fu-remark')?.value || '').trim();
-    if (!outcome) { showToast('Select the call outcome', 'w'); return; }
-    if (selectedNext === null) { showToast('Choose when to follow up again (or "No further follow-up")', 'w'); return; }
+    if (mode === 'call') {
+      if (!outcome) { showToast('Select the call outcome', 'w'); return; }
+      if (selectedNext === null) { showToast('Choose when to follow up again (or "No further follow-up")', 'w'); return; }
+    }
+    if (mode === 'drop' && !reason && !remark) { showToast('Write the reason for dropping it from the list', 'w'); return; }
     if (!window.FBDB) { showToast('Not connected to the database — follow-up not saved', 'e'); return; }
     const cu = currentUser();
     const now = new Date().toISOString();
     const by = (cu && cu.name) || 'Staff';
     const entryId = window.FBDB.ref().push().key;
     const base = 'procedureFollowups/' + row.key;
-    const entry = { at: now, by: by, outcome: outcome, reason: reason, remark: remark, nextDate: selectedNext || '' };
+    const existing = followups[row.key] || {};
     const updates = {};
-    ['bmhId', 'patient', 'mobile', 'ageSex', 'centre', 'dept', 'proc', 'eye', 'advisedDate', 'doctor'].forEach(function (k) {
-      updates[base + '/' + k] = row[k] == null ? '' : String(row[k]);
+    // Descriptive fields: keep the first advice date if the record already exists.
+    META_FIELDS.forEach(function (k) {
+      const value = (k === 'advisedDate' && existing.advisedDate) ? existing.advisedDate : row[k];
+      updates[base + '/' + k] = value == null ? '' : String(value);
     });
-    updates[base + '/status'] = selectedNext ? 'open' : 'closed';
-    updates[base + '/nextDate'] = selectedNext || '';
-    updates[base + '/lastOutcome'] = outcome;
-    updates[base + '/lastReason'] = reason;
-    updates[base + '/lastRemark'] = remark;
+    if (!existing.createdAt) { updates[base + '/createdAt'] = now; updates[base + '/createdFrom'] = 'follow-up'; }
+    const entry = { at: now, by: by, action: mode, outcome: mode === 'drop' ? 'Dropped from list' : (mode === 'restore' ? 'Restored to list' : outcome), reason: reason, remark: remark, nextDate: mode === 'call' ? (selectedNext || '') : '' };
+    if (mode === 'call') {
+      updates[base + '/status'] = selectedNext ? 'open' : 'closed';
+      updates[base + '/nextDate'] = selectedNext || '';
+      updates[base + '/lastOutcome'] = outcome;
+      updates[base + '/lastReason'] = reason;
+      updates[base + '/lastRemark'] = remark;
+    } else if (mode === 'drop') {
+      updates[base + '/dropped'] = true;
+      updates[base + '/droppedAt'] = now;
+      updates[base + '/droppedBy'] = by;
+      updates[base + '/dropReason'] = [reason, remark].filter(Boolean).join(' — ');
+      updates[base + '/status'] = 'closed';
+      updates[base + '/nextDate'] = '';
+    } else if (mode === 'restore') {
+      updates[base + '/dropped'] = false;
+      updates[base + '/droppedAt'] = '';
+      updates[base + '/droppedBy'] = '';
+      updates[base + '/dropReason'] = '';
+    }
     updates[base + '/updatedAt'] = now;
     updates[base + '/updatedBy'] = by;
     updates[base + '/log/' + entryId] = entry;
     if (reason && reasonOptions().indexOf(reason) === -1) updates['procedureFollowupReasons/' + slug(reason)] = reason;
-    const btn = document.getElementById('adv-fu-save');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    const buttons = ['adv-fu-save', 'adv-fu-drop', 'adv-fu-restore'].map(function (id) { return document.getElementById(id); }).filter(Boolean);
+    buttons.forEach(function (b) { b.disabled = true; });
     window.FBDB.ref().update(updates).then(function () {
-      const rec = Object.assign({}, followups[row.key] || {});
+      const rec = Object.assign({}, existing);
       Object.keys(updates).forEach(function (path) {
         if (path.indexOf(base + '/') !== 0) return;
         const field = path.slice(base.length + 1);
@@ -53934,14 +54122,16 @@ window.addEventListener('DOMContentLoaded', function() {
       });
       followups[row.key] = rec;
       closeM('m-adv-followup');
-      showToast(selectedNext ? 'Follow-up saved — next call ' + fmt(selectedNext) + ' ✓' : 'Follow-up saved and closed ✓', 's');
+      showToast(mode === 'drop' ? 'Dropped from the advised list ✓'
+        : mode === 'restore' ? 'Restored to the advised list ✓'
+        : (selectedNext ? 'Follow-up saved — next call ' + fmt(selectedNext) + ' ✓' : 'Follow-up saved — no further calls ✓'), 's');
       refreshBanner();
       rerenderReportIfOpen();
     }).catch(function (err) {
       console.warn('procedure follow-up save failed', err);
-      showToast('Could not save follow-up — please try again', 'e');
+      showToast('Could not save — please try again', 'e');
     }).finally(function () {
-      if (btn) { btn.disabled = false; btn.textContent = '💾 Save follow-up'; }
+      buttons.forEach(function (b) { b.disabled = false; });
     });
   }
 
@@ -53949,10 +54139,9 @@ window.addEventListener('DOMContentLoaded', function() {
   function userScope() {
     const cu = currentUser();
     if (!cu) return null;
-    const role = String(cu.role || '').toLowerCase();
-    const admin = !!cu.isAdmin || role === 'admin';
+    const admin = isAdminUser();
     const dept = normalizeDeptKeyForQueue(cu.dept || '');
-    if (!admin && !DEPTS.some(function (d) { return d.key === dept; })) return null;
+    if (!admin && !deptOf(dept)) return null;
     const allCentres = admin || !!cu.canSeeAllCentres || cu.centre === 'BOTH';
     return { admin: admin, dept: dept, centre: allCentres ? '' : String(cu.centre || '').toUpperCase() };
   }
@@ -54023,10 +54212,15 @@ window.addEventListener('DOMContentLoaded', function() {
     listening = true;
     window.FBDB.ref('procedureFollowups').on('value', function (snap) {
       followups = snap.val() || {};
+      followupsLoaded = true;
       refreshBanner();
+      rerenderReportIfOpen();
     }, function (err) { console.warn('procedure follow-ups listener error', err); });
     window.FBDB.ref('procedureFollowupReasons').on('value', function (snap) {
       customReasons = snap.val() || {};
+    }, function () {});
+    window.FBDB.ref('procedureFollowupsMeta').on('value', function (snap) {
+      fillMeta = snap.val() || null;
     }, function () {});
   }
 
@@ -54035,6 +54229,13 @@ window.addEventListener('DOMContentLoaded', function() {
   window.bmhOpenAdvisedFollowup = openFollowup;
   window.bmhAdvisedPickDate = pickDate;
   window.bmhSaveAdvisedFollowup = saveFollowup;
+  window.bmhFillAdvisedFromHistory = fillFromHistory;
+  // Called from saveVisit only after the visit itself has saved successfully.
+  window.bmhRecordAdvisedFromVisit = function (bmhId, deptKey, visit, patient) {
+    try {
+      recordAdvisedFromVisit(bmhId, deptKey, visit, patient).catch(function (e) { console.warn('advised record skipped', e); });
+    } catch (e) { console.warn('advised record skipped', e); }
+  };
   window.bmhSetAdvisedFilter = function (name, value) {
     const f = window._bmhAdvFilter || (window._bmhAdvFilter = { status: 'pending', tests: false });
     f[name] = value;
