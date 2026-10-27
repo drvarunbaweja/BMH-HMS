@@ -54347,7 +54347,9 @@ window.addEventListener('DOMContentLoaded', function() {
 // renderInvestigationChooser, and the `panel-` condition in printUnifiedRx.
 // ═══════════════════════════════════════════════════════════════════════════
 (function () {
-  const PANELS = [
+  // Standard panels. Doctors/admin can edit, delete or add panels; those changes are
+  // saved in settings/labPanels/<key> and override these defaults on every computer.
+  const BUILTIN_PANELS = [
     { key: 'cbc', name: 'CBC (Complete Blood Count)', short: 'CBC', alias: /\bcbc\b|complete blood count|h(a)?emogram|\bhmg\b/i,
       tests: ['Hb (Haemoglobin)', 'T.L.C. (Total Leukocytes Count)', 'Neutrophils', 'Lymphocytes', 'Monocytes', 'Eosinophils', 'Basophils',
         'Platelets Count', 'R.B.C. (Red Blood Cells)', 'P.C.V. (Packed Cell Volume)', 'M.C.V. (Mean Cell Volume)',
@@ -54389,6 +54391,182 @@ window.addEventListener('DOMContentLoaded', function() {
 
   function norm(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function asList(v) { return Array.isArray(v) ? v.filter(Boolean) : (v && typeof v === 'object' ? Object.values(v).filter(Boolean) : []); }
+
+  // ── Panels = standard panels merged with saved edits ───────────────────────
+  let panelOverrides = {};
+  let overridesListening = false;
+  function getPanels() {
+    const out = [];
+    BUILTIN_PANELS.forEach(function (p) {
+      const o = panelOverrides[p.key];
+      if (o && o.deleted) return;
+      if (o && o.name) {
+        out.push({ key: p.key, name: o.name, short: o.short || o.name, tests: asList(o.tests), alias: p.alias, builtin: true, edited: true });
+      } else {
+        out.push(Object.assign({ builtin: true, edited: false }, p));
+      }
+    });
+    Object.keys(panelOverrides || {}).forEach(function (key) {
+      if (BUILTIN_PANELS.some(function (p) { return p.key === key; })) return;
+      const o = panelOverrides[key];
+      if (!o || o.deleted || !o.name) return;
+      out.push({ key: key, name: o.name, short: o.short || o.name, tests: asList(o.tests), alias: null, builtin: false, edited: false });
+    });
+    return out;
+  }
+  function panelCovers(testName) {
+    const n = norm(testName);
+    return getPanels().some(function (p) {
+      return p.alias ? p.alias.test(testName) : (norm(p.name) === n || norm(p.short) === n);
+    });
+  }
+  function ensureOverridesListener() {
+    if (overridesListening || !window.FBDB) return;
+    overridesListening = true;
+    window.FBDB.ref('settings/labPanels').on('value', function (snap) {
+      panelOverrides = snap.val() || {};
+      if (!draft) { renderPanelCards(); renderMoreTests(); }
+    }, function (err) { console.warn('lab panels listener error', err); });
+  }
+
+  // ── Panel editor ────────────────────────────────────────────────────────────
+  let editing = false;
+  let draft = null;       // panel being edited: { key, name, short, tests, builtin, isNew }
+  let deleteArmed = '';   // key of the panel waiting for a second tap to delete
+  function currentUserObj() { return (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER : (window.CURRENT_USER || null); }
+  function canEditPanels() {
+    const cu = currentUserObj();
+    if (!cu) return false;
+    const role = String(cu.role || '').toLowerCase();
+    return !!cu.isAdmin || ['admin', 'doctor', 'optometrist', 'lab'].indexOf(role) > -1;
+  }
+  function allTestNames() {
+    const names = new Map();
+    allCategoryTests().forEach(function (n) { names.set(norm(n), n); });
+    moreLabTests().forEach(function (group) { group.forEach(function (n) { if (!names.has(norm(n))) names.set(norm(n), n); }); });
+    return Array.from(names.values()).sort(function (a, b) { return a.localeCompare(b); });
+  }
+  function savePanelRecord(key, record, okMessage) {
+    if (!window.FBDB) { showToast('Not connected to the database — panel not saved', 'e'); return Promise.resolve(false); }
+    const cu = currentUserObj();
+    const ref = window.FBDB.ref('settings/labPanels/' + key);
+    const write = record === null ? ref.remove()
+      : ref.set(Object.assign({}, record, { updatedAt: new Date().toISOString(), updatedBy: (cu && cu.name) || 'Staff' }));
+    return write.then(function () {
+      if (record === null) delete panelOverrides[key]; else panelOverrides[key] = record;
+      showToast(okMessage, 's');
+      return true;
+    }).catch(function (err) {
+      console.warn('lab panel save failed', err);
+      showToast('Could not save the panel — please try again', 'e');
+      return false;
+    });
+  }
+  function syncDraftFromInputs() {
+    if (!draft) return;
+    const n = document.getElementById('inv-pe-name');
+    const s = document.getElementById('inv-pe-short');
+    if (n) draft.name = n.value;
+    if (s) draft.short = s.value;
+  }
+  function setEditMode(on) {
+    editing = !!on;
+    draft = null;
+    deleteArmed = '';
+    renderPanelCards();
+  }
+  function editPanel(key) {
+    if (key === '__new') {
+      draft = { key: '', name: '', short: '', tests: [], builtin: false, isNew: true };
+    } else {
+      const p = getPanels().find(function (x) { return x.key === key; });
+      if (!p) return;
+      draft = { key: p.key, name: p.name, short: p.short, tests: p.tests.slice(), builtin: p.builtin, isNew: false };
+    }
+    deleteArmed = '';
+    renderPanelCards();
+  }
+  function addDraftTest() {
+    if (!draft) return;
+    syncDraftFromInputs();
+    const input = document.getElementById('inv-pe-add');
+    const raw = String(input && input.value || '').trim();
+    if (!raw) return;
+    const match = allTestNames().find(function (n) { return norm(n) === norm(raw); }) || raw;
+    if (!draft.tests.some(function (t) { return norm(t) === norm(match); })) draft.tests.push(match);
+    renderPanelCards();
+    const again = document.getElementById('inv-pe-add');
+    if (again) again.focus();
+  }
+  function removeDraftTest(index) {
+    if (!draft) return;
+    syncDraftFromInputs();
+    draft.tests.splice(index, 1);
+    renderPanelCards();
+  }
+  function saveDraft() {
+    if (!draft) return;
+    syncDraftFromInputs();
+    const name = String(draft.name || '').trim();
+    const short = String(draft.short || '').trim() || name;
+    if (!name) { showToast('Enter the panel name', 'w'); return; }
+    if (!draft.tests.length) { showToast('Add at least one test to the panel', 'w'); return; }
+    const key = draft.key || ('c' + Date.now().toString(36));
+    savePanelRecord(key, { name: name, short: short, tests: draft.tests.slice() }, 'Panel saved: ' + short + ' ✓').then(function (ok) {
+      if (!ok) return;
+      draft = null;
+      renderPanelCards();
+      renderMoreTests();
+    });
+  }
+  function deletePanel(key) {
+    if (deleteArmed !== key) { deleteArmed = key; renderPanelCards(); return; }
+    const p = getPanels().find(function (x) { return x.key === key; });
+    deleteArmed = '';
+    if (!p) return;
+    const record = p.builtin ? { deleted: true } : null;
+    savePanelRecord(key, record, 'Panel deleted: ' + p.short).then(function () { renderPanelCards(); renderMoreTests(); });
+  }
+  function resetPanel(key) {
+    savePanelRecord(key, null, 'Panel reset to standard ✓').then(function () { renderPanelCards(); renderMoreTests(); });
+  }
+  function renderEditor(host) {
+    if (draft) {
+      const options = allTestNames().map(function (n) { return '<option value="' + esc(n) + '">'; }).join('');
+      host.innerHTML = '<div style="grid-column:1/-1;background:#fff;border:1.5px solid var(--g5,#e5e5e5);border-radius:10px;padding:10px 12px">'
+        + '<div style="font-size:13px;font-weight:900;color:var(--bmh-blue);margin-bottom:8px">' + (draft.isNew ? 'New panel' : 'Edit panel') + '</div>'
+        + '<div class="fg" style="gap:8px"><div class="form-group" style="margin:0"><label class="fl">Panel name</label><input type="text" id="inv-pe-name" value="' + esc(draft.name) + '" placeholder="e.g. Pre-op Profile"></div>'
+        + '<div class="form-group" style="margin:0"><label class="fl">Prints on prescription as</label><input type="text" id="inv-pe-short" value="' + esc(draft.short) + '" placeholder="e.g. Pre-op Profile"></div></div>'
+        + '<div style="font-size:10.5px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 5px">Tests sent to the lab (' + draft.tests.length + ')</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">' + (draft.tests.length ? draft.tests.map(function (t, i) {
+          return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-lt);color:var(--blue);padding:3px 4px 3px 9px;border-radius:20px;font-size:11px;font-weight:700">' + esc(t)
+            + '<button type="button" title="Remove" onclick="bmhLabPanelRemoveTest(' + i + ')" style="border:0;background:#fff;color:#c62828;border-radius:50%;width:18px;height:18px;line-height:16px;font-weight:900;cursor:pointer">✕</button></span>';
+        }).join('') : '<span style="font-size:11px;color:var(--g1)">No tests yet</span>') + '</div>'
+        + '<div style="display:flex;gap:6px"><input type="text" id="inv-pe-add" list="inv-pe-testlist" autocomplete="off" placeholder="Type or pick a test, then Add" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();bmhLabPanelAddTest();}"><datalist id="inv-pe-testlist">' + options + '</datalist>'
+        + '<button type="button" class="btn btn-xs btn-blue" onclick="bmhLabPanelAddTest()">+ Add</button></div>'
+        + '<div style="display:flex;gap:8px;margin-top:12px"><button type="button" class="btn btn-gold btn-sm" style="flex:1" onclick="bmhLabPanelSave()">💾 Save panel</button>'
+        + '<button type="button" class="btn btn-gray btn-sm" onclick="bmhLabPanelEdit(null)">Cancel</button></div></div>';
+      return;
+    }
+    const panels = getPanels();
+    const deleted = BUILTIN_PANELS.filter(function (p) { return panelOverrides[p.key] && panelOverrides[p.key].deleted; });
+    host.innerHTML = '<div style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">'
+      + '<button type="button" class="btn btn-xs btn-gold" onclick="bmhLabPanelEdit(\'__new\')">+ New panel</button>'
+      + '<button type="button" class="btn btn-xs btn-outline" onclick="bmhLabPanelEditMode(false)">✓ Done editing</button></div>'
+      + panels.map(function (p) {
+        const armed = deleteArmed === p.key;
+        return '<div style="grid-column:1/-1;display:flex;gap:8px;align-items:center;padding:8px 10px;background:var(--g6);border-radius:8px">'
+          + '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:800">' + esc(p.name) + (p.edited ? ' <span style="font-size:9.5px;color:#8a4200">(edited)</span>' : '') + (!p.builtin ? ' <span style="font-size:9.5px;color:#0B5FA5">(added)</span>' : '') + '</div>'
+          + '<div style="font-size:10px;color:var(--g1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Prints as “' + esc(p.short) + '” · ' + esc(p.tests.join(', ')) + '</div></div>'
+          + '<button type="button" class="btn btn-xs btn-outline" onclick="bmhLabPanelEdit(\'' + p.key + '\')">Edit</button>'
+          + (p.edited ? '<button type="button" class="btn btn-xs btn-outline" onclick="bmhLabPanelReset(\'' + p.key + '\')">Reset to standard</button>' : '')
+          + '<button type="button" class="btn btn-xs ' + (armed ? 'btn-red' : 'btn-outline') + '" onclick="bmhLabPanelDelete(\'' + p.key + '\')">' + (armed ? 'Tap again to delete' : 'Delete') + '</button></div>';
+      }).join('')
+      + (deleted.length ? '<div style="grid-column:1/-1;font-size:11px;color:var(--g1);margin-top:6px">Deleted standard panels: ' + deleted.map(function (p) {
+        return esc(p.short) + ' <button type="button" class="btn btn-xs btn-outline" onclick="bmhLabPanelReset(\'' + p.key + '\')">Restore</button>';
+      }).join(' ') + '</div>' : '');
+  }
   function allCategoryTests() {
     const map = new Map();
     (Array.isArray(INVESTIGATION_CATEGORIES) ? INVESTIGATION_CATEGORIES : []).forEach(function (cat) {
@@ -54429,7 +54607,7 @@ window.addEventListener('DOMContentLoaded', function() {
     return inTemplates && resolvePanelTests(panel).every(function (t) { return sel.has(t); });
   }
   function togglePanel(key) {
-    const panel = PANELS.find(function (p) { return p.key === key; });
+    const panel = getPanels().find(function (p) { return p.key === key; });
     if (!panel) return;
     const tests = resolvePanelTests(panel);
     window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS = window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS || [];
@@ -54457,7 +54635,13 @@ window.addEventListener('DOMContentLoaded', function() {
   function renderPanelCards() {
     const host = document.getElementById('inv-panels-list');
     if (!host) return;
-    host.innerHTML = PANELS.map(function (panel) {
+    const tools = document.getElementById('inv-panels-tools');
+    if (tools) {
+      tools.innerHTML = (!editing && canEditPanels())
+        ? '<button type="button" class="btn btn-xs btn-outline" onclick="bmhLabPanelEditMode(true)">✏️ Edit panels</button>' : '';
+    }
+    if (editing) { renderEditor(host); return; }
+    host.innerHTML = getPanels().map(function (panel) {
       const on = isPanelSelected(panel);
       const tests = resolvePanelTests(panel);
       return '<div onclick="bmhToggleLabPanel(\'' + panel.key + '\')" style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none;background:' + (on ? 'var(--blue-lt)' : 'var(--g6)') + ';border:1.5px solid ' + (on ? 'var(--blue,#0B5FA5)' : 'transparent') + '">'
@@ -54476,7 +54660,7 @@ window.addEventListener('DOMContentLoaded', function() {
     const add = function (heading, name) {
       const clean = String(name || '').trim();
       if (!clean || alreadyInChooser(clean, known) || listed.has(norm(clean))) return;
-      if (PANELS.some(function (p) { return p.alias.test(clean); })) return; // covered by a panel
+      if (panelCovers(clean)) return; // covered by a panel
       listed.add(norm(clean));
       const h = String(heading || 'Other lab tests').trim() || 'Other lab tests';
       if (!groups.has(h)) groups.set(h, new Map());
@@ -54500,7 +54684,7 @@ window.addEventListener('DOMContentLoaded', function() {
       if (tabbed.has('inv-' + cat.id + '-list')) return;
       (cat.tests || []).forEach(function (t) {
         const clean = String(t || '').trim();
-        if (!clean || listed.has(norm(clean)) || PANELS.some(function (p) { return p.alias.test(clean); })) return;
+        if (!clean || listed.has(norm(clean)) || panelCovers(clean)) return;
         listed.add(norm(clean));
         const h = getLabHeadingPlainLabel(cat.label || cat.id) || 'Other lab tests';
         if (!groups.has(h)) groups.set(h, new Map());
@@ -54549,7 +54733,7 @@ window.addEventListener('DOMContentLoaded', function() {
     const panelsContent = document.createElement('div');
     panelsContent.className = 'tab-content';
     panelsContent.id = 'inv-panels';
-    panelsContent.innerHTML = '<div style="font-size:11px;color:var(--g1);margin:8px 0">Tap a panel to select all its tests. The lab receives every test; the prescription shows only the panel name.</div>'
+    panelsContent.innerHTML = '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin:8px 0"><div style="font-size:11px;color:var(--g1)">Tap a panel to select all its tests. The lab receives every test; the prescription shows only the panel name.</div><div id="inv-panels-tools" style="flex-shrink:0"></div></div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-panels-list"></div>';
     firstContent.parentNode.insertBefore(panelsContent, firstContent);
     const allContents = modal.querySelectorAll('.tab-content');
@@ -54566,10 +54750,18 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 
   window.bmhToggleLabPanel = togglePanel;
-  window.bmhLabPanels = PANELS;
+  window.bmhGetLabPanels = getPanels;
+  window.bmhLabPanelEditMode = setEditMode;
+  window.bmhLabPanelEdit = function (key) { if (key) editPanel(key); else { draft = null; renderPanelCards(); } };
+  window.bmhLabPanelAddTest = addDraftTest;
+  window.bmhLabPanelRemoveTest = removeDraftTest;
+  window.bmhLabPanelSave = saveDraft;
+  window.bmhLabPanelDelete = deletePanel;
+  window.bmhLabPanelReset = resetPanel;
   window.bmhRenderLabPanelsAndMoreTests = function () {
     try {
       if (!ensureTabs()) return;
+      ensureOverridesListener();
       renderPanelCards();
       renderMoreTests();
       syncSelectedInvestigationCheckboxes();
