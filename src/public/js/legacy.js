@@ -33522,6 +33522,10 @@ function generateSurgeryReport() {
     return;
   }
   window._bmhGeneratingSurgeryReportAfterOTRefresh = false;
+  if (sourceFilter === 'advised' && typeof window.bmhRenderAdvisedProcedureReport === 'function') {
+    window.bmhRenderAdvisedProcedureReport(el);
+    return;
+  }
   const filtered = getProcedureReportRows();
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
@@ -33535,6 +33539,13 @@ function generateSurgeryReport() {
 function openSurgeryReportWindow() {
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
   const sourceFilter = document.getElementById('rep-surg-source')?.value || 'ot';
+  if (sourceFilter === 'advised' && typeof window.bmhAdvisedReportPrintHtml === 'function') {
+    const aw = window.open('', '_blank', 'width=1200,height=800');
+    if (!aw) { showToast('Popup blocked — allow popups to open report window', 'w'); return; }
+    aw.document.write(window.bmhAdvisedReportPrintHtml('Advised Procedures & Follow-up'));
+    aw.document.close();
+    return;
+  }
   const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
   const w = window.open('', '_blank', 'width=1200,height=800');
   if (!w) { showToast('Popup blocked — allow popups to open report window', 'w'); return; }
@@ -33547,6 +33558,11 @@ function openSurgeryReportWindow() {
 function printSurgeryReportCurrent() {
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
   const sourceFilter = document.getElementById('rep-surg-source')?.value || 'ot';
+  if (sourceFilter === 'advised' && typeof window.bmhAdvisedReportPrintHtml === 'function') {
+    safePrint(window.bmhAdvisedReportPrintHtml('Advised Procedures & Follow-up'));
+    showToast('Advised procedures list ready to print ✓', 's');
+    return;
+  }
   const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
   safePrint(sourceFilter === 'deliveries'
     ? buildExpectedDeliveryReportHtml(rows, 'Deliveries Expected')
@@ -53451,3 +53467,587 @@ window.addEventListener('DOMContentLoaded', function() {
     }
   } catch(e){}
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADVISED PROCEDURES — follow-up list, call log & due-call reminder
+// Self-contained block. READS: each patient's latest plan per department
+// (lastVisitByDept / lastVisit) and the OT register (OT_CASES).
+// WRITES ONLY: procedureFollowups/<key> and procedureFollowupReasons/<key>.
+// Rollback: delete this block and the three `sourceFilter === 'advised'`
+// hooks in generateSurgeryReport / openSurgeryReportWindow /
+// printSurgeryReportCurrent, plus the "advised" <option> in index.html.
+// ═══════════════════════════════════════════════════════════════════════════
+(function () {
+  const DEPTS = [
+    { key: 'ophtho', field: 'procedures', label: 'Ophthalmology' },
+    { key: 'obg', field: 'obgProcAdvised', label: 'Obs & Gynae' },
+    { key: 'psych', field: 'psychProcAdvised', label: 'Neuropsychiatry' },
+    { key: 'skin', field: 'skinProcAdvised', label: 'Skin & Cosmetology' }
+  ];
+  const INTERVALS = [
+    { label: '3 days', days: 3 }, { label: '1 week', days: 7 }, { label: '10 days', days: 10 },
+    { label: '2 weeks', days: 14 }, { label: '1 month', days: 30 }
+  ];
+  const OUTCOMES = [
+    'Spoke to patient', 'Spoke to relative', 'Not reachable / switched off', 'Wrong number',
+    'Patient will visit', 'Booked for surgery / procedure', 'Declined', 'Done elsewhere'
+  ];
+  const DEFAULT_REASONS = [
+    'Financial constraints', 'Wants to wait / not ready yet', 'Family decision pending',
+    'Wants second opinion', 'Insurance / TPA approval pending', 'Medical fitness pending (BP / sugar / cardiac)',
+    'Fear / anxiety about surgery', 'Distance / travel difficulty', 'No attendant available',
+    'Busy with work / season', 'Got it done elsewhere', 'Not reachable on phone', 'Symptoms improved / feels no need'
+  ];
+  // Investigations / tests that sometimes sit in the "procedures advised" list.
+  const TEST_RE = /\b(oct|fundus|field|perimetry|pentacam|topograph\w*|refraction|cycloplegic|cylcloplegic|biometry|iol ?master|a ?-?scan|b ?-?scan|usg|ultrasound|ultrasonography|gonioscopy|ffa|angiograph\w*|specular|next visit|blood|ecg|x ?-?ray|investigations?|review|dilat\w*)\b/i;
+  // Procedure families — first match wins (order matters).
+  const FAMILIES = [
+    ['pterygium', /pterygium/],
+    ['chalazion', /chalazion|incision and curettage|\bi ?& ?c\b/],
+    ['yag', /\byag\b|capsulotomy/],
+    ['cataract', /cataract|pmics|phaco|\bsics\b|\becce\b|lens extraction|\biol\b/],
+    ['ivt', /intravitreal|anti ?-?v ?e ?g ?f|\bivt\b|ranibizumab|bevacizumab|aflibercept|faricimab|brolucizumab|avastin|lucentis|eylea|accentrix|razumab|ozurdex/],
+    ['glaucoma', /trabeculectomy|trabeculotomy|glaucoma surg|\bmigs\b|istent|hydrus|ahmed|glaucoma valve|goniotomy|\bslt\b|iridotomy/],
+    ['squint', /squint|strabismus/],
+    ['lacrimal', /\bdcr\b|dacryo|punct|probing|syringing|lacrimal/],
+    ['refractive', /lasik|\bsmile\b|\bprk\b|\bicl\b|refractive surgery/],
+    ['retina', /vitrectomy|\bppv\b|scleral buckle|retinal detachment|endolaser|\bprp\b|photocoagulation|barrage|retinal laser/],
+    ['keratoplasty', /keratoplasty|corneal transplant|\bdmek\b|\bdsaek\b|\bpkp\b/],
+    ['lid', /ptosis|entropion|ectropion|blepharoplasty/],
+    ['lscs', /lscs|caesarean|cesarean|c-section/],
+    ['delivery', /normal delivery|vaginal delivery|assisted delivery/],
+    ['hysterectomy', /hysterectomy|\btlh\b|\bnvdh\b/],
+    ['iucd', /copper ?-?t\b|\biucd\b|\biud\b/],
+    ['mtp', /\bmtp\b|suction evac|evacuation|\bd ?& ?c\b|dilatation and curettage|abortion/],
+    ['laparoscopy', /laparoscop|tubectomy|sterili[sz]ation|tubal/],
+    ['ect', /\bect\b|electroconvulsive/],
+    ['rtms', /rtms|transcranial/],
+    ['peel', /\bpeel/],
+    ['laser-skin', /laser hair|hair reduction|tattoo|q ?-?switch|co2 laser|fractional/],
+    ['injectable', /botox|botulinum|filler|hyaluronic/],
+    ['microneedling', /microneedl|dermaroller|mnrf/],
+    ['excision', /excision|biopsy|mole|wart|cautery|cyst/]
+  ];
+  const STOP = new Set(['right', 'left', 'both', 'eyes', 'under', 'with', 'surgery', 'procedure', 'implantation',
+    'advised', 'treatment', 'local', 'anaesthesia', 'anesthesia', 'aseptic', 'precaution', 'technique', 'touch', 'from', 'next', 'visit']);
+
+  let followups = {};
+  let customReasons = {};
+  let listening = false;
+  let lastRows = [];
+  let currentRow = null;
+  let selectedNext = null; // '' = no further follow-up, 'YYYY-MM-DD' = date, null = not chosen
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function today() { return localDateKey(new Date()); }
+  function shiftDate(dateKey, days) {
+    const base = dateKey ? new Date(dateKey + 'T12:00:00') : new Date();
+    if (Number.isNaN(base.getTime())) return '';
+    base.setDate(base.getDate() + days);
+    return localDateKey(base);
+  }
+  function fmt(dateKey) { return dateKey ? (formatDateIN(dateKey) || dateKey) : '—'; }
+  function slug(text) {
+    return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'item';
+  }
+  function rowKey(bmhId, dept, proc) {
+    return String(bmhId || '').replace(/[^A-Za-z0-9-]/g, '') + '__' + dept + '__' + slug(proc);
+  }
+  function currentUser() {
+    return (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER : (window.CURRENT_USER || null);
+  }
+  function asList(value) {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') return Object.values(value);
+    return [];
+  }
+  function procFamily(name) {
+    const t = String(name || '').toLowerCase();
+    for (let i = 0; i < FAMILIES.length; i++) if (FAMILIES[i][1].test(t)) return FAMILIES[i][0];
+    return '';
+  }
+  function isTestName(name) { return TEST_RE.test(String(name || '')) && !procFamily(name); }
+  function eyeOf(text) {
+    const t = String(text || '').toLowerCase();
+    if (/both eyes|\bou\b|bilateral/.test(t)) return 'Both';
+    if (/right|\bod\b/.test(t)) return 'Right';
+    if (/left|\bos\b/.test(t)) return 'Left';
+    return '';
+  }
+  function eyesCompatible(a, b) { return !a || !b || a === 'Both' || b === 'Both' || a === b; }
+  function words(name) {
+    return new Set(String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(function (w) {
+      return w.length >= 4 && !STOP.has(w);
+    }));
+  }
+  function namesMatch(a, b) {
+    const fa = procFamily(a), fb = procFamily(b);
+    if (fa || fb) return fa === fb;
+    const wa = words(a), wb = words(b);
+    if (!wa.size || !wb.size) return false;
+    let shared = 0;
+    wa.forEach(function (w) { if (wb.has(w)) shared += 1; });
+    return shared >= Math.min(2, wa.size, wb.size);
+  }
+
+  function patientPool() {
+    const cache = window._BMH_ALL_PATIENTS_CACHE;
+    if (Array.isArray(cache) && cache.length) return cache;
+    return (typeof PATIENTS !== 'undefined' && Array.isArray(PATIENTS)) ? PATIENTS : [];
+  }
+  function latestPlanByDept(p) {
+    const out = {};
+    const byDept = p.lastVisitByDept || {};
+    DEPTS.forEach(function (d) { if (byDept[d.key] && typeof byDept[d.key] === 'object') out[d.key] = byDept[d.key]; });
+    const lv = p.lastVisit;
+    if (lv && typeof lv === 'object') {
+      const dk = normalizeDeptKeyForQueue(lv.dept || p.lastDeptVisit || '');
+      if (dk && !out[dk] && DEPTS.some(function (d) { return d.key === dk; })) out[dk] = lv;
+    }
+    return out;
+  }
+  function otRows() {
+    const src = (typeof OT_CASES !== 'undefined' && Array.isArray(OT_CASES)) ? OT_CASES : [];
+    return src.filter(Boolean).map(function (c) {
+      const proc = String(c.procedure || c.surgery || c.operation || '').trim();
+      return {
+        bmhId: String(c.bmhId || c.bmshId || c.patientId || '').trim(),
+        proc: proc,
+        eye: eyeOf(String(c.eye || c.site || c.operatingEye || '') + ' ' + proc),
+        date: localDateKey(c.date || c.scheduledDate || c.otDate || c.surgeryDate || c.createdAt || ''),
+        status: String(c.status || 'pending').toLowerCase(),
+        surgeon: c.surgeon || c.doctor || '',
+        iol: c.iol || c.implant || '',
+        centre: c.centre || '',
+        patient: c.patient || c.name || '',
+        mobile: c.mobile || '',
+        dept: c.caseKind === 'obg' ? 'obg' : (normalizeDeptKeyForQueue(c.dept || c.department || '') || 'ophtho'),
+        id: c.id || ''
+      };
+    }).filter(function (o) { return o.bmhId && o.proc && !/^(procedure|\?)$/i.test(o.proc); });
+  }
+  function otDone(o) { return o.status === 'completed' || o.status === 'done'; }
+  function findOtMatch(row, ots) {
+    // Only an OT entry on/after the advice counts (2 days' slack for entry dates);
+    // an earlier operation is usually the other eye or a previous injection.
+    const earliest = row.advisedDate ? shiftDate(row.advisedDate, -2) : '';
+    const hits = ots.filter(function (o) {
+      return o.bmhId === row.bmhId && namesMatch(row.proc, o.proc) && eyesCompatible(row.eye, o.eye)
+        && (!earliest || !o.date || o.date >= earliest);
+    });
+    if (!hits.length) return null;
+    hits.sort(function (a, b) { return (otDone(b) - otDone(a)) || String(b.date).localeCompare(String(a.date)); });
+    return hits[0];
+  }
+  function statusFromOt(o) {
+    if (!o) return 'advised';
+    return otDone(o) ? 'done' : 'scheduled';
+  }
+  function isDue(rec) {
+    return !!(rec && rec.status === 'open' && rec.nextDate && rec.nextDate <= today());
+  }
+
+  function buildRows() {
+    const ots = otRows();
+    const usedOt = new Set();
+    const rows = [];
+    const seen = new Set();
+    patientPool().forEach(function (p) {
+      if (!p || !p.bmhId || seen.has(p.bmhId)) return;
+      seen.add(p.bmhId);
+      const plans = latestPlanByDept(p);
+      Object.keys(plans).forEach(function (dk) {
+        const v = plans[dk];
+        const d = DEPTS.find(function (x) { return x.key === dk; });
+        const procs = Array.from(new Set(asList(v[d.field]).map(function (x) { return String(x || '').trim(); }).filter(Boolean)));
+        procs.forEach(function (proc) {
+          const row = {
+            key: rowKey(p.bmhId, dk, proc), bmhId: p.bmhId, patient: p.name || p.patient || '—',
+            mobile: p.mob || p.mobile || p.phone || '', ageSex: [p.age || '—', p.sex || '—'].join('/'),
+            centre: p.centre || '', dept: dk, proc: proc, eye: eyeOf(proc),
+            advisedDate: localDateKey(v.date || v.visitDate || v.createdAt || ''),
+            doctor: String(v.doctor || p.assignedDoctor || p.doctor || '').split('·')[0].trim(),
+            isTest: isTestName(proc), source: 'plan'
+          };
+          const ot = findOtMatch(row, ots);
+          if (ot) usedOt.add(ot);
+          row.ot = ot;
+          row.status = statusFromOt(ot);
+          rows.push(row);
+        });
+      });
+    });
+    // Operated / booked patients whose latest plan no longer lists the procedure
+    ots.forEach(function (o) {
+      if (usedOt.has(o)) return;
+      rows.push({
+        key: rowKey(o.bmhId, o.dept, o.proc), bmhId: o.bmhId, patient: o.patient || '—', mobile: o.mobile || '',
+        ageSex: '—', centre: o.centre, dept: o.dept, proc: o.proc, eye: o.eye, advisedDate: '',
+        doctor: o.surgeon, isTest: false, source: 'ot', ot: o, status: statusFromOt(o)
+      });
+    });
+    return rows;
+  }
+
+  function readFilters() {
+    const f = window._bmhAdvFilter || (window._bmhAdvFilter = { status: 'pending', tests: false });
+    return {
+      text: (document.getElementById('rep-surg-name')?.value || '').trim().toLowerCase(),
+      from: document.getElementById('rep-surg-from')?.value || '',
+      to: document.getElementById('rep-surg-to')?.value || '',
+      centre: document.getElementById('rep-centre')?.value || '',
+      dept: normalizeDeptKeyForQueue(document.getElementById('rep-surg-dept')?.value || ''),
+      status: f.status, tests: f.tests
+    };
+  }
+  function applyFilters(rows, f, ignoreStatus) {
+    return rows.filter(function (r) {
+      if (!f.tests && r.isTest) return false;
+      if (f.dept && r.dept !== f.dept) return false;
+      if (f.centre && typeof normalizeAppointmentCentreValue === 'function'
+        && normalizeAppointmentCentreValue(r.centre || 'CHD') !== f.centre) return false;
+      const d = r.advisedDate || (r.ot && r.ot.date) || '';
+      if (f.from && (!d || d < f.from)) return false;
+      if (f.to && (!d || d > f.to)) return false;
+      if (f.text && ![r.proc, r.patient, r.bmhId, r.mobile, r.doctor].join(' ').toLowerCase().includes(f.text)) return false;
+      if (ignoreStatus) return true;
+      if (f.status === 'due') return isDue(followups[r.key]);
+      if (f.status === 'pending') return r.status === 'advised';
+      if (f.status !== 'all' && r.status !== f.status) return false;
+      return true;
+    });
+  }
+  function sortRows(rows) {
+    const order = { advised: 0, scheduled: 1, done: 2 };
+    return rows.sort(function (a, b) {
+      const da = isDue(followups[a.key]) ? 0 : 1, db = isDue(followups[b.key]) ? 0 : 1;
+      if (da !== db) return da - db;
+      if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+      const ka = a.advisedDate || (a.ot && a.ot.date) || '', kb = b.advisedDate || (b.ot && b.ot.date) || '';
+      return kb.localeCompare(ka) || String(a.patient).localeCompare(String(b.patient));
+    });
+  }
+  function deptLabel(key) { const d = DEPTS.find(function (x) { return x.key === key; }); return d ? d.label : (key || '—'); }
+  function statusCell(r) {
+    if (r.status === 'done') {
+      return '<span class="badge bd-green">Done ' + esc(fmt(r.ot.date)) + '</span>'
+        + '<div style="font-size:10px;color:var(--g1);margin-top:3px">' + esc([r.ot.surgeon, r.ot.iol && r.ot.iol !== 'N/A' ? r.ot.iol : ''].filter(Boolean).join(' · ')) + '</div>';
+    }
+    if (r.status === 'scheduled') return '<span class="badge bd-blue">OT booked ' + esc(fmt(r.ot.date)) + '</span>';
+    return '<span class="badge bd-orange">Not done yet</span>';
+  }
+  function followupCell(r) {
+    const rec = followups[r.key];
+    const due = isDue(rec);
+    const last = rec ? [rec.lastOutcome, rec.lastReason].filter(Boolean).join(' — ') : '';
+    const next = rec && rec.status === 'open' && rec.nextDate ? 'Next call: ' + fmt(rec.nextDate) : (rec && rec.status === 'closed' ? 'Closed' : '');
+    return '<div style="display:flex;gap:8px;align-items:flex-start">'
+      + '<button type="button" class="btn btn-xs ' + (due ? 'btn-red bmh-adv-flash' : 'btn-outline') + '" title="Open follow-up sheet" onclick="bmhOpenAdvisedFollowup(\'' + r.key + '\')">📞' + (due ? ' Due' : '') + '</button>'
+      + '<div style="font-size:10.5px;line-height:1.35">' + (last ? esc(last) : (r.status === 'done' ? '' : '<span style="color:var(--g1)">No call logged</span>'))
+      + (next ? '<div style="color:' + (due ? '#c62828;font-weight:800' : 'var(--g1)') + '">' + esc(next) + '</div>' : '') + '</div></div>';
+  }
+
+  function renderReport(el) {
+    ensureListening();
+    const f = readFilters();
+    const all = buildRows();
+    lastRows = all;
+    const base = applyFilters(all, f, true);
+    const counts = {
+      advised: base.filter(function (r) { return r.status === 'advised'; }).length,
+      scheduled: base.filter(function (r) { return r.status === 'scheduled'; }).length,
+      done: base.filter(function (r) { return r.status === 'done'; }).length,
+      due: base.filter(function (r) { return isDue(followups[r.key]); }).length,
+      all: base.length
+    };
+    const rows = sortRows(applyFilters(all, f, false));
+    const chip = function (value, label, n) {
+      const on = f.status === value;
+      return '<button type="button" class="btn btn-xs ' + (on ? 'btn-blue' : 'btn-outline') + '" onclick="bmhSetAdvisedFilter(\'status\',\'' + value + '\')">' + label + ' <b>' + n + '</b></button>';
+    };
+    const smallPool = patientPool().length < 10000;
+    el.innerHTML = '<div class="card">'
+      + '<div class="card-hd"><div><div class="card-title">📋 Advised Procedures &amp; Follow-up — ' + rows.length + ' shown</div>'
+      + '<div class="card-sub">From each patient\'s latest plan in every department, checked against the OT register.</div></div>'
+      + '<button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>'
+      + (smallPool ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff7e0;font-size:11.5px">This login has only part of the patient list loaded. Open this report from the admin login to see every advised patient.</div>' : '')
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">'
+      + chip('pending', 'Not done yet', counts.advised) + chip('due', '📞 Calls due', counts.due)
+      + chip('scheduled', 'OT booked', counts.scheduled) + chip('done', 'Done', counts.done) + chip('all', 'All', counts.all)
+      + '<label style="margin-left:auto;font-size:11.5px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ' + (f.tests ? 'checked' : '') + ' onchange="bmhSetAdvisedFilter(\'tests\',this.checked)"> Include tests (OCT, fields, etc.)</label>'
+      + '</div>'
+      + (rows.length ? '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>Dept</th><th>Procedure advised</th><th>Doctor</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>'
+        + rows.map(function (r, i) {
+          return '<tr' + (isDue(followups[r.key]) ? ' style="background:#fff1f0"' : '') + '><td>' + (i + 1) + '</td>'
+            + '<td style="white-space:nowrap">' + (r.advisedDate ? esc(fmt(r.advisedDate)) : '<span style="color:var(--g1);font-size:10px">from OT register</span>') + '</td>'
+            + '<td><div style="font-weight:800">' + esc(r.patient) + '</div><div style="font-size:10px;color:var(--g1)">' + esc(r.bmhId) + (r.mobile ? ' · ' + esc(r.mobile) : '') + '</div></td>'
+            + '<td>' + esc(deptLabel(r.dept)) + '</td><td style="font-weight:700">' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td>'
+            + '<td>' + statusCell(r) + '</td><td>' + followupCell(r) + '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+        : '<div style="padding:20px;text-align:center;color:var(--g1)">No patients for this filter.</div>')
+      + '</div>';
+  }
+
+  function printHtml(title) {
+    const f = readFilters();
+    const rows = sortRows(applyFilters(lastRows.length ? lastRows : buildRows(), f, false));
+    const statusText = function (r) {
+      if (r.status === 'done') return 'Done ' + fmt(r.ot.date);
+      if (r.status === 'scheduled') return 'OT booked ' + fmt(r.ot.date);
+      return 'Not done yet';
+    };
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:8mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:5px 6px;font-size:10px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E}@page{size:A4 landscape;margin:7mm}</style></head><body>'
+      + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title || 'Advised Procedures & Follow-up') + ' — ' + rows.length + '</div>'
+      + '<table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Dept</th><th>Procedure</th><th>Doctor</th><th>Status</th><th>Last call</th><th>Next call</th></tr></thead><tbody>'
+      + rows.map(function (r, i) {
+        const rec = followups[r.key] || {};
+        return '<tr><td>' + (i + 1) + '</td><td>' + esc(fmt(r.advisedDate)) + '</td><td>' + esc(r.patient) + '</td><td>' + esc(r.bmhId) + '</td><td>' + esc(r.mobile || '—') + '</td><td>'
+          + esc(deptLabel(r.dept)) + '</td><td>' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td><td>' + esc(statusText(r)) + '</td><td>'
+          + esc([rec.lastOutcome, rec.lastReason, rec.lastRemark].filter(Boolean).join(' — ') || '—') + '</td><td>' + esc(rec.status === 'open' ? fmt(rec.nextDate) : (rec.status === 'closed' ? 'Closed' : '—')) + '</td></tr>';
+      }).join('') + '</tbody></table></body></html>';
+  }
+
+  // ── Follow-up sheet (popup) ──────────────────────────────────────────────
+  function ensureStyles() {
+    if (document.getElementById('bmh-adv-style')) return;
+    const st = document.createElement('style');
+    st.id = 'bmh-adv-style';
+    st.textContent = '@keyframes bmhAdvPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(198,40,40,.55)}50%{opacity:.72;box-shadow:0 0 0 8px rgba(198,40,40,0)}}'
+      + '.bmh-adv-flash{animation:bmhAdvPulse 1.2s ease-in-out infinite}'
+      + '#bmh-adv-banner{position:fixed;bottom:22px;right:24px;z-index:550;background:#c62828;color:#fff;border:0;border-radius:999px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;display:none}'
+      + '.bmh-adv-int{border:1.5px solid var(--g4,#ccc);background:#fff;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}'
+      + '.bmh-adv-int.on{background:var(--bmh-blue,#1A3C6E);color:#fff;border-color:var(--bmh-blue,#1A3C6E)}';
+    document.head.appendChild(st);
+  }
+  function ensureModal() {
+    ensureStyles();
+    if (document.getElementById('m-adv-followup')) return;
+    const ov = document.createElement('div');
+    ov.className = 'modal-ov';
+    ov.id = 'm-adv-followup';
+    ov.innerHTML = '<div class="modal" style="max-width:640px;width:100%"><div class="modal-hd"><div class="modal-title">📞 Procedure Follow-up</div><button class="modal-close" onclick="closeM(\'m-adv-followup\')">✕</button></div>'
+      + '<div id="adv-fu-head" style="font-size:12.5px;line-height:1.5;margin-bottom:10px"></div>'
+      + '<div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Conversation history</div>'
+      + '<div id="adv-fu-log" style="max-height:170px;overflow-y:auto;border:1px solid var(--g5,#eee);border-radius:8px;padding:6px 8px;margin-bottom:12px;font-size:11.5px"></div>'
+      + '<div class="fg" style="gap:9px">'
+      + '<div class="form-group"><label class="fl">Call outcome</label><select id="adv-fu-outcome"><option value="">Select</option>' + OUTCOMES.map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="form-group"><label class="fl">Reason not done yet</label><input type="text" id="adv-fu-reason" list="adv-fu-reasons" placeholder="Pick or type a new reason" autocomplete="off"><datalist id="adv-fu-reasons"></datalist></div>'
+      + '</div>'
+      + '<div class="form-group" style="margin-top:8px"><label class="fl">Notes of the conversation</label><textarea id="adv-fu-remark" style="min-height:70px" placeholder="What the patient said"></textarea></div>'
+      + '<div class="form-group" style="margin-top:8px"><label class="fl">Follow up again in</label><div id="adv-fu-intervals" style="display:flex;flex-wrap:wrap;gap:6px"></div>'
+      + '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:11.5px">or on date <input type="date" id="adv-fu-date" style="max-width:170px" onchange="bmhAdvisedPickDate(this.value)"></div></div>'
+      + '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-gold" style="flex:1" id="adv-fu-save" onclick="bmhSaveAdvisedFollowup()">💾 Save follow-up</button><button class="btn btn-gray" onclick="closeM(\'m-adv-followup\')">Cancel</button></div>'
+      + '</div>';
+    document.body.appendChild(ov);
+  }
+  function renderIntervals() {
+    const host = document.getElementById('adv-fu-intervals');
+    if (!host) return;
+    host.innerHTML = INTERVALS.map(function (iv) {
+      const date = shiftDate(today(), iv.days);
+      return '<button type="button" class="bmh-adv-int' + (selectedNext === date ? ' on' : '') + '" onclick="bmhAdvisedPickDate(\'' + date + '\')">' + iv.label + '</button>';
+    }).join('') + '<button type="button" class="bmh-adv-int' + (selectedNext === '' ? ' on' : '') + '" onclick="bmhAdvisedPickDate(\'\')">No further follow-up</button>';
+    const dateEl = document.getElementById('adv-fu-date');
+    if (dateEl) dateEl.value = selectedNext || '';
+  }
+  function reasonOptions() {
+    const set = new Set(DEFAULT_REASONS);
+    Object.values(customReasons || {}).forEach(function (r) { if (r) set.add(String(r)); });
+    return Array.from(set);
+  }
+  function rowFromRecord(key) {
+    const rec = followups[key];
+    if (!rec) return null;
+    return { key: key, bmhId: rec.bmhId, patient: rec.patient, mobile: rec.mobile, ageSex: rec.ageSex || '—', centre: rec.centre,
+      dept: rec.dept, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate, doctor: rec.doctor, status: 'advised', source: 'record' };
+  }
+  function openFollowup(key) {
+    ensureListening();
+    const row = lastRows.find(function (r) { return r.key === key; }) || rowFromRecord(key);
+    if (!row) { showToast('Follow-up entry not found', 'w'); return; }
+    currentRow = row;
+    selectedNext = null;
+    ensureModal();
+    const rec = followups[key] || {};
+    const statusLine = row.status === 'done' ? 'Done ' + fmt(row.ot && row.ot.date) : (row.status === 'scheduled' ? 'OT booked ' + fmt(row.ot && row.ot.date) : 'Not done yet');
+    document.getElementById('adv-fu-head').innerHTML = '<div style="font-size:15px;font-weight:900;color:var(--bmh-blue)">' + esc(row.patient) + '</div>'
+      + '<div>' + esc(row.bmhId) + ' · ' + esc(row.ageSex || '—') + (row.mobile ? ' · <a href="tel:' + esc(String(row.mobile).replace(/[^0-9+]/g, '')) + '">📱 ' + esc(row.mobile) + '</a>' : '') + '</div>'
+      + '<div><b>' + esc(row.proc) + '</b> · ' + esc(deptLabel(row.dept)) + '</div>'
+      + '<div style="color:var(--g1)">Advised ' + esc(fmt(row.advisedDate)) + (row.doctor ? ' by ' + esc(row.doctor) : '') + ' · ' + esc(statusLine) + '</div>';
+    const log = Object.values(rec.log || {}).sort(function (a, b) { return String(b.at || '').localeCompare(String(a.at || '')); });
+    document.getElementById('adv-fu-log').innerHTML = log.length ? log.map(function (e) {
+      const when = e.at ? new Date(e.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+      return '<div style="padding:5px 0;border-bottom:1px solid var(--g5,#eee)"><b>' + esc(when) + '</b> · ' + esc(e.by || '') + '<br>'
+        + esc([e.outcome, e.reason].filter(Boolean).join(' — ') || '—') + (e.remark ? '<br><i>' + esc(e.remark) + '</i>' : '')
+        + '<br><span style="color:var(--g1)">' + (e.nextDate ? 'Next call ' + esc(fmt(e.nextDate)) : 'No further follow-up') + '</span></div>';
+    }).join('') : '<div style="color:var(--g1);padding:4px 0">No calls logged yet.</div>';
+    document.getElementById('adv-fu-reasons').innerHTML = reasonOptions().map(function (r) { return '<option value="' + esc(r) + '">'; }).join('');
+    document.getElementById('adv-fu-outcome').value = '';
+    document.getElementById('adv-fu-reason').value = rec.lastReason || '';
+    document.getElementById('adv-fu-remark').value = '';
+    renderIntervals();
+    openM('m-adv-followup');
+  }
+  function pickDate(value) {
+    selectedNext = value || '';
+    renderIntervals();
+  }
+  function saveFollowup() {
+    const row = currentRow;
+    if (!row) return;
+    const outcome = document.getElementById('adv-fu-outcome')?.value || '';
+    const reason = (document.getElementById('adv-fu-reason')?.value || '').trim();
+    const remark = (document.getElementById('adv-fu-remark')?.value || '').trim();
+    if (!outcome) { showToast('Select the call outcome', 'w'); return; }
+    if (selectedNext === null) { showToast('Choose when to follow up again (or "No further follow-up")', 'w'); return; }
+    if (!window.FBDB) { showToast('Not connected to the database — follow-up not saved', 'e'); return; }
+    const cu = currentUser();
+    const now = new Date().toISOString();
+    const by = (cu && cu.name) || 'Staff';
+    const entryId = window.FBDB.ref().push().key;
+    const base = 'procedureFollowups/' + row.key;
+    const entry = { at: now, by: by, outcome: outcome, reason: reason, remark: remark, nextDate: selectedNext || '' };
+    const updates = {};
+    ['bmhId', 'patient', 'mobile', 'ageSex', 'centre', 'dept', 'proc', 'eye', 'advisedDate', 'doctor'].forEach(function (k) {
+      updates[base + '/' + k] = row[k] == null ? '' : String(row[k]);
+    });
+    updates[base + '/status'] = selectedNext ? 'open' : 'closed';
+    updates[base + '/nextDate'] = selectedNext || '';
+    updates[base + '/lastOutcome'] = outcome;
+    updates[base + '/lastReason'] = reason;
+    updates[base + '/lastRemark'] = remark;
+    updates[base + '/updatedAt'] = now;
+    updates[base + '/updatedBy'] = by;
+    updates[base + '/log/' + entryId] = entry;
+    if (reason && reasonOptions().indexOf(reason) === -1) updates['procedureFollowupReasons/' + slug(reason)] = reason;
+    const btn = document.getElementById('adv-fu-save');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    window.FBDB.ref().update(updates).then(function () {
+      const rec = Object.assign({}, followups[row.key] || {});
+      Object.keys(updates).forEach(function (path) {
+        if (path.indexOf(base + '/') !== 0) return;
+        const field = path.slice(base.length + 1);
+        if (field.indexOf('log/') === 0) { rec.log = Object.assign({}, rec.log || {}); rec.log[entryId] = entry; }
+        else rec[field] = updates[path];
+      });
+      followups[row.key] = rec;
+      closeM('m-adv-followup');
+      showToast(selectedNext ? 'Follow-up saved — next call ' + fmt(selectedNext) + ' ✓' : 'Follow-up saved and closed ✓', 's');
+      refreshBanner();
+      rerenderReportIfOpen();
+    }).catch(function (err) {
+      console.warn('procedure follow-up save failed', err);
+      showToast('Could not save follow-up — please try again', 'e');
+    }).finally(function () {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Save follow-up'; }
+    });
+  }
+
+  // ── Due-call reminder (flashing banner for the department's logins) ──────
+  function userScope() {
+    const cu = currentUser();
+    if (!cu) return null;
+    const role = String(cu.role || '').toLowerCase();
+    const admin = !!cu.isAdmin || role === 'admin';
+    const dept = normalizeDeptKeyForQueue(cu.dept || '');
+    if (!admin && !DEPTS.some(function (d) { return d.key === dept; })) return null;
+    const allCentres = admin || !!cu.canSeeAllCentres || cu.centre === 'BOTH';
+    return { admin: admin, dept: dept, centre: allCentres ? '' : String(cu.centre || '').toUpperCase() };
+  }
+  function dueForUser() {
+    const scope = userScope();
+    if (!scope) return [];
+    const ots = otRows();
+    return Object.keys(followups || {}).filter(function (key) {
+      const rec = followups[key];
+      if (!isDue(rec)) return false;
+      if (!scope.admin && rec.dept !== scope.dept) return false;
+      if (scope.centre && rec.centre && String(rec.centre).toUpperCase() !== scope.centre) return false;
+      if (ots.length) {
+        const ot = findOtMatch({ bmhId: rec.bmhId, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate }, ots);
+        if (ot && otDone(ot)) return false;
+      }
+      return true;
+    });
+  }
+  function loggedIn() {
+    const gate = document.getElementById('login-gate');
+    return !!currentUser() && (!gate || gate.style.display === 'none');
+  }
+  function refreshBanner() {
+    ensureStyles();
+    let b = document.getElementById('bmh-adv-banner');
+    const due = loggedIn() ? dueForUser() : [];
+    if (!due.length) { if (b) b.style.display = 'none'; return; }
+    if (!b) {
+      b = document.createElement('button');
+      b.id = 'bmh-adv-banner';
+      b.type = 'button';
+      b.className = 'bmh-adv-flash';
+      b.onclick = openDueList;
+      document.body.appendChild(b);
+    }
+    b.textContent = '📞 ' + due.length + ' procedure follow-up call' + (due.length === 1 ? '' : 's') + ' due — tap to open';
+    b.style.display = 'block';
+  }
+  function openDueList() {
+    ensureStyles();
+    let ov = document.getElementById('m-adv-due');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.className = 'modal-ov';
+      ov.id = 'm-adv-due';
+      ov.innerHTML = '<div class="modal" style="max-width:640px;width:100%"><div class="modal-hd"><div class="modal-title">📞 Follow-up calls due</div><button class="modal-close" onclick="closeM(\'m-adv-due\')">✕</button></div><div id="adv-due-list"></div></div>';
+      document.body.appendChild(ov);
+    }
+    const keys = dueForUser().sort(function (a, b) { return String(followups[a].nextDate).localeCompare(String(followups[b].nextDate)); });
+    document.getElementById('adv-due-list').innerHTML = keys.length ? keys.map(function (key) {
+      const r = followups[key];
+      return '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--g5,#eee)">'
+        + '<div style="flex:1;font-size:12px"><b>' + esc(r.patient) + '</b> · ' + esc(r.bmhId) + (r.mobile ? ' · ' + esc(r.mobile) : '')
+        + '<div>' + esc(r.proc) + ' · ' + esc(deptLabel(r.dept)) + '</div>'
+        + '<div style="color:var(--g1)">Due ' + esc(fmt(r.nextDate)) + (r.lastReason ? ' · last: ' + esc(r.lastReason) : '') + '</div></div>'
+        + '<button class="btn btn-xs btn-gold" onclick="closeM(\'m-adv-due\');bmhOpenAdvisedFollowup(\'' + key + '\')">📞 Open</button></div>';
+    }).join('') : '<div style="padding:16px;text-align:center;color:var(--g1)">No calls due.</div>';
+    openM('m-adv-due');
+  }
+  function rerenderReportIfOpen() {
+    const el = document.getElementById('rep-surgery-result');
+    const src = document.getElementById('rep-surg-source')?.value || '';
+    if (el && src === 'advised' && el.offsetParent !== null) renderReport(el);
+  }
+  function ensureListening() {
+    if (listening || !window.FBDB || !currentUser()) return;
+    listening = true;
+    window.FBDB.ref('procedureFollowups').on('value', function (snap) {
+      followups = snap.val() || {};
+      refreshBanner();
+    }, function (err) { console.warn('procedure follow-ups listener error', err); });
+    window.FBDB.ref('procedureFollowupReasons').on('value', function (snap) {
+      customReasons = snap.val() || {};
+    }, function () {});
+  }
+
+  window.bmhRenderAdvisedProcedureReport = renderReport;
+  window.bmhAdvisedReportPrintHtml = printHtml;
+  window.bmhOpenAdvisedFollowup = openFollowup;
+  window.bmhAdvisedPickDate = pickDate;
+  window.bmhSaveAdvisedFollowup = saveFollowup;
+  window.bmhSetAdvisedFilter = function (name, value) {
+    const f = window._bmhAdvFilter || (window._bmhAdvFilter = { status: 'pending', tests: false });
+    f[name] = value;
+    const el = document.getElementById('rep-surgery-result');
+    if (el) renderReport(el);
+  };
+  // Light check every 30 s: start the small follow-up listener once a
+  // department/admin user is logged in, and refresh the banner (date roll-over).
+  setInterval(function () {
+    try {
+      if (!loggedIn()) { const b = document.getElementById('bmh-adv-banner'); if (b) b.style.display = 'none'; return; }
+      if (userScope()) ensureListening();
+      refreshBanner();
+    } catch (e) { /* never let the reminder affect the rest of the app */ }
+  }, 30000);
+})();
