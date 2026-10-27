@@ -32483,35 +32483,81 @@ function getObgAncVisitCandidates(pt) {
   Object.values(getCachedPatientVisits(pt.bmhId) || {}).forEach(function (visit) { add(visit, 'cache'); });
   return rows;
 }
+// Delivery entries from the OT register (normal delivery / caesarean), by patient.
+function obgDeliveryOtRowsByPatient() {
+  const byId = new Map();
+  (typeof OT_CASES !== 'undefined' && Array.isArray(OT_CASES) ? OT_CASES : []).forEach(function (c) {
+    if (!c) return;
+    const hay = [c.procedure, c.surgery, c.obgCaseType, c.procedureMain, c.procedureSub].join(' ').toLowerCase();
+    if (!/lscs|caesar|cesarean|c-section|delivery/.test(hay)) return;
+    const id = String(c.bmhId || c.bmshId || c.patientId || '').trim();
+    if (!id) return;
+    const status = String(c.status || 'pending').toLowerCase();
+    if (!byId.has(id)) byId.set(id, []);
+    byId.get(id).push({
+      date: localDateKey(c.date || c.scheduledDate || c.otDate || c.surgeryDate || c.createdAt || ''),
+      done: status === 'completed' || status === 'done',
+      type: /lscs|caesar|cesarean|c-section/.test(hay) ? 'Caesarean (LSCS)' : 'Normal delivery',
+      by: c.surgeon || c.doctor || ''
+    });
+  });
+  return byId;
+}
+// Expected deliveries: only patients whose OBG visit has ANC ticked (getObgAncVisitCandidates).
+// EDD = saved EDD, else LMP + 280 days from that ANC visit. Delivered / booked status comes
+// from the OT register for this pregnancy (OT date on/after LMP).
 function getExpectedDeliveryRows() {
   const fromVal = document.getElementById('rep-surg-from')?.value || '';
   const toVal = document.getElementById('rep-surg-to')?.value || '';
   const centreFilter = document.getElementById('rep-centre')?.value || '';
+  const pool = (Array.isArray(window._BMH_ALL_PATIENTS_CACHE) && window._BMH_ALL_PATIENTS_CACHE.length)
+    ? window._BMH_ALL_PATIENTS_CACHE
+    : (PATIENTS || []);
+  const deliveries = obgDeliveryOtRowsByPatient();
+  const todayTime = Date.parse(localDateKey(new Date()) + 'T12:00:00');
+  const shift = function (iso, days) {
+    const d = new Date(String(iso || '') + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return '';
+    d.setDate(d.getDate() + days);
+    return localDateKey(d);
+  };
+  const visitDateOf = function (v) { return localDateKey(v.date || v.visitDate || v.createdAt || ''); };
   const rows = [];
   const seen = new Set();
-  (PATIENTS || []).forEach(function (pt) {
+  pool.forEach(function (pt) {
     if (!pt || !pt.bmhId || seen.has(pt.bmhId)) return;
     if (centreFilter && normalizeAppointmentCentreValue(pt.centre || 'CHD') !== centreFilter) return;
-    const visits = getObgAncVisitCandidates(pt)
-      .map(function (visit) {
-        const eddRaw = visit['obg-obs-edd-usg'] || visit['obg-obs-edd-date'] || visit.edd || '';
-        const eddIso = parseObgEddToIso(eddRaw);
-        return { visit: visit, eddIso: eddIso, eddRaw: eddRaw };
-      })
-      .filter(function (row) { return !!row.eddIso; })
-      .sort(function (a, b) {
-        return String(b.visit.date || b.visit.visitDate || b.visit.createdAt || '').localeCompare(String(a.visit.date || a.visit.visitDate || a.visit.createdAt || ''));
-      });
-    if (!visits.length) return;
-    const picked = visits[0];
-    if (fromVal && picked.eddIso < fromVal) return;
-    if (toVal && picked.eddIso > toVal) return;
+    const candidates = getObgAncVisitCandidates(pt).map(function (visit) {
+      let eddIso = parseObgEddToIso(visit['obg-obs-edd-usg'] || '') || parseObgEddToIso(visit['obg-obs-edd-date'] || '') || parseObgEddToIso(visit.edd || '');
+      let eddSource = eddIso ? 'saved' : '';
+      if (!eddIso) {
+        const lmpRaw = String(visit.lmp || visit['obg-obs-lmp'] || '').trim();
+        const lmpIso = /^\d{4}-\d{2}-\d{2}$/.test(lmpRaw) ? lmpRaw : parseObgEddToIso(lmpRaw);
+        if (lmpIso) { eddIso = shift(lmpIso, 280); eddSource = 'lmp'; }
+      }
+      return { visit: visit, eddIso: eddIso, eddSource: eddSource };
+    }).sort(function (a, b) { return visitDateOf(b.visit).localeCompare(visitDateOf(a.visit)); });
+    if (!candidates.length) return;
+    const picked = candidates.find(function (c) { return !!c.eddIso; }) || candidates[0];
+    if (fromVal && (!picked.eddIso || picked.eddIso < fromVal)) return;
+    if (toVal && (!picked.eddIso || picked.eddIso > toVal)) return;
     const v = picked.visit;
-    const eddTime = Date.parse(picked.eddIso + 'T12:00:00');
-    const todayTime = Date.parse(localDateKey(new Date()) + 'T12:00:00');
-    const daysLeft = Number.isFinite(eddTime) && Number.isFinite(todayTime)
-      ? Math.round((eddTime - todayTime) / 86400000)
-      : null;
+    const visitDate = visitDateOf(v);
+    const pregnancyStart = picked.eddIso ? shift(picked.eddIso, -280) : (visitDate ? shift(visitDate, -280) : '');
+    const delivery = (deliveries.get(pt.bmhId) || []).filter(function (d) {
+      return !pregnancyStart || !d.date || d.date >= pregnancyStart;
+    }).sort(function (a, b) { return (b.done - a.done) || String(b.date).localeCompare(String(a.date)); })[0] || null;
+    const eddTime = picked.eddIso ? Date.parse(picked.eddIso + 'T12:00:00') : NaN;
+    const daysLeft = Number.isFinite(eddTime) && Number.isFinite(todayTime) ? Math.round((eddTime - todayTime) / 86400000) : null;
+    const state = delivery && delivery.done ? 'delivered'
+      : delivery ? 'booked'
+      : !picked.eddIso ? 'no-edd'
+      : daysLeft < 0 ? 'overdue' : 'due';
+    let gaNow = '';
+    if (daysLeft != null && state !== 'delivered') {
+      const daysPregnant = 280 - daysLeft;
+      if (daysPregnant >= 0) gaNow = Math.floor(daysPregnant / 7) + 'w ' + (daysPregnant % 7) + 'd';
+    }
     seen.add(pt.bmhId);
     rows.push({
       patient: pt.name || '—',
@@ -32519,32 +32565,55 @@ function getExpectedDeliveryRows() {
       mobile: pt.mob || pt.mobile || '',
       ageSex: [pt.age || '—', pt.sex || '—'].join('/'),
       eddIso: picked.eddIso,
-      edd: formatDateIN(picked.eddIso),
+      edd: picked.eddIso ? formatDateIN(picked.eddIso) : '—',
+      eddSource: picked.eddSource,
       lmp: v.lmp || v['obg-obs-lmp'] || '',
       gravida: v.gravida || ['G' + (v.g || '0'), 'P' + (v.p || '0'), 'A' + (v.a || '0'), 'L' + (v.l || '0')].join(''),
       ga: v.ga || '',
+      gaNow: gaNow,
       risk: v.riskTag || v['obg-risk'] || '',
       visitDate: v.date || v.visitDate || v.createdAt || '',
       doctor: v.doctor || pt.assignedDoctor || pt.doctor || '',
       centre: pt.centre || '',
       notes: v.ancNotes || v.notes || '',
-      daysLeft: daysLeft
+      daysLeft: daysLeft,
+      delivery: delivery,
+      state: state
     });
   });
   return rows.sort(function (a, b) {
+    if (!a.eddIso !== !b.eddIso) return a.eddIso ? -1 : 1;
     return String(a.eddIso || '').localeCompare(String(b.eddIso || '')) || String(a.patient || '').localeCompare(String(b.patient || ''));
   });
 }
+function expectedDeliveryStatusText(row) {
+  if (row.state === 'delivered') return 'Delivered ' + (row.delivery.date ? formatDateIN(row.delivery.date) : '') + ' · ' + row.delivery.type;
+  if (row.state === 'booked') return row.delivery.type + ' booked ' + (row.delivery.date ? formatDateIN(row.delivery.date) : '');
+  if (row.state === 'no-edd') return 'EDD not recorded';
+  if (row.state === 'overdue') return 'Overdue ' + Math.abs(row.daysLeft) + ' day' + (Math.abs(row.daysLeft) === 1 ? '' : 's');
+  return (row.daysLeft === 0 ? 'Due today' : 'Due in ' + row.daysLeft + ' day' + (row.daysLeft === 1 ? '' : 's'));
+}
+function expectedDeliveryStatusColor(row) {
+  return { delivered: '#1a8c3c', booked: '#0B5FA5', overdue: '#c62828', 'no-edd': '#8a4200' }[row.state] || '#1A3C6E';
+}
+function expectedDeliveryCounts(rows) {
+  const counts = { due: 0, overdue: 0, booked: 0, delivered: 0, 'no-edd': 0 };
+  rows.forEach(function (r) { counts[r.state] = (counts[r.state] || 0) + 1; });
+  return 'Due ' + counts.due + ' · Overdue ' + counts.overdue + ' · Delivery booked ' + counts.booked
+    + ' · Delivered ' + counts.delivered + ' · EDD not recorded ' + counts['no-edd'];
+}
 function buildExpectedDeliveryReportHtml(rows, title) {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900}.muted{color:#666;font-size:10px}@page{size:A4 portrait;margin:8mm}</style></head><body>'
-    + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title || 'Deliveries Expected') + '</div>'
-    + (rows.length ? '<table><thead><tr><th>#</th><th>EDD</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Centre</th><th>Due In</th></tr></thead><tbody>'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900}.muted{color:#666;font-size:10px}@page{size:A4 landscape;margin:8mm}</style></head><body>'
+    + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:4px">' + esc(title || 'Deliveries Expected') + ' — ' + rows.length + ' ANC patients</div>'
+    + '<div class="muted" style="margin-bottom:10px">' + esc(expectedDeliveryCounts(rows)) + '</div>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>EDD</th><th>Status</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Centre</th></tr></thead><tbody>'
     + rows.map(function (row, i) {
-      const due = row.daysLeft == null ? '—' : (row.daysLeft < 0 ? (Math.abs(row.daysLeft) + 'd overdue') : (row.daysLeft + 'd'));
-      return '<tr><td>' + (i + 1) + '</td><td style="font-weight:900;color:#1A3C6E">' + esc(row.edd) + '</td><td style="font-weight:800">' + esc(row.patient) + (row.notes ? '<div class="muted" style="margin-top:4px">' + esc(row.notes) + '</div>' : '') + '</td><td style="font-family:monospace">' + esc(row.bmhId) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.ageSex || '—') + '</td><td>' + esc(row.gravida || '—') + '</td><td>' + esc(row.risk || 'Low risk') + '</td><td>' + esc(row.visitDate ? formatDateIN(row.visitDate) : '—') + '</td><td>' + esc(row.doctor || '—') + '</td><td>' + esc(row.centre || '—') + '</td><td>' + esc(due) + '</td></tr>';
+      return '<tr><td>' + (i + 1) + '</td><td style="font-weight:900;color:#1A3C6E">' + esc(row.edd) + (row.eddSource === 'lmp' ? '<div class="muted">from LMP</div>' : '') + '</td>'
+        + '<td style="font-weight:800;color:' + expectedDeliveryStatusColor(row) + '">' + esc(expectedDeliveryStatusText(row)) + (row.gaNow ? '<div class="muted">' + esc(row.gaNow) + '</div>' : '') + '</td>'
+        + '<td style="font-weight:800">' + esc(row.patient) + (row.notes ? '<div class="muted" style="margin-top:4px">' + esc(row.notes) + '</div>' : '') + '</td><td style="font-family:monospace">' + esc(row.bmhId) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.ageSex || '—') + '</td><td>' + esc(row.gravida || '—') + '</td><td>' + esc(row.risk || 'Low risk') + '</td><td>' + esc(row.visitDate ? formatDateIN(row.visitDate) : '—') + '</td><td>' + esc(row.doctor || '—') + '</td><td>' + esc(row.centre || '—') + '</td></tr>';
     }).join('')
-    + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No ANC patients with EDD found for the current filter.</div>')
+    + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No ANC patients found for the current filter.</div>')
     + '</body></html>';
 }
 
@@ -33497,16 +33566,27 @@ function generateSurgeryReport() {
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
   const sourceFilter = document.getElementById('rep-surg-source')?.value || 'ot';
   if (sourceFilter === 'deliveries') {
+    // Load the OT register first so delivered mothers (normal / LSCS) show as delivered.
+    const lastOtRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
+    if (!window._bmhGeneratingDeliveriesAfterOTRefresh && Date.now() - lastOtRefresh > 30000 && typeof refreshOTCasesOnceForReports === 'function') {
+      window._bmhGeneratingDeliveriesAfterOTRefresh = true;
+      el.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading OT register to mark delivered patients...</div></div>';
+      refreshOTCasesOnceForReports().then(function () {
+        window._bmhGeneratingDeliveriesAfterOTRefresh = false;
+        generateSurgeryReport();
+      });
+      return;
+    }
+    window._bmhGeneratingDeliveriesAfterOTRefresh = false;
     const rows = getExpectedDeliveryRows();
     const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
     el.innerHTML = `<div class="card">
-      <div class="card-hd"><div><div class="card-title">🤰 Deliveries Expected — ${rows.length} patients</div><div class="card-sub">ANC cases sorted chronologically by EDD</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-      ${rows.length ? `<table><thead><tr><th>#</th><th>EDD</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Due In</th></tr></thead><tbody>
+      <div class="card-hd"><div><div class="card-title">🤰 Deliveries Expected — ${rows.length} ANC patients</div><div class="card-sub">ANC-ticked OBG patients from both centres, sorted by EDD · ${esc(expectedDeliveryCounts(rows))}</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
+      ${rows.length ? `<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>EDD</th><th>Status</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Centre</th></tr></thead><tbody>
       ${rows.map(function (row, i) {
-        const due = row.daysLeft == null ? '—' : (row.daysLeft < 0 ? (Math.abs(row.daysLeft) + 'd overdue') : (row.daysLeft + 'd'));
-        return `<tr><td>${i + 1}</td><td style="font-weight:900;color:var(--bmh-blue)">${esc(row.edd)}</td><td style="font-weight:800">${esc(row.patient)}${row.notes ? `<div style="font-size:10px;color:var(--g1);margin-top:3px">${esc(row.notes)}</div>` : ''}</td><td style="font-family:var(--mono);font-size:10px">${esc(row.bmhId)}</td><td>${esc(row.mobile || '—')}</td><td>${esc(row.ageSex || '—')}</td><td>${esc(row.gravida || '—')}</td><td>${esc(row.risk || 'Low risk')}</td><td>${esc(row.visitDate ? formatDateIN(row.visitDate) : '—')}</td><td>${esc(row.doctor || '—')}</td><td>${esc(due)}</td></tr>`;
+        return `<tr${row.state === 'overdue' ? ' style="background:#fff1f0"' : ''}><td>${i + 1}</td><td style="font-weight:900;color:var(--bmh-blue);white-space:nowrap">${esc(row.edd)}${row.eddSource === 'lmp' ? '<div style="font-size:10px;color:var(--g1);font-weight:600">from LMP</div>' : ''}</td><td style="font-weight:800;color:${expectedDeliveryStatusColor(row)}">${esc(expectedDeliveryStatusText(row))}${row.gaNow ? `<div style="font-size:10px;color:var(--g1);font-weight:600">${esc(row.gaNow)}</div>` : ''}</td><td style="font-weight:800">${esc(row.patient)}${row.notes ? `<div style="font-size:10px;color:var(--g1);margin-top:3px">${esc(row.notes)}</div>` : ''}</td><td style="font-family:var(--mono);font-size:10px">${esc(row.bmhId)}</td><td>${esc(row.mobile || '—')}</td><td>${esc(row.ageSex || '—')}</td><td>${esc(row.gravida || '—')}</td><td>${esc(row.risk || 'Low risk')}</td><td>${esc(row.visitDate ? formatDateIN(row.visitDate) : '—')}</td><td>${esc(row.doctor || '—')}</td><td>${esc(row.centre || '—')}</td></tr>`;
       }).join('')}
-      </tbody></table>` : '<div style="padding:20px;text-align:center;color:var(--g1)">No ANC patients with EDD found for the current filter.</div>'}
+      </tbody></table></div>` : '<div style="padding:20px;text-align:center;color:var(--g1)">No ANC patients found for the current filter.</div>'}
     </div>`;
     return;
   }
