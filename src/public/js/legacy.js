@@ -54396,6 +54396,26 @@ window.addEventListener('DOMContentLoaded', function() {
     });
     return map;
   }
+  // Same test written differently in Charges and in the chooser (e.g. "HIV" vs "H.I.V. I & II").
+  const SYNONYMS = { hiv: 'hiviii', uricacid: 'suricacid', randombloodsugar: 'randomglucose', rbs: 'randomglucose',
+    fastingbloodsugar: 'fastingglucose', fbs: 'fastingglucose', ppbs: 'postprandialglucose', esr: 'esrerythrocytessedimentationrate' };
+  function nameKeys(name) {
+    const raw = String(name || '');
+    const keys = new Set([norm(raw)]);
+    const m = raw.match(/^(.*?)\(([^)]*)\)\s*$/);
+    if (m) { keys.add(norm(m[1])); keys.add(norm(m[2])); }
+    Array.from(keys).forEach(function (k) { if (SYNONYMS[k]) keys.add(SYNONYMS[k]); });
+    keys.delete('');
+    return keys;
+  }
+  function knownTestKeys() {
+    const keys = new Set();
+    allCategoryTests().forEach(function (name) { nameKeys(name).forEach(function (k) { keys.add(k); }); });
+    return keys;
+  }
+  function alreadyInChooser(name, known) {
+    return Array.from(nameKeys(name)).some(function (k) { return known.has(k); });
+  }
   // Use the exact name shown in the chooser when one matches, so the tick boxes line up.
   function resolvePanelTests(panel) {
     const known = allCategoryTests();
@@ -54449,16 +54469,18 @@ window.addEventListener('DOMContentLoaded', function() {
 
   // Lab tests that exist in Settings → Charges (or lab groups) but have no tab in the chooser.
   function moreLabTests() {
-    const known = allCategoryTests();
+    const known = knownTestKeys();
     const tabbed = new Set(Array.from(document.querySelectorAll('#m-order-invest [id^="inv-"][id$="-list"]')).map(function (el) { return el.id; }));
     const groups = new Map();
+    const listed = new Set(); // each test once, even if it sits under two headings in Charges
     const add = function (heading, name) {
       const clean = String(name || '').trim();
-      if (!clean || known.has(norm(clean))) return;
+      if (!clean || alreadyInChooser(clean, known) || listed.has(norm(clean))) return;
       if (PANELS.some(function (p) { return p.alias.test(clean); })) return; // covered by a panel
+      listed.add(norm(clean));
       const h = String(heading || 'Other lab tests').trim() || 'Other lab tests';
       if (!groups.has(h)) groups.set(h, new Map());
-      if (!groups.get(h).has(norm(clean))) groups.get(h).set(norm(clean), clean);
+      groups.get(h).set(norm(clean), clean);
     };
     // 1. Lab charges. A row that is only a heading for other rows is not a test.
     const rows = (typeof CHARGES_DATA !== 'undefined' && Array.isArray(CHARGES_DATA)) ? CHARGES_DATA : [];
@@ -54468,7 +54490,8 @@ window.addEventListener('DOMContentLoaded', function() {
       headingNames.add(norm(getLabHeadingPlainLabel(cat.label || cat.id)));
       headingNames.add(norm(cat.id));
     });
-    labRows.forEach(function (r) {
+    // Rows with a heading first, so a test listed both with and without one keeps its heading.
+    labRows.slice().sort(function (a, b) { return (a.parent ? 0 : 1) - (b.parent ? 0 : 1); }).forEach(function (r) {
       if (!r.parent && headingNames.has(norm(r.name))) return;
       add(r.parent || 'Other lab tests', r.name);
     });
@@ -54477,10 +54500,11 @@ window.addEventListener('DOMContentLoaded', function() {
       if (tabbed.has('inv-' + cat.id + '-list')) return;
       (cat.tests || []).forEach(function (t) {
         const clean = String(t || '').trim();
-        if (!clean || PANELS.some(function (p) { return p.alias.test(clean); })) return;
+        if (!clean || listed.has(norm(clean)) || PANELS.some(function (p) { return p.alias.test(clean); })) return;
+        listed.add(norm(clean));
         const h = getLabHeadingPlainLabel(cat.label || cat.id) || 'Other lab tests';
         if (!groups.has(h)) groups.set(h, new Map());
-        if (!groups.get(h).has(norm(clean))) groups.get(h).set(norm(clean), clean);
+        groups.get(h).set(norm(clean), clean);
       });
     });
     return groups;
