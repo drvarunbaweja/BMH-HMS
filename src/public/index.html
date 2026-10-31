@@ -4290,15 +4290,6 @@
           <span>Discount ₹</span>
           <input type="number" id="bmh-bill-discount" value="0" min="0" step="1" style="width:88px;text-align:right;font-size:12px" oninput="bmhUpdateBillTotals()">
         </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;align-items:center;gap:8px">
-          <span title="Type the final amount to collect; the discount is filled in for you">Net payable ₹</span>
-          <input type="number" id="bmh-bill-net-input" min="0" step="1" placeholder="0" style="width:88px;text-align:right;font-size:12px" oninput="bmhOnBillNetInput(this.value)">
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:2px;font-size:12px;align-items:center;gap:8px;color:#5b4a00">
-          <span title="Optional. Shown on the printed bill and receipt only — charges and collections are not changed">Bill amount on print ₹ <span style="font-size:10px;color:var(--g1)">(optional)</span></span>
-          <input type="number" id="bmh-bill-shown-amt" min="0" step="1" placeholder="same" style="width:88px;text-align:right;font-size:12px" oninput="bmhOnBillShownAmountInput()">
-        </div>
-        <div id="bmh-bill-shown-hint" style="display:none;font-size:10.5px;line-height:1.35;color:#5b4a00;background:#fff8e1;border-radius:6px;padding:5px 7px;margin-bottom:6px"></div>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;cursor:pointer">
           <input type="checkbox" id="bmh-apply-advance" onchange="bmhUpdateBillTotals()">
           Apply advance &nbsp;<span id="bmh-advance-available" style="font-weight:900;color:var(--blue);font-size:13px">₹0 available</span>
@@ -6789,7 +6780,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js?v=20261031-bill-net-v7"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20261031-followups-centre-v6"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 <script type="module" src="./js/qr-decoder.js"></script>
