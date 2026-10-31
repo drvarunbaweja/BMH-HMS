@@ -21112,7 +21112,8 @@ function openCurrentObgIPDAdmit() {
   const bmhId = String(window.CURRENT_PATIENT?.bmhId || document.getElementById('obg-pt-uid')?.textContent || '').trim();
   const p = PATIENTS.find(function (row) { return String(row.bmhId || '') === bmhId; }) || window.CURRENT_PATIENT;
   if (!p || !bmhId || bmhId === '—') { showToast('Open an OBG patient first', 'w'); return; }
-  window._BMH_IPD_ADMIT_CONTEXT = { removeQueue: true, source: 'obg-followup' };
+  // Patient stays in today's OPD queue until marked seen or the day changes (same as OT → IPD).
+  window._BMH_IPD_ADMIT_CONTEXT = { removeQueue: false, source: 'obg-followup' };
   populateSelectors && populateSelectors();
   const sel = document.getElementById('ipd-pt-sel');
   if (sel) {
