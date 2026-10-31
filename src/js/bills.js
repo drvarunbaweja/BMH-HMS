@@ -113,6 +113,8 @@ export async function saveBill(data) {
     discountReason: data.discountReason         || '',
     advanceApplied: Number(data.advanceApplied) || 0,
     netPayable:     Number(data.netPayable)     || 0,
+    // Optional higher amount shown on the printed bill/receipt only (display; 0 = not used)
+    billAmountShown: Number(data.billAmountShown) || 0,
 
     // Payment received from patient (cash/UPI/card portion)
     paymentMode:    data.paymentMode    || 'Cash',
