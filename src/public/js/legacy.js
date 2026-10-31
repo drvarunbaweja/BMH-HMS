@@ -52007,24 +52007,7 @@ function _renderDocQueueImpl() {
   }
   const myPts = (() => {
     if (queueAdminView || CURRENT_USER?.role === 'Reception') {
-      if (adminDeptFilter === 'all') {
-        // "All departments" view: a referred patient also gets the referral row for the
-        // department referred to (as the single-department views do), so marking them seen
-        // in the referring department doesn't move the referral into Done.
-        const allRows = queueBasePts.slice();
-        const allKeys = new Set(allRows.map(function (p) { return String(p?._queueKey || p?.bmhId || ''); }));
-        queueBasePts.forEach(function (p) {
-          if (!p || p._xrefEntry || p._deptQueueEntry) return;
-          getActiveCrossRefsForPatient(p).forEach(function (xref) {
-            if (!crossRefQueueDateMatchesToday(xref)) return;
-            const row = buildCrossRefQueuePatient(p, xref, '');
-            if (!row._queueKey || allKeys.has(row._queueKey)) return;
-            allKeys.add(row._queueKey);
-            allRows.push(row);
-          });
-        });
-        return allRows;
-      }
+      if (adminDeptFilter === 'all') return queueBasePts;
       const adminRows = [];
       const seenAdminKeys = new Set();
       queueBasePts.forEach(function (p) {
