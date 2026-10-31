@@ -38994,10 +38994,19 @@ function hydratePatientsFromTodayFinancialQueueEvidence(opts) {
     return !loaded || !patientQueueDateMatchesToday(loaded);
   });
   if (!missing.length) return Promise.resolve([]);
-  const key = day + ':' + missing.slice().sort().join('|');
+  // Skip memory (see bmhHydrateSkip block at the end of this file): patients that were just
+  // fetched and correctly left out (other centre, IPD/discharged, merged…) are not fetched
+  // again until they get a new payment/charge today, their record changes, or 2 minutes pass.
+  // Manual restore (force) always checks everyone. Off switch: bmhHydrateSkipOff().
+  const skipMem = (!opts.force && window.bmhHydrateSkip && window.bmhHydrateSkip.enabled()) ? window.bmhHydrateSkip : null;
+  const skipPrints = skipMem ? skipMem.fingerprints(missing, day) : null;
+  const toFetch = skipMem ? missing.filter(function (id) { return !skipMem.has(id, day, skipPrints[id]); }) : missing;
+  if (!toFetch.length) return Promise.resolve([]);
+  const key = day + ':' + toFetch.slice().sort().join('|');
   if (window._bmhFinancialQueueHydrateInFlight === key) return window._bmhFinancialQueueHydratePromise || Promise.resolve([]);
   if (!opts.force && window._bmhFinancialQueueHydrateKey === key && Date.now() - Number(window._bmhFinancialQueueHydrateAt || 0) < 15000) return Promise.resolve([]);
   window._bmhFinancialQueueHydrateInFlight = key;
+  const readFailed = {};
   const readOne = function (id) {
     const candidates = getBmhIdLookupCandidates(id);
     let chain = Promise.resolve(null);
@@ -39007,19 +39016,23 @@ function hydratePatientsFromTodayFinancialQueueEvidence(opts) {
         return window.FBDB.ref('patients/' + candidate).once('value').then(function (snap) {
           const val = snap && snap.val && snap.val();
           return val ? Object.assign({}, val, { bmhId: val.bmhId || candidate }) : null;
-        }).catch(function () { return null; });
+        }).catch(function () { readFailed[id] = true; return null; });
       });
     });
     return chain;
   };
-  window._bmhFinancialQueueHydratePromise = Promise.all(missing.map(readOne)).then(function (rows) {
+  window._bmhFinancialQueueHydratePromise = Promise.all(toFetch.map(readOne)).then(function (rows) {
     const added = [];
-    rows.filter(Boolean).forEach(function (raw) {
+    // Remember only a clean "left out" answer; a network error is never remembered.
+    const leftOut = function (id) { if (skipMem && !readFailed[id]) skipMem.remember(id, day, skipPrints[id]); };
+    rows.forEach(function (raw, i) {
+      const askedId = toFetch[i];
+      if (!raw) { leftOut(askedId); return; }
       const row = normalizePatientRecord(raw);
-      if (!row || !row.bmhId) return;
-      if (isMergedPatientRecord && isMergedPatientRecord(row)) return;
-      if (!rowMatchesCentre(row, effectivePatientListCentreScope && effectivePatientListCentreScope(), { allowUncentredToday: true, dateKey: day })) return;
-      if (!patientHasTodayQueueRecoveryEvidence(row, day)) return;
+      if (!row || !row.bmhId) { leftOut(askedId); return; }
+      if (isMergedPatientRecord && isMergedPatientRecord(row)) { leftOut(askedId); return; }
+      if (!rowMatchesCentre(row, effectivePatientListCentreScope && effectivePatientListCentreScope(), { allowUncentredToday: true, dateKey: day })) { leftOut(askedId); return; }
+      if (!patientHasTodayQueueRecoveryEvidence(row, day)) { leftOut(askedId); return; }
       repairPatientQueueStampFromRecoveryEvidence(row, day);
       upsertHydratedQueuePatient(row);
       added.push(row);
@@ -55467,4 +55480,82 @@ window.addEventListener('DOMContentLoaded', function() {
       + cell('Balance due', s.balance, s.balance > 0 ? '#b45309' : '#15803d')
       + '</div>' + (s.billNo ? '<div style="font-size:8.5px;color:#666">Against bill ' + String(s.billNo).replace(/</g, '&lt;') + '</div>' : '');
   };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPEED STEP 1 — skip memory for the "paid today but not in queue" safety net
+// hydratePatientsFromTodayFinancialQueueEvidence re-fetched, one by one, every
+// patient with money today who is not in today's queue — and most of them are
+// correctly left out (other centre, IPD / discharged, merged). This remembers a
+// clean "left out" answer so the same patient is not fetched again until:
+//   • they get any new payment / charge / bill / pay request today, or
+//   • their loaded record changes (status, queue date, department, centre…), or
+//   • 2 minutes pass, or the page is refreshed, or the day changes.
+// Patients who qualify are added exactly as before. Network errors are never
+// remembered. Manual "restore to queue" (force) always checks everyone.
+// Off switch (this computer):  bmhHydrateSkipOff()   — back on: bmhHydrateSkipOn()
+// ═══════════════════════════════════════════════════════════════════════════
+(function () {
+  const RECHECK_MS = 2 * 60 * 1000;
+  const memo = new Map();
+  function enabled() {
+    try { return localStorage.getItem('bmh_disable_hydrate_skip') !== '1'; } catch (e) { return true; }
+  }
+  function sameDay(raw, day) {
+    try { return !!raw && (localDateKey(raw) === day || String(raw).slice(0, 10) === day); } catch (e) { return false; }
+  }
+  function money(row) {
+    const a = row && row.amount != null ? row.amount : ((Number(row && row.qty) || 1) * (Number(row && row.rate) || 0));
+    return Math.round((Number(a) || 0) * 100);
+  }
+  function addTo(map, id, part) {
+    const k = String(id || '').trim();
+    if (!k) return;
+    map[k] = (map[k] || '') + part + ';';
+  }
+  // One pass over today's lists, then a short text per patient describing their money today.
+  function fingerprints(ids, day) {
+    const byId = {};
+    try {
+      (typeof TRANSACTIONS !== 'undefined' ? TRANSACTIONS : []).forEach(function (t) {
+        if (t && t.bmhId && sameDay(t.date || t.createdAt || t.ts || t.updatedAt, day)) addTo(byId, t.bmhId, 't' + (t.id || '') + ':' + money(t) + ':' + (t.dept || ''));
+      });
+      (typeof PAY_REQUESTS !== 'undefined' ? PAY_REQUESTS : []).forEach(function (p) {
+        if (p && p.bmhId && sameDay(p.date || p.createdAt || p.updatedAt, day)) addTo(byId, p.bmhId, 'p' + (p.id || '') + ':' + (p.status || '') + ':' + money(p));
+      });
+      ((typeof bmhGetSavedBillsForHistory === 'function' ? bmhGetSavedBillsForHistory() : window.BMH_SAVED_BILLS) || []).forEach(function (b) {
+        if (b && b.bmhId && sameDay(b.createdAt || b.date || b.updatedAt, day)) addTo(byId, b.bmhId, 'b' + (b.id || b.billNo || '') + ':' + (b.status || '') + ':' + Math.round((Number(b.amountReceived || b.patientPays || 0)) * 100));
+      });
+    } catch (e) {}
+    const out = {};
+    (ids || []).forEach(function (id) {
+      let fp = '';
+      try {
+        const cands = typeof getBmhIdLookupCandidates === 'function' ? getBmhIdLookupCandidates(id) : [id];
+        cands.forEach(function (c) {
+          fp += byId[String(c)] || '';
+          ((window.BMH_PATIENT_CHARGES || {})[c] || []).forEach(function (r) {
+            if (r && sameDay(r.ts || r.date || r.createdAt || r.updatedAt, day)) fp += 'c' + money(r) + ':' + (r.paid ? 1 : 0) + ';';
+          });
+        });
+        const p = typeof findLoadedPatientByBmhId === 'function' ? findLoadedPatientByBmhId(id) : null;
+        if (p) fp += '|' + [p.updatedAt, p.status, p.queueDate, p.queueRemoved, p.dept, p.centre, p.checkinAt, p.queueAddedAt].map(function (v) { return v == null ? '' : String(v); }).join(',');
+      } catch (e) { fp = 'x' + Date.now(); }
+      out[id] = fp;
+    });
+    return out;
+  }
+  function has(id, day, fp) {
+    const m = memo.get(String(id));
+    if (!m) return false;
+    if (m.day !== day || m.fp !== fp || Date.now() - m.at > RECHECK_MS) { memo.delete(String(id)); return false; }
+    return true;
+  }
+  function remember(id, day, fp) {
+    if (fp == null) return;
+    memo.set(String(id), { day: day, fp: fp, at: Date.now() });
+  }
+  window.bmhHydrateSkip = { enabled: enabled, fingerprints: fingerprints, has: has, remember: remember, size: function () { return memo.size; }, clear: function () { memo.clear(); } };
+  window.bmhHydrateSkipOff = function () { try { localStorage.setItem('bmh_disable_hydrate_skip', '1'); } catch (e) {} memo.clear(); return 'Skip memory OFF on this computer (old behaviour).'; };
+  window.bmhHydrateSkipOn = function () { try { localStorage.removeItem('bmh_disable_hydrate_skip'); } catch (e) {} return 'Skip memory ON on this computer.'; };
 })();
