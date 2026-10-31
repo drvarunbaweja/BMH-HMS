@@ -3649,28 +3649,31 @@ function buildProfessionalReceiptHtml(pr) {
     addressText ? ('resident of ' + escapeHtmlConsent(addressText)) : ''
   ].filter(Boolean);
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title><style>
-    *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:10mm;background:#fff;font-size:12.5px;line-height:1.55}
-    @page{size:A4 portrait;margin:10mm}
-    .sheet{border:1px solid #cfd5de;border-radius:10px;padding:12mm 12mm 10mm}
-    .hdr{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border-bottom:2px solid #1A3C6E;padding-bottom:10px;margin-bottom:14px}
-    .logo-wrap{display:flex;align-items:flex-start;gap:10px}
-    .logo{height:46px;width:auto;object-fit:contain}
-    .hname{font-size:21px;font-weight:900;color:#1A3C6E;line-height:1.1}
-    .hmeta{font-size:11px;color:#444;line-height:1.45;margin-top:4px;max-width:430px}
-    .badge{display:inline-block;padding:4px 12px;border-radius:999px;background:#eef3fb;color:#1A3C6E;font-size:11px;font-weight:900;letter-spacing:.5px}
-    .meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 14px}
-    .meta-box{border:1px solid #d7dce5;border-radius:8px;padding:8px 10px}
-    .lbl{font-size:9px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.5px}
-    .val{font-size:12px;font-weight:800;color:#111;margin-top:3px}
-    .para{font-size:13px;line-height:1.8;margin:12px 0}
-    .amt-box{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;border:1px solid #d7dce5;border-radius:10px;padding:12px;background:#fbfcfe;margin:14px 0}
-    .amt{font-size:24px;font-weight:900;color:#1A3C6E}
-    .foot{display:flex;justify-content:space-between;gap:20px;margin-top:26px}
+    /* Half-A4 receipt: fits the top half of an A4 sheet (210 x 148 mm); cut along the dashed line. */
+    *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;background:#fff;font-size:11px;line-height:1.4}
+    @page{size:A4 portrait;margin:0}
+    .half{width:210mm;height:148.5mm;padding:6mm 9mm 5mm;border-bottom:1px dashed #9aa3b2;position:relative;overflow:hidden}
+    .half:after{content:'✂ cut here';position:absolute;right:9mm;bottom:-1px;transform:translateY(50%);background:#fff;padding:0 4px;font-size:8px;color:#9aa3b2}
+    .sheet{border:1px solid #cfd5de;border-radius:8px;padding:5mm 6mm 4mm;height:100%;display:flex;flex-direction:column}
+    .hdr{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;border-bottom:2px solid #1A3C6E;padding-bottom:5px;margin-bottom:6px}
+    .logo-wrap{display:flex;align-items:flex-start;gap:8px}
+    .logo{height:32px;width:auto;object-fit:contain}
+    .hname{font-size:15px;font-weight:900;color:#1A3C6E;line-height:1.1}
+    .hmeta{font-size:8.5px;color:#444;line-height:1.35;margin-top:2px;max-width:120mm}
+    .badge{display:inline-block;padding:3px 10px;border-radius:999px;background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;letter-spacing:.5px}
+    .meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:4px 0 6px}
+    .meta-box{border:1px solid #d7dce5;border-radius:6px;padding:4px 7px}
+    .lbl{font-size:7.5px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.4px}
+    .val{font-size:10.5px;font-weight:800;color:#111;margin-top:1px}
+    .para{font-size:11px;line-height:1.5;margin:4px 0}
+    .amt-box{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid #d7dce5;border-radius:8px;padding:6px 10px;background:#fbfcfe;margin:6px 0}
+    .amt{font-size:18px;font-weight:900;color:#1A3C6E}
+    .foot{display:flex;justify-content:space-between;gap:16px;margin-top:auto}
     .sign{flex:1;text-align:center}
-    .line{height:34px;border-bottom:1px solid #222;margin-bottom:6px}
-    .small{font-size:10px;color:#666}
+    .line{height:18px;border-bottom:1px solid #222;margin-bottom:3px}
+    .small{font-size:8.5px;color:#666}
   </style></head><body>
-  <div class="sheet">
+  <div class="half"><div class="sheet">
     <div class="hdr">
       <div class="logo-wrap">
         ${logoSrc ? `<img src="${logoSrc}" class="logo" alt="BMH">` : ''}
@@ -3701,7 +3704,7 @@ function buildProfessionalReceiptHtml(pr) {
       <div class="sign"><div class="line"></div><div class="small">Received From</div></div>
       <div class="sign"><div class="line"></div><div class="small">Authorised Signatory</div></div>
     </div>
-  </div>
+  </div></div>
   <script>window.onload=()=>window.print()<\/script>
   </body></html>`;
 }
@@ -55452,16 +55455,16 @@ window.addEventListener('DOMContentLoaded', function() {
   window.bmhReceiptBillSummaryHtml = function (s) {
     if (!s) return '';
     const cell = function (label, value, color) {
-      return '<div style="border:1px solid #d7dce5;border-radius:8px;padding:7px 9px"><div style="font-size:9px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.4px">' + label + '</div>'
-        + '<div style="font-size:13px;font-weight:900;color:' + (color || '#111') + ';margin-top:2px">' + rupees(value) + '</div></div>';
+      return '<div style="border:1px solid #d7dce5;border-radius:6px;padding:3px 5px"><div style="font-size:7px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.3px;line-height:1.2">' + label + '</div>'
+        + '<div style="font-size:10.5px;font-weight:900;color:' + (color || '#111') + ';margin-top:1px">' + rupees(value) + '</div></div>';
     };
-    return '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 4px">'
+    return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;margin:4px 0 2px">'
       + cell('Total bill amount', s.gross, '#1A3C6E')
       + cell('Discount', s.discount, '#8a4200')
       + cell('Net bill amount', s.net, '#1A3C6E')
       + cell('Advance paid earlier', s.advance, '#0B5FA5')
       + cell('Paid now', s.paidNow, '#15803d')
       + cell('Balance due', s.balance, s.balance > 0 ? '#b45309' : '#15803d')
-      + '</div>' + (s.billNo ? '<div style="font-size:10px;color:#666">Against bill ' + String(s.billNo).replace(/</g, '&lt;') + '</div>' : '');
+      + '</div>' + (s.billNo ? '<div style="font-size:8.5px;color:#666">Against bill ' + String(s.billNo).replace(/</g, '&lt;') + '</div>' : '');
   };
 })();
