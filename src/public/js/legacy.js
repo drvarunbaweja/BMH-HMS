@@ -27891,18 +27891,25 @@ async function _registerPatientImpl() {
       .concat([previousCentre, currentCentre])
       .filter(Boolean)
   ));
-  const previousDeptSnapshot = existingPt ? {
-    dept: normalizeDeptKeyForQueue(existingPt.dept || existingPt.department || ''),
-    centre: patientCentreKey(existingPt.centre || centre),
-    doctor: existingPt.assignedDoctor || existingPt.doctor || '',
-    purpose: existingPt.purpose || 'Consultation',
-    queueAddedAt: existingPt.queueAddedAt || existingPt.checkinAt || existingPt.updatedAt || '',
-    createdAt: existingPt.queueAddedAt || existingPt.updatedAt || currentIso,
-    seenAt: isPatientMarkedSeen(existingPt) ? (existingPt.seenAt || currentIso) : '',
-    source: existingPt.queueSource || 'reception',
-    wasToday: patientQueueDateMatchesToday(existingPt)
+  // The directory copy found by search can be from an older visit. If the patient is already
+  // in today's queue, take today's department/queue state from the live queue copy, so the
+  // first department keeps its place when a token is made for another department.
+  const liveTodayPt = existingPt ? ((PATIENTS || []).find(function (row) {
+    return row && row !== existingPt && String(row.bmhId || '') === String(existingPt.bmhId || '') && patientQueueDateMatchesToday(row);
+  }) || null) : null;
+  const queueStatePt = liveTodayPt || existingPt;
+  const previousDeptSnapshot = queueStatePt ? {
+    dept: normalizeDeptKeyForQueue(queueStatePt.dept || queueStatePt.department || ''),
+    centre: patientCentreKey(queueStatePt.centre || centre),
+    doctor: queueStatePt.assignedDoctor || queueStatePt.doctor || '',
+    purpose: queueStatePt.purpose || 'Consultation',
+    queueAddedAt: queueStatePt.queueAddedAt || queueStatePt.checkinAt || queueStatePt.updatedAt || '',
+    createdAt: queueStatePt.queueAddedAt || queueStatePt.updatedAt || currentIso,
+    seenAt: isPatientMarkedSeen(queueStatePt) ? (queueStatePt.seenAt || currentIso) : '',
+    source: queueStatePt.queueSource || 'reception',
+    wasToday: patientQueueDateMatchesToday(queueStatePt)
   } : null;
-  const seenByDeptForVisit = Object.assign({}, existingPt?.seenByDept || existingPt?.deptSeenAt || {});
+  const seenByDeptForVisit = Object.assign({}, queueStatePt?.seenByDept || queueStatePt?.deptSeenAt || {});
   delete seenByDeptForVisit[normalizeDeptKeyForQueue(dept)];
 
   const patient = Object.assign({}, existingPt || {}, {
@@ -27936,6 +27943,11 @@ async function _registerPatientImpl() {
     createdBy: existingPt?.createdBy || CURRENT_USER?.name || 'Reception'
   });
   normalizePatientRecord(patient);
+  // Keep today's other-department entries and today's referrals from the live queue copy.
+  if (liveTodayPt) {
+    if (Array.isArray(liveTodayPt.deptQueueEntries)) patient.deptQueueEntries = liveTodayPt.deptQueueEntries.slice();
+    if (Array.isArray(liveTodayPt.crossRefs)) patient.crossRefs = liveTodayPt.crossRefs.slice();
+  }
 
   // Keep the live queue and the full patient cache on the same object. A later
   // cache rebuild must not restore the pre-registration copy and hide this row.
