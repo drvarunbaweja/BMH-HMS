@@ -3688,6 +3688,7 @@ function buildProfessionalReceiptHtml(pr) {
       <div class="meta-box"><div class="lbl">BMSH ID</div><div class="val" style="font-family:ui-monospace,monospace">${escapeHtmlConsent(pr.bmhId || pt.bmhId || '—')}</div></div>
     </div>
     <div class="para">Received a sum of <strong>Rs. ${escapeHtmlConsent(bmhAmountToWords(amount))}</strong> (<strong>₹${amount.toLocaleString('en-IN')}</strong>) from ${patientParts.join(', ') || '<strong>the patient</strong>'} as charges for <strong>${service}</strong>.</div>
+    ${pr.billSummary && typeof bmhReceiptBillSummaryHtml === 'function' ? bmhReceiptBillSummaryHtml(pr.billSummary) : ''}
     <div class="amt-box">
       <div>
         <div class="lbl">Payment Mode</div>
@@ -13066,6 +13067,7 @@ function bmhBuildBillPayloadFromUi(bmhId, opts) {
     discount: discount,
     advanceApplied: advanceApplied,
     netPayable: netPayable,
+    billAmountShown: (!isTPA && typeof bmhGetBillAmountShown === 'function') ? bmhGetBillAmountShown(sub) : 0,
     paymentMode: paymentMode,
     amountReceived: amountReceived,
     paymentRef: paymentRef,
@@ -13219,7 +13221,8 @@ function bmhPrintReceiptFromBill(bill) {
     mode: bill.paymentMode || 'Cash',
     paymentRef: bill.paymentRef || '',
     service: primaryLabel,
-    for: primaryLabel + ' · Bill ' + String(bill.billNo || bill.id || '')
+    for: primaryLabel + ' · Bill ' + String(bill.billNo || bill.id || ''),
+    billSummary: typeof bmhBillPrintFigures === 'function' ? Object.assign(bmhBillPrintFigures(bill), { billNo: bill.billNo || bill.id || '' }) : null
   });
 }
 function bmhCreateBillingCollectionTransactions(savedBill, billData, pt) {
@@ -13693,6 +13696,7 @@ async function bmhSaveAndPrintBill() {
     // Clear discount, TPA, advance-applied UI fields
     const discEl = document.getElementById('bmh-bill-discount');
     if (discEl) discEl.value = '';
+    ['bmh-bill-net-input', 'bmh-bill-shown-amt'].forEach(function (id) { const e = document.getElementById(id); if (e) { e.value = ''; e.dataset.bmhId = ''; } });
     const advCb = document.getElementById('bmh-apply-advance');
     if (advCb) { advCb.checked = false; }
     const tpaCb = document.getElementById('bmh-is-tpa');
@@ -13743,7 +13747,7 @@ function bmhPrintSavedBill(bill) {
   const timeStr = new Date(bill.createdAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
   const byCat = {};
-  (bill.items || []).forEach(function (l) { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
+  (typeof bmhBillItemsForPrint === 'function' ? bmhBillItemsForPrint(bill) : (bill.items || [])).forEach(function (l) { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
   const catLabel = typeof bmhCatLabel === 'function' ? bmhCatLabel : function (c) { return c; };
   const bodyRows = Object.keys(byCat).map(function (cat) {
     const hdr = '<tr><td colspan="4" style="background:#e8eef8;font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:.4px;padding:5px 8px;color:#1A3C6E">' + esc(catLabel(cat)) + '</td></tr>';
@@ -13754,7 +13758,8 @@ function bmhPrintSavedBill(bill) {
   const tpaLine = bill.isTPA && bill.tpaAmount > 0
     ? '<div style="margin-top:6px;font-size:10px;padding:6px 8px;background:#e0f0ff;border-radius:6px">TPA / Cashless: <strong>' + esc(bill.tpaCompany || 'Insurance') + '</strong>' + (bill.tpaPolicy ? ' · Policy: ' + esc(bill.tpaPolicy) : '') + ' · TPA pays ₹' + Number(bill.tpaAmount).toLocaleString('en-IN') + ' · Patient pays ₹' + Number(bill.patientPays || 0).toLocaleString('en-IN') + '</div>' : '';
   const dueAmount = Math.max(0, Number(bill.netPayable || 0) - Number(bill.amountReceived || 0));
-  const totalsStack = [
+  const printFig = typeof bmhBillPrintFigures === 'function' ? bmhBillPrintFigures(bill) : null;
+  const totalsStack = printFig && typeof bmhBillTotalsPrintHtml === 'function' ? bmhBillTotalsPrintHtml(printFig) : [
     ['Amount charged', Number(bill.subtotal || 0)],
     ['Advance', Number(bill.advanceApplied || 0)],
     ['Discount', Number(bill.discount || 0)],
@@ -13789,8 +13794,7 @@ function bmhPrintSavedBill(bill) {
     + '<div class="rcp"><div><strong>' + esc(bill.billNo || bill.id || '') + '</strong><div style="margin-top:2px">Patient bill / receipt</div></div><div style="text-align:right">' + today + '<br>' + timeStr + '</div></div>'
     + '<div class="ptbox"><div class="nm">' + esc(bill.patientName || 'Patient') + '</div><div class="id">' + esc(bill.bmhId || '') + '</div><div style="font-size:9.5px;color:#555;margin-top:4px">' + (bill.age ? esc(String(bill.age)) + 'Y ' : '') + esc(bill.sex || '') + (bill.dept ? ' · ' + esc(bill.dept) : '') + (bill.doctor ? ' · ' + esc(bill.doctor) : '') + '</div></div>'
     + '<table><thead><tr><th colspan="2">Description</th><th>Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + (bodyRows || '<tr><td colspan="4" style="padding:9px;text-align:center;color:#888">No charge lines</td></tr>') + '</tbody></table>'
-    + (bill.discount > 0 || bill.advanceApplied > 0 ? '<div style="font-size:9.5px;text-align:right;margin-bottom:6px;color:#444">' + (bill.discount > 0 ? 'Discount ₹' + Number(bill.discount).toLocaleString('en-IN') : '') + (bill.discount > 0 && bill.advanceApplied > 0 ? ' · ' : '') + (bill.advanceApplied > 0 ? 'Advance adjusted ₹' + Number(bill.advanceApplied).toLocaleString('en-IN') : '') + '</div>' : '')
-    + '<div style="margin-top:12px;border:1px solid #d7dce5;border-radius:10px;padding:10px 12px;background:#fbfcfe">' + totalsStack + '<div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:2px solid #1A3C6E;font-size:15px;font-weight:900;color:#1A3C6E"><span>Net total</span><span>₹' + Number(bill.netPayable || 0).toLocaleString('en-IN') + '</span></div><div style="font-size:10px;color:#555;margin-top:6px">Mode: ' + esc(bill.paymentMode || 'Cash') + (bill.paymentRef ? ' · Ref: ' + esc(bill.paymentRef) : '') + '</div></div>'
+    + '<div style="margin-top:12px;border:1px solid #d7dce5;border-radius:10px;padding:10px 12px;background:#fbfcfe">' + totalsStack + '<div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:2px solid #1A3C6E;font-size:15px;font-weight:900;color:#1A3C6E"><span>' + (printFig ? 'Net bill amount' : 'Net total') + '</span><span>₹' + Number(printFig ? printFig.net : (bill.netPayable || 0)).toLocaleString('en-IN') + '</span></div><div style="font-size:10px;color:#555;margin-top:6px">Mode: ' + esc(bill.paymentMode || 'Cash') + (bill.paymentRef ? ' · Ref: ' + esc(bill.paymentRef) : '') + '</div></div>'
     + tpaLine
     + '<div class="foot">Bill No: ' + esc(bill.billNo || bill.id || '') + ' · Saved ' + today + ' · Computer-generated receipt. Please retain for your records.</div>'
     + '<script>window.onload=()=>window.print()<\/script></body></html>';
@@ -14508,6 +14512,7 @@ function bmhUpdateBillTotals() {
   } else if (hint) {
     hint.style.display = 'none';
   }
+  if (typeof bmhSyncBillAmountInputs === 'function') { try { bmhSyncBillAmountInputs(z, bmhId); } catch (e) {} }
   if (bmhId) bmhSyncPatientRunningBalance(bmhId);
 }
 
@@ -15326,6 +15331,10 @@ function printBmhPatientBill(bmhIdOpt) {
   const centre = String(p.centre || CURRENT_USER?.centre || 'CHD').toUpperCase();
   const billContext = bmhGetEffectiveBillContext(bmhId);
   const lines = billContext.lines;
+  if (!lines.length && typeof bmhLatestSavedBillFor === 'function') {
+    const lastBill = bmhLatestSavedBillFor(bmhId);
+    if (lastBill && typeof bmhPrintSavedBill === 'function') { bmhPrintSavedBill(lastBill); return; }
+  }
   const { sub, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
   const invNo = 'RCP-' + String(Date.now()).slice(-10);
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -15408,7 +15417,21 @@ th:last-child{text-align:right}
 </div>
 <table><thead><tr><th colspan="2">Description</th><th>Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>${bodyRows || '<tr><td colspan="4" style="padding:9px;text-align:center;color:#888">No charge lines</td></tr>'}</tbody></table>
 ${discount > 0 || advanceApplied > 0 ? `<div style="font-size:9.5px;text-align:right;margin-bottom:6px;color:#444">${discount > 0 ? 'Discount ₹' + discount.toLocaleString('en-IN') + ' · ' : ''}${advanceApplied > 0 ? 'Advance adjusted ₹' + advanceApplied.toLocaleString('en-IN') : ''}</div>` : ''}
-<div class="totbar"><div class="big">Net payable: ₹${(Number(taxable != null ? taxable : sub - discount - advanceApplied) || 0).toLocaleString('en-IN')}</div><div class="sub">Outstanding balance ₹${dueAmt.toLocaleString('en-IN')} · Consultation and surgery are billed separately where already settled</div></div>
+${(function () {
+  // Clear figures: bill amount (incl. any higher amount on print), discount, net bill, advance, balance to pay.
+  const shown = typeof bmhGetBillAmountShown === 'function' ? bmhGetBillAmountShown(sub) : 0;
+  const gross = shown > sub ? shown : sub;
+  const netBill = Math.max(0, sub - discount);
+  const toPay = Number(taxable != null ? taxable : netBill - advanceApplied) || 0;
+  const r = function (n) { return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN'); };
+  return '<div style="margin:10px 0 0;border:1px solid #d7dce5;border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.8">'
+    + '<div style="display:flex;justify-content:space-between"><span>Total bill amount</span><b>' + r(gross) + '</b></div>'
+    + (gross - netBill > 0 ? '<div style="display:flex;justify-content:space-between;color:#8a4200"><span>Less: discount</span><b>− ' + r(gross - netBill) + '</b></div>' : '')
+    + '<div style="display:flex;justify-content:space-between;color:#1A3C6E;font-size:12.5px"><span>Net bill amount</span><b>' + r(netBill) + '</b></div>'
+    + (advanceApplied > 0 ? '<div style="display:flex;justify-content:space-between;color:#0B5FA5"><span>Less: advance paid earlier</span><b>− ' + r(advanceApplied) + '</b></div>' : '')
+    + '</div>'
+    + '<div class="totbar"><div class="big">Net bill amount: ' + r(netBill) + '</div><div class="sub">Balance to pay ' + r(toPay) + ' · Outstanding balance ' + r(dueAmt) + ' · Consultation and surgery are billed separately where already settled</div></div>';
+})()}
 ${payLines ? `<div class="payh">Recent payments</div><div>${payLines}</div>` : ''}
 <div class="foot">This is a computer-generated receipt. Subject to hospital policies. GST as applicable.<br>Please retain this receipt for your records.</div>
 </body></html>`;
@@ -55303,4 +55326,142 @@ window.addEventListener('DOMContentLoaded', function() {
   window.bmhStatisticsCompute = compute; // for checking numbers
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureTab);
   else ensureTab();
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BILLING — "Net payable" box and "Bill amount on print"
+// • Net payable ₹: typing the final amount fills the existing Discount box
+//   (discount = subtotal − net). Same discount as today, just typed the other way.
+// • Bill amount on print ₹ (optional): a higher amount shown on the printed bill
+//   and receipt, with the difference shown as discount. Display only: charge
+//   lines, discounts, collections and department totals are NOT changed.
+//   Not used for TPA / cashless bills.
+// • Clear print figures: Total bill amount, Discount, Net bill amount, Advance,
+//   Paid now, Balance due — used by the bill, statement and receipt prints.
+// ═══════════════════════════════════════════════════════════════════════════
+(function () {
+  function rupees(n) { return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN'); }
+  function billPatientId() { return document.getElementById('bmh-bill-pt-select')?.value || window._bmhSelectedBillPatient || ''; }
+  function isTpaBill() {
+    const mode = document.getElementById('bmh-pay-mode')?.value || '';
+    return !!document.getElementById('bmh-is-tpa')?.checked
+      || /Insurance|TPA|PMJAY|ECHS|Cashless/i.test(mode)
+      || Number(document.getElementById('bmh-pay-cashless-approved')?.value || 0) > 0;
+  }
+  // The printed amount belongs to the patient it was typed for.
+  function shownValueFor(bmhId) {
+    const el = document.getElementById('bmh-bill-shown-amt');
+    if (!el) return 0;
+    if (el.dataset.bmhId && el.dataset.bmhId !== bmhId) { el.value = ''; el.dataset.bmhId = ''; }
+    return Math.max(0, Number(el.value || 0));
+  }
+  window.bmhGetBillAmountShown = function (sub) {
+    const v = shownValueFor(billPatientId());
+    if (!v || isTpaBill()) return 0;
+    return v > (Number(sub) || 0) ? Math.round(v) : 0;
+  };
+  window.bmhOnBillNetInput = function (value) {
+    const id = billPatientId();
+    if (!id || typeof bmhTotalsForPatient !== 'function') return;
+    const discEl = document.getElementById('bmh-bill-discount');
+    if (String(value).trim() === '') return;
+    const sub = Number(bmhTotalsForPatient(id).sub) || 0;
+    const net = Math.max(0, Number(value) || 0);
+    if (net > sub) {
+      showToast('Net payable cannot be more than the bill (' + rupees(sub) + '). To show a higher bill amount, use "Bill amount on print".', 'w');
+      if (discEl) discEl.value = '0';
+    } else if (discEl) {
+      discEl.value = String(Math.round(sub - net));
+    }
+    bmhUpdateBillTotals();
+  };
+  window.bmhOnBillShownAmountInput = function () {
+    const el = document.getElementById('bmh-bill-shown-amt');
+    if (el) el.dataset.bmhId = billPatientId();
+    if (el && el.value && isTpaBill()) {
+      showToast('Bill amount on print is not used for TPA / cashless bills', 'w');
+      el.value = '';
+    }
+    bmhUpdateBillTotals();
+  };
+  // Called at the end of bmhUpdateBillTotals: keeps the two boxes and the hint in step.
+  window.bmhSyncBillAmountInputs = function (z, bmhId) {
+    const sub = Number(z && z.sub) || 0;
+    const discount = Number(z && z.discount) || 0;
+    const net = Math.max(0, sub - discount);
+    const netEl = document.getElementById('bmh-bill-net-input');
+    if (netEl && document.activeElement !== netEl) netEl.value = bmhId && sub ? String(Math.round(net)) : '';
+    const hint = document.getElementById('bmh-bill-shown-hint');
+    if (!hint) return;
+    const typed = bmhId ? shownValueFor(bmhId) : 0;
+    if (!typed) { hint.style.display = 'none'; hint.textContent = ''; return; }
+    hint.style.display = 'block';
+    if (isTpaBill()) { hint.textContent = 'Not used for TPA / cashless bills.'; return; }
+    if (typed <= sub) { hint.textContent = 'Must be more than the bill subtotal ' + rupees(sub) + ' — otherwise leave it blank.'; return; }
+    hint.textContent = 'Printed as: Bill ' + rupees(typed) + ' − Discount ' + rupees(typed - net) + ' = Net ' + rupees(net)
+      + '. Charges and collection stay ' + rupees(net) + '.';
+  };
+
+  // Figures for any printout of a saved bill.
+  window.bmhBillPrintFigures = function (bill) {
+    const b = bill || {};
+    const subtotal = Math.max(0, Number(b.subtotal) || 0);
+    const discount = Math.max(0, Number(b.discount) || 0);
+    const shown = Math.max(0, Number(b.billAmountShown) || 0);
+    const gross = shown > subtotal ? shown : subtotal;
+    const net = Math.max(0, subtotal - discount);
+    const advance = Math.max(0, Number(b.advanceApplied) || 0);
+    const paidNow = Math.max(0, Number(b.amountReceived) || 0);
+    return {
+      gross: gross, discount: Math.max(0, gross - net), net: net, advance: advance, paidNow: paidNow,
+      balance: Math.max(0, net - advance - paidNow), extraShown: gross - subtotal
+    };
+  };
+  // Bill items for printing: when a higher bill amount is shown, the difference is shown on the largest item.
+  window.bmhBillItemsForPrint = function (bill) {
+    const items = (bill && Array.isArray(bill.items) ? bill.items : []).map(function (l) { return Object.assign({}, l); });
+    const extra = window.bmhBillPrintFigures(bill).extraShown;
+    if (extra > 0 && items.length) {
+      let top = 0;
+      items.forEach(function (l, i) { if ((Number(l.amount) || 0) > (Number(items[top].amount) || 0)) top = i; });
+      items[top].amount = (Number(items[top].amount) || 0) + extra;
+    }
+    return items;
+  };
+  // Totals panel used on the printed bill.
+  window.bmhBillTotalsPrintHtml = function (f) {
+    const row = function (label, value, opts) {
+      opts = opts || {};
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:' + (opts.last ? 'none' : '1px solid #e5e7eb')
+        + ';font-size:' + (opts.big ? '14px' : '12px') + ';font-weight:' + (opts.big ? '900' : '700') + ';color:' + (opts.color || '#243b53') + '"><span>' + label + '</span><span>' + value + '</span></div>';
+    };
+    return row('Total bill amount', rupees(f.gross))
+      + (f.discount > 0 ? row('Less: discount', '− ' + rupees(f.discount), { color: '#8a4200' }) : '')
+      + row('Net bill amount', rupees(f.net), { big: true, color: '#1A3C6E' })
+      + (f.advance > 0 ? row('Less: advance paid earlier', '− ' + rupees(f.advance), { color: '#0B5FA5' }) : '')
+      + row('Paid now', rupees(f.paidNow), { color: '#15803d' })
+      + row('Balance due', f.balance > 0 ? rupees(f.balance) : rupees(0) + ' &nbsp;<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:#dcfce7;color:#15803d">PAID IN FULL</span>', { last: true, big: true, color: f.balance > 0 ? '#b45309' : '#15803d' });
+  };
+  // Latest saved bill of a patient (used when "Preview bill" has nothing unpaid left to show).
+  window.bmhLatestSavedBillFor = function (bmhId) {
+    const rows = typeof bmhGetSavedBillsForHistory === 'function' ? bmhGetSavedBillsForHistory() : (window.BMH_SAVED_BILLS || []);
+    return (rows || []).filter(function (b) { return b && b.bmhId === bmhId && String(b.status || '').toLowerCase() !== 'void'; })
+      .sort(function (a, b) { return String(b.createdAt || b.date || '').localeCompare(String(a.createdAt || a.date || '')); })[0] || null;
+  };
+  // Summary block for a receipt printed with a bill.
+  window.bmhReceiptBillSummaryHtml = function (s) {
+    if (!s) return '';
+    const cell = function (label, value, color) {
+      return '<div style="border:1px solid #d7dce5;border-radius:8px;padding:7px 9px"><div style="font-size:9px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.4px">' + label + '</div>'
+        + '<div style="font-size:13px;font-weight:900;color:' + (color || '#111') + ';margin-top:2px">' + rupees(value) + '</div></div>';
+    };
+    return '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 4px">'
+      + cell('Total bill amount', s.gross, '#1A3C6E')
+      + cell('Discount', s.discount, '#8a4200')
+      + cell('Net bill amount', s.net, '#1A3C6E')
+      + cell('Advance paid earlier', s.advance, '#0B5FA5')
+      + cell('Paid now', s.paidNow, '#15803d')
+      + cell('Balance due', s.balance, s.balance > 0 ? '#b45309' : '#15803d')
+      + '</div>' + (s.billNo ? '<div style="font-size:10px;color:#666">Against bill ' + String(s.billNo).replace(/</g, '&lt;') + '</div>' : '');
+  };
 })();
