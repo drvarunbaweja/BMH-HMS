@@ -32527,7 +32527,6 @@ function getExpectedDeliveryRows() {
   const seen = new Set();
   pool.forEach(function (pt) {
     if (!pt || !pt.bmhId || seen.has(pt.bmhId)) return;
-    if (centreFilter && normalizeAppointmentCentreValue(pt.centre || 'CHD') !== centreFilter) return;
     const candidates = getObgAncVisitCandidates(pt).map(function (visit) {
       let eddIso = parseObgEddToIso(visit['obg-obs-edd-usg'] || '') || parseObgEddToIso(visit['obg-obs-edd-date'] || '') || parseObgEddToIso(visit.edd || '');
       let eddSource = eddIso ? 'saved' : '';
@@ -32543,6 +32542,7 @@ function getExpectedDeliveryRows() {
     if (fromVal && (!picked.eddIso || picked.eddIso < fromVal)) return;
     if (toVal && (!picked.eddIso || picked.eddIso > toVal)) return;
     const v = picked.visit;
+    if (centreFilter && normalizeAppointmentCentreValue(v.centre || pt.centre || 'CHD') !== centreFilter) return;
     const visitDate = visitDateOf(v);
     const pregnancyStart = picked.eddIso ? shift(picked.eddIso, -280) : (visitDate ? shift(visitDate, -280) : '');
     const delivery = (deliveries.get(pt.bmhId) || []).filter(function (d) {
@@ -32575,7 +32575,7 @@ function getExpectedDeliveryRows() {
       risk: v.riskTag || v['obg-risk'] || '',
       visitDate: v.date || v.visitDate || v.createdAt || '',
       doctor: v.doctor || pt.assignedDoctor || pt.doctor || '',
-      centre: pt.centre || '',
+      centre: v.centre || pt.centre || '',
       notes: v.ancNotes || v.notes || '',
       daysLeft: daysLeft,
       delivery: delivery,
@@ -33602,16 +33602,20 @@ function generateSurgeryReport() {
     }
     window._bmhGeneratingDeliveriesAfterOTRefresh = false;
     const showRemoved = !!window._bmhDeliveriesShowRemoved;
-    const allRows = withDeliveryFollowups(getExpectedDeliveryRows(), { showRemoved: true });
+    const fuApi = window.bmhAdvisedFollowupApi;
+    const unfiltered = withDeliveryFollowups(getExpectedDeliveryRows(), { showRemoved: true });
+    const chosenCentre = fuApi ? fuApi.chosenCentre() : '';
+    const allRows = chosenCentre && fuApi ? unfiltered.filter(function (r) { return fuApi.centreKey(r.centre) === chosenCentre; }) : unfiltered;
     const removedCount = allRows.filter(function (r) { return r.dropped; }).length;
     const rows = showRemoved ? allRows : allRows.filter(function (r) { return !r.dropped; });
-    const fuApi = window.bmhAdvisedFollowupApi;
+    const centreChips = fuApi ? fuApi.centreChipsHtml(unfiltered.filter(function (r) { return showRemoved || !r.dropped; }), chosenCentre) : '';
     const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
     el.innerHTML = `<div class="card">
       <div class="card-hd"><div><div class="card-title">🤰 Deliveries Expected — ${rows.length} ANC patients</div><div class="card-sub">ANC-ticked OBG patients from both centres, sorted by EDD · ${esc(expectedDeliveryCounts(rows))}</div></div><div style="display:flex;gap:10px;align-items:center"><label style="font-size:11.5px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ${showRemoved ? 'checked' : ''} onchange="window._bmhDeliveriesShowRemoved=this.checked;generateSurgeryReport()"> Show removed (${removedCount})</label><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div></div>
+      ${centreChips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">${centreChips}</div>` : ''}
       ${rows.length ? `<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>EDD</th><th>Status</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Centre</th><th>Follow-up</th></tr></thead><tbody>
       ${rows.map(function (row, i) {
-        return `<tr${row.state === 'overdue' ? ' style="background:#fff1f0"' : ''}><td>${i + 1}</td><td style="font-weight:900;color:var(--bmh-blue);white-space:nowrap">${esc(row.edd)}${row.eddSource === 'lmp' ? '<div style="font-size:10px;color:var(--g1);font-weight:600">from LMP</div>' : ''}</td><td style="font-weight:800;color:${expectedDeliveryStatusColor(row)}">${esc(expectedDeliveryStatusText(row))}${row.gaNow ? `<div style="font-size:10px;color:var(--g1);font-weight:600">${esc(row.gaNow)}</div>` : ''}</td><td>${fuApi ? fuApi.patientNameHtml(row) : esc(row.patient)}${row.notes ? `<div style="font-size:10px;color:var(--g1);margin-top:3px">${esc(row.notes)}</div>` : ''}</td><td style="font-family:var(--mono);font-size:10px">${esc(row.bmhId)}</td><td>${esc(row.mobile || '—')}</td><td>${esc(row.ageSex || '—')}</td><td>${esc(row.gravida || '—')}</td><td>${esc(row.risk || 'Low risk')}</td><td>${esc(row.visitDate ? formatDateIN(row.visitDate) : '—')}</td><td>${esc(row.doctor || '—')}</td><td>${esc(row.centre || '—')}</td><td>${fuApi ? fuApi.followupCell(row) : ''}</td></tr>`;
+        return `<tr${row.state === 'overdue' ? ' style="background:#fff1f0"' : ''}><td>${i + 1}</td><td style="font-weight:900;color:var(--bmh-blue);white-space:nowrap">${esc(row.edd)}${row.eddSource === 'lmp' ? '<div style="font-size:10px;color:var(--g1);font-weight:600">from LMP</div>' : ''}</td><td style="font-weight:800;color:${expectedDeliveryStatusColor(row)}">${esc(expectedDeliveryStatusText(row))}${row.gaNow ? `<div style="font-size:10px;color:var(--g1);font-weight:600">${esc(row.gaNow)}</div>` : ''}</td><td>${fuApi ? fuApi.patientNameHtml(row) : esc(row.patient)}${row.notes ? `<div style="font-size:10px;color:var(--g1);margin-top:3px">${esc(row.notes)}</div>` : ''}</td><td style="font-family:var(--mono);font-size:10px">${esc(row.bmhId)}</td><td>${esc(row.mobile || '—')}</td><td>${esc(row.ageSex || '—')}</td><td>${esc(row.gravida || '—')}</td><td>${esc(row.risk || 'Low risk')}</td><td>${esc(row.visitDate ? formatDateIN(row.visitDate) : '—')}</td><td>${esc(row.doctor || '—')}</td><td>${esc(({ RPR: 'Ropar', CHD: 'Chandigarh' })[normalizeAppointmentCentreValue(row.centre || 'CHD')] || row.centre || '—')}</td><td>${fuApi ? fuApi.followupCell(row) : ''}</td></tr>`;
       }).join('')}
       </tbody></table></div>` : '<div style="padding:20px;text-align:center;color:var(--g1)">No ANC patients found for the current filter.</div>'}
     </div>`;
@@ -33653,7 +33657,7 @@ function openSurgeryReportWindow() {
     aw.document.close();
     return;
   }
-  const rows = sourceFilter === 'deliveries' ? withDeliveryFollowups(getExpectedDeliveryRows(), { showRemoved: !!window._bmhDeliveriesShowRemoved }) : getProcedureReportRows();
+  const rows = sourceFilter === 'deliveries' ? withDeliveryFollowups(getExpectedDeliveryRows(), { showRemoved: !!window._bmhDeliveriesShowRemoved }).filter(function (r) { const api = window.bmhAdvisedFollowupApi; const c = api ? api.chosenCentre() : ''; return !c || api.centreKey(r.centre) === c; }) : getProcedureReportRows();
   const w = window.open('', '_blank', 'width=1200,height=800');
   if (!w) { showToast('Popup blocked — allow popups to open report window', 'w'); return; }
   w.document.write(sourceFilter === 'deliveries'
@@ -33670,7 +33674,7 @@ function printSurgeryReportCurrent() {
     showToast('Advised procedures list ready to print ✓', 's');
     return;
   }
-  const rows = sourceFilter === 'deliveries' ? withDeliveryFollowups(getExpectedDeliveryRows(), { showRemoved: !!window._bmhDeliveriesShowRemoved }) : getProcedureReportRows();
+  const rows = sourceFilter === 'deliveries' ? withDeliveryFollowups(getExpectedDeliveryRows(), { showRemoved: !!window._bmhDeliveriesShowRemoved }).filter(function (r) { const api = window.bmhAdvisedFollowupApi; const c = api ? api.chosenCentre() : ''; return !c || api.centreKey(r.centre) === c; }) : getProcedureReportRows();
   safePrint(sourceFilter === 'deliveries'
     ? buildExpectedDeliveryReportHtml(rows, 'Deliveries Expected')
     : buildProcedureReportHtml(rows, proc || 'Procedure Report'));
@@ -53727,7 +53731,7 @@ window.addEventListener('DOMContentLoaded', function() {
     return {
       key: rowKey(p.bmhId, deptKey, proc), bmhId: String(p.bmhId || ''), patient: p.name || p.patient || '—',
       mobile: p.mob || p.mobile || p.phone || '', ageSex: [p.age || '—', p.sex || '—'].join('/'),
-      centre: p.centre || '', dept: deptKey, proc: proc, eye: eyeOf(proc),
+      centre: (visit && visit.centre) || p.centre || '', dept: deptKey, proc: proc, eye: eyeOf(proc),
       advisedDate: localDateKey((visit && (visit.date || visit.visitDate || visit.createdAt)) || '') || today(),
       doctor: String((visit && visit.doctor) || p.assignedDoctor || p.doctor || '').split('·')[0].trim()
     };
@@ -53943,23 +53947,38 @@ window.addEventListener('DOMContentLoaded', function() {
     return rows;
   }
 
+  function centreKeyOf(c) { return typeof normalizeAppointmentCentreValue === 'function' ? normalizeAppointmentCentreValue(c || 'CHD') : String(c || 'CHD').toUpperCase(); }
+  function centreName(c) { const k = centreKeyOf(c); return k === 'RPR' ? 'Ropar' : k === 'CHD' ? 'Chandigarh' : (c || '—'); }
+  function centreBadge(c) {
+    const k = centreKeyOf(c);
+    return '<span class="badge ' + (k === 'RPR' ? 'bd-teal' : 'bd-purple') + '" style="white-space:nowrap">' + esc(centreName(c)) + '</span>';
+  }
+  // Centre chips shared by the Advised and Deliveries lists.
+  function centreChipsHtml(rowsForCounts, chosen) {
+    const n = function (k) { return rowsForCounts.filter(function (r) { return !k || centreKeyOf(r.centre) === k; }).length; };
+    const chip = function (k, label) {
+      const on = (chosen || '') === k;
+      return '<button type="button" class="btn btn-xs ' + (on ? 'btn-blue' : 'btn-outline') + '" onclick="bmhSetAdvisedFilter(\'centre\',\'' + k + '\')">' + label + ' <b>' + n(k) + '</b></button>';
+    };
+    return '<span style="font-size:10.5px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Centre</span>'
+      + chip('', 'Both') + chip('RPR', '📍 Ropar') + chip('CHD', '📍 Chandigarh');
+  }
   function readFilters() {
     const f = window._bmhAdvFilter || (window._bmhAdvFilter = { status: 'pending', tests: false });
     return {
       text: (document.getElementById('rep-surg-name')?.value || '').trim().toLowerCase(),
       from: document.getElementById('rep-surg-from')?.value || '',
       to: document.getElementById('rep-surg-to')?.value || '',
-      centre: document.getElementById('rep-centre')?.value || '',
+      centre: f.centre != null ? f.centre : (document.getElementById('rep-centre')?.value || ''),
       dept: normalizeDeptKeyForQueue(document.getElementById('rep-surg-dept')?.value || ''),
       status: f.status, tests: f.tests
     };
   }
-  function applyFilters(rows, f, ignoreStatus) {
+  function applyFilters(rows, f, ignoreStatus, ignoreCentre) {
     return rows.filter(function (r) {
       if (!f.tests && r.isTest) return false;
       if (f.dept && r.dept !== f.dept) return false;
-      if (f.centre && typeof normalizeAppointmentCentreValue === 'function'
-        && normalizeAppointmentCentreValue(r.centre || 'CHD') !== f.centre) return false;
+      if (f.centre && !ignoreCentre && centreKeyOf(r.centre) !== f.centre) return false;
       const d = r.advisedDate || (r.ot && r.ot.date) || '';
       if (f.from && (!d || d < f.from)) return false;
       if (f.to && (!d || d > f.to)) return false;
@@ -54146,14 +54165,16 @@ window.addEventListener('DOMContentLoaded', function() {
       + chip('pending', 'Not done yet', counts.advised) + chip('due', '📞 Calls due', counts.due)
       + chip('scheduled', 'OT booked', counts.scheduled) + chip('done', 'Done', counts.done)
       + chip('all', 'All', counts.all) + chip('dropped', 'Dropped', counts.dropped)
+      + '</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">'
+      + centreChipsHtml(applyFilters(all, f, false, true), f.centre)
       + '<label style="margin-left:auto;font-size:11.5px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ' + (f.tests ? 'checked' : '') + ' onchange="bmhSetAdvisedFilter(\'tests\',this.checked)"> Include tests (OCT, fields, etc.)</label>'
       + '</div>'
-      + (rows.length ? '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>Dept</th><th>Procedure advised</th><th>Doctor</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>'
+      + (rows.length ? '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>Centre</th><th>Dept</th><th>Procedure advised</th><th>Doctor</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>'
         + rows.map(function (r, i) {
           return '<tr' + (isDue(followups[r.key]) ? ' style="background:#fff1f0"' : '') + '><td>' + (i + 1) + '</td>'
             + '<td style="white-space:nowrap">' + (r.advisedDate ? esc(fmt(r.advisedDate)) : '<span style="color:var(--g1);font-size:10px">from OT register</span>') + '</td>'
             + '<td><div>' + patientNameHtml(r) + '</div><div style="font-size:10px;color:var(--g1)">' + esc(r.bmhId) + (r.mobile ? ' · ' + esc(r.mobile) : '') + '</div></td>'
-            + '<td>' + esc(deptLabel(r.dept)) + '</td><td style="font-weight:700">' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td>'
+            + '<td>' + centreBadge(r.centre) + '</td><td>' + esc(deptLabel(r.dept)) + '</td><td style="font-weight:700">' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td>'
             + '<td>' + statusCell(r) + '</td><td>' + followupCell(r) + '</td></tr>';
         }).join('') + '</tbody></table></div>'
         : '<div style="padding:20px;text-align:center;color:var(--g1)">No patients for this filter.</div>')
@@ -54175,10 +54196,10 @@ window.addEventListener('DOMContentLoaded', function() {
     };
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:8mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:5px 6px;font-size:10px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E}@page{size:A4 landscape;margin:7mm}</style></head><body>'
       + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title || 'Advised Procedures & Follow-up') + ' — ' + rows.length + '</div>'
-      + '<table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Dept</th><th>Procedure</th><th>Doctor</th><th>Status</th><th>Last call</th><th>Next call</th></tr></thead><tbody>'
+      + '<table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Centre</th><th>Dept</th><th>Procedure</th><th>Doctor</th><th>Status</th><th>Last call</th><th>Next call</th></tr></thead><tbody>'
       + rows.map(function (r, i) {
         const rec = followups[r.key] || {};
-        return '<tr><td>' + (i + 1) + '</td><td>' + esc(fmt(r.advisedDate)) + '</td><td>' + esc(r.patient) + '</td><td>' + esc(r.bmhId) + '</td><td>' + esc(r.mobile || '—') + '</td><td>'
+        return '<tr><td>' + (i + 1) + '</td><td>' + esc(fmt(r.advisedDate)) + '</td><td>' + esc(r.patient) + '</td><td>' + esc(r.bmhId) + '</td><td>' + esc(r.mobile || '—') + '</td><td>' + esc(centreName(r.centre)) + '</td><td>'
           + esc(deptLabel(r.dept)) + '</td><td>' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td><td>' + esc(statusText(r)) + '</td><td>'
           + esc([rec.lastOutcome, rec.lastReason, rec.lastRemark].filter(Boolean).join(' — ') || '—') + '</td><td>'
           + esc(rec.status === 'open' && !rec.dropped ? fmt(rec.nextDate) : '—') + '</td></tr>';
@@ -54255,6 +54276,7 @@ window.addEventListener('DOMContentLoaded', function() {
     document.getElementById('adv-fu-head').innerHTML = '<div style="font-size:15px;font-weight:900;color:var(--bmh-blue)">' + esc(row.patient) + '</div>'
       + '<div>' + esc(row.bmhId) + ' · ' + esc(row.ageSex || '—') + (row.mobile ? ' · <a href="tel:' + esc(String(row.mobile).replace(/[^0-9+]/g, '')) + '">📱 ' + esc(row.mobile) + '</a>' : '') + '</div>'
       + '<div><b>' + esc(row.proc) + '</b> · ' + esc(deptLabel(row.dept)) + '</div>'
+      + '<div style="margin:3px 0">📍 Call from <b>' + esc(centreName(row.centre)) + ' centre</b></div>'
       + '<div style="color:var(--g1)">Advised ' + esc(fmt(row.advisedDate)) + (row.doctor ? ' by ' + esc(row.doctor) : '') + ' · ' + esc(statusLine) + '</div>';
     const log = Object.values(rec.log || {}).sort(function (a, b) { return String(b.at || '').localeCompare(String(a.at || '')); });
     document.getElementById('adv-fu-log').innerHTML = log.length ? log.map(function (e) {
@@ -54412,7 +54434,7 @@ window.addEventListener('DOMContentLoaded', function() {
       const r = followups[key];
       return '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--g5,#eee)">'
         + '<div style="flex:1;font-size:12px"><b>' + esc(r.patient) + '</b> · ' + esc(r.bmhId) + (r.mobile ? ' · ' + esc(r.mobile) : '')
-        + '<div>' + esc(r.proc) + ' · ' + esc(deptLabel(r.dept)) + '</div>'
+        + '<div>' + esc(r.proc) + ' · ' + esc(deptLabel(r.dept)) + ' · 📍 ' + esc(centreName(r.centre)) + '</div>'
         + '<div style="color:var(--g1)">Due ' + esc(fmt(r.nextDate)) + (r.lastReason ? ' · last: ' + esc(r.lastReason) : '') + '</div></div>'
         + '<button class="btn btn-xs btn-gold" onclick="closeM(\'m-adv-due\');bmhOpenAdvisedFollowup(\'' + key + '\')">📞 Open</button></div>';
     }).join('') : '<div style="padding:16px;text-align:center;color:var(--g1)">No calls due.</div>';
@@ -54456,6 +54478,9 @@ window.addEventListener('DOMContentLoaded', function() {
     isDue: function (key) { return isDue(followups[key]); },
     followupCell: followupCell,
     patientNameHtml: patientNameHtml,
+    centreChipsHtml: centreChipsHtml,
+    centreKey: centreKeyOf,
+    chosenCentre: function () { return readFilters().centre; },
     ensureListening: ensureListening
   };
   window.bmhFillAdvisedFromHistory = fillFromHistory;
@@ -54469,7 +54494,9 @@ window.addEventListener('DOMContentLoaded', function() {
     const f = window._bmhAdvFilter || (window._bmhAdvFilter = { status: 'pending', tests: false });
     f[name] = value;
     const el = document.getElementById('rep-surgery-result');
-    if (el) renderReport(el);
+    const src = document.getElementById('rep-surg-source')?.value || '';
+    if (el && src === 'deliveries' && typeof generateSurgeryReport === 'function') generateSurgeryReport();
+    else if (el) renderReport(el);
   };
   // Light check every 30 s: start the small follow-up listener once a
   // department/admin user is logged in, and refresh the banner (date roll-over).
