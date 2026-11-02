@@ -7083,29 +7083,6 @@ function buildSidebarForRole(role, dept, name) {
   // Admin role keeps the full default sidebar — no change needed
   appendApprovedModules();
 }
-// The menu is built at login from the built-in login profile; the pages ticked in
-// Settings → Logins arrive a moment later from userSettings. Apply them to the
-// logged-in user and rebuild the menu once, keeping the current page highlighted.
-function bmhApplySavedAccessToCurrentUser(settings) {
-  if (!settings || !CURRENT_USER || CURRENT_USER.isAdmin) return;
-  const uname = String(CURRENT_USER.username || '').toLowerCase();
-  if (!uname) return;
-  const saved = settings[sanitizeFirebaseKey(uname)] || settings[uname];
-  const savedModules = saved && saved.access && Array.isArray(saved.access.modules) ? saved.access.modules : null;
-  if (!savedModules) return;
-  const current = Array.isArray(CURRENT_USER.access?.modules) ? CURRENT_USER.access.modules : [];
-  const same = current.length === savedModules.length && savedModules.every(function (m) { return current.indexOf(m) !== -1; });
-  if (same) return;
-  CURRENT_USER.access = Object.assign({}, CURRENT_USER.access || {}, saved.access);
-  window.CURRENT_USER = CURRENT_USER;
-  buildSidebarForRole(CURRENT_USER.role, CURRENT_USER.dept, CURRENT_USER.name);
-  const activeKey = String((typeof getActivePageId === 'function' ? getActivePageId() : '') || '').replace(/^pg-/, '');
-  if (activeKey) {
-    document.querySelectorAll('#sbnav .ni').forEach(function (el) {
-      el.classList.toggle('active', String(el.getAttribute('onclick') || '').indexOf("nav('" + activeKey + "'") === 0);
-    });
-  }
-}
 function setCentre(c, btn) {
   // Only admin/BOTH users can switch — centre-locked users are blocked
   const uc = getUserCentre ? getUserCentre() : null;
@@ -37438,7 +37415,6 @@ function activateUserSession(user, profile, opts) {
             }
             applyLoginCompatibilityDefaults && applyLoginCompatibilityDefaults(uname);
           });
-          try { bmhApplySavedAccessToCurrentUser(settings); } catch (e) { console.warn('saved access apply skipped', e); }
         }).catch(function(e){ console.warn('userSettings load error:', e); });
       }, 1600);
       if (opts.auditLogin && typeof fbPush === 'function') {
@@ -37458,7 +37434,6 @@ function preloadUserSettings() {
       USER_DB[uname] = Object.assign({}, USER_DB[uname] || {}, data);
       applyLoginCompatibilityDefaults && applyLoginCompatibilityDefaults(uname);
     });
-    try { bmhApplySavedAccessToCurrentUser(settings); } catch (e) { console.warn('saved access apply skipped', e); }
     if (CURRENT_USER?.isAdmin) renderAdminUsersList && renderAdminUsersList();
   }).catch(function(e){ console.warn('user preload error:', e); });
 }
