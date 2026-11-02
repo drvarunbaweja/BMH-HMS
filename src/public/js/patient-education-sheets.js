@@ -135,6 +135,24 @@
         ['No heavy lifting (more than your baby) or intercourse for 6 weeks. Plan contraception; wait at least 18 months before the next pregnancy.', '6 ਹਫ਼ਤੇ ਭਾਰੀ ਭਾਰ (ਬੱਚੇ ਤੋਂ ਵੱਧ) ਜਾਂ ਸੰਬੰਧ ਨਹੀਂ। ਪਰਿਵਾਰ ਨਿਯੋਜਨ ਕਰੋ; ਅਗਲੇ ਗਰਭ ਲਈ ਘੱਟੋ-ਘੱਟ 18 ਮਹੀਨੇ ਉਡੀਕ ਕਰੋ।']])],
       urgent: ['COME IMMEDIATELY if there is fever, wound redness, pus or opening, heavy bleeding, severe pain, breathlessness, or pain/swelling in a leg.', 'ਤੁਰੰਤ ਆਓ ਜੇ ਬੁਖ਼ਾਰ, ਜ਼ਖ਼ਮ ਵਿੱਚ ਲਾਲੀ, ਪੀਕ ਜਾਂ ਖੁੱਲ੍ਹਣਾ, ਜ਼ਿਆਦਾ ਖ਼ੂਨ, ਤੇਜ਼ ਦਰਦ, ਸਾਹ ਚੜ੍ਹਨਾ, ਜਾਂ ਲੱਤ ਵਿੱਚ ਦਰਦ/ਸੋਜ ਹੋਵੇ।'] },
 
+    { id: 'gdm', dept: 'obg', extra: 'obg', title: ['Pregnancy with Diabetes — Instructions for the Mother', 'ਗਰਭ ਅਵਸਥਾ ਵਿੱਚ ਸ਼ੂਗਰ — ਮਾਂ ਲਈ ਹਦਾਇਤਾਂ'], sections: [
+      S('1. Tests and check-ups', '1. ਟੈਸਟ ਅਤੇ ਚੈੱਕਅੱਪ', [
+        ['Sugar test (OGTT) as advised; HbA1c, kidney function and urine tests; eye check if you had diabetes before pregnancy', 'ਸਲਾਹ ਅਨੁਸਾਰ ਸ਼ੂਗਰ ਦਾ ਟੈਸਟ (OGTT); HbA1c, ਗੁਰਦਿਆਂ ਅਤੇ ਪਿਸ਼ਾਬ ਦੇ ਟੈਸਟ; ਗਰਭ ਤੋਂ ਪਹਿਲਾਂ ਸ਼ੂਗਰ ਸੀ ਤਾਂ ਅੱਖਾਂ ਦੀ ਜਾਂਚ'],
+        ['Growth scans of the baby and more frequent visits; BP and weight checked at every visit', 'ਬੱਚੇ ਦੇ ਵਾਧੇ ਦੇ ਸਕੈਨ ਅਤੇ ਵੱਧ ਵਾਰ ਚੈੱਕਅੱਪ; ਹਰ ਵਾਰ BP ਅਤੇ ਭਾਰ ਦੀ ਜਾਂਚ']]),
+      S('2. Check your sugar at home', '2. ਘਰ ਵਿੱਚ ਸ਼ੂਗਰ ਚੈੱਕ ਕਰੋ', [
+        ['Check fasting sugar and 2 hours after main meals, as advised. Write every reading in a diary and bring it to each visit.', 'ਸਲਾਹ ਅਨੁਸਾਰ ਖਾਲੀ ਪੇਟ ਅਤੇ ਮੁੱਖ ਭੋਜਨ ਤੋਂ 2 ਘੰਟੇ ਬਾਅਦ ਸ਼ੂਗਰ ਚੈੱਕ ਕਰੋ। ਹਰ ਰੀਡਿੰਗ ਡਾਇਰੀ ਵਿੱਚ ਲਿਖੋ ਅਤੇ ਹਰ ਵਾਰ ਨਾਲ ਲਿਆਓ।'],
+        ['Usual targets: fasting below 95 mg/dL; 2 hours after meals below 120 mg/dL — or as your doctor writes: ' + B, 'ਆਮ ਟੀਚਾ: ਖਾਲੀ ਪੇਟ 95 mg/dL ਤੋਂ ਘੱਟ; ਭੋਜਨ ਤੋਂ 2 ਘੰਟੇ ਬਾਅਦ 120 mg/dL ਤੋਂ ਘੱਟ — ਜਾਂ ਡਾਕਟਰ ਦੇ ਲਿਖੇ ਅਨੁਸਾਰ: ' + B]]),
+      S('3. Diet and exercise', '3. ਖ਼ੁਰਾਕ ਅਤੇ ਕਸਰਤ', [
+        ['Eat 3 small meals and 2–3 small snacks; do not skip meals. Prefer whole grains, dals, vegetables, salad, curd and paneer.', '3 ਛੋਟੇ ਭੋਜਨ ਅਤੇ 2–3 ਹਲਕੇ ਨਾਸ਼ਤੇ ਕਰੋ; ਭੋਜਨ ਨਾ ਛੱਡੋ। ਸਾਬਤ ਅਨਾਜ, ਦਾਲਾਂ, ਸਬਜ਼ੀਆਂ, ਸਲਾਦ, ਦਹੀਂ ਅਤੇ ਪਨੀਰ ਖਾਓ।'],
+        ['Avoid sugar, sweets, juices, cold drinks, white bread, maida and fried food. Eat whole fruit in small portions.', 'ਖੰਡ, ਮਿਠਾਈਆਂ, ਜੂਸ, ਕੋਲਡ ਡਰਿੰਕ, ਚਿੱਟੀ ਬ੍ਰੈੱਡ, ਮੈਦਾ ਅਤੇ ਤਲੇ ਭੋਜਨ ਤੋਂ ਬਚੋ। ਸਾਬਤ ਫਲ ਥੋੜ੍ਹੀ ਮਾਤਰਾ ਵਿੱਚ ਖਾਓ।'],
+        ['Walk for 15–30 minutes after meals, unless your doctor has told you to rest.', 'ਭੋਜਨ ਤੋਂ ਬਾਅਦ 15–30 ਮਿੰਟ ਤੁਰੋ, ਜਦੋਂ ਤੱਕ ਡਾਕਟਰ ਨੇ ਆਰਾਮ ਕਰਨ ਲਈ ਨਾ ਕਿਹਾ ਹੋਵੇ।']]),
+      S('4. Medicines and low sugar', '4. ਦਵਾਈਆਂ ਅਤੇ ਘੱਟ ਸ਼ੂਗਰ', [
+        ['Take tablets or insulin exactly as prescribed. Keep insulin in the fridge door (not the freezer).', 'ਗੋਲੀਆਂ ਜਾਂ ਇੰਸੁਲਿਨ ਬਿਲਕੁਲ ਲਿਖੇ ਅਨੁਸਾਰ ਲਓ। ਇੰਸੁਲਿਨ ਫ਼ਰਿੱਜ ਦੇ ਦਰਵਾਜ਼ੇ ਵਿੱਚ ਰੱਖੋ (ਫ਼ਰੀਜ਼ਰ ਵਿੱਚ ਨਹੀਂ)।'],
+        ['Low sugar (sweating, shaking, dizziness, sugar below 70): take 3 teaspoons of sugar or glucose in water, recheck after 15 minutes, then eat a snack.', 'ਘੱਟ ਸ਼ੂਗਰ (ਪਸੀਨਾ, ਕੰਬਣੀ, ਚੱਕਰ, ਸ਼ੂਗਰ 70 ਤੋਂ ਘੱਟ): 3 ਚਮਚ ਖੰਡ ਜਾਂ ਗਲੂਕੋਜ਼ ਪਾਣੀ ਵਿੱਚ ਲਓ, 15 ਮਿੰਟ ਬਾਅਦ ਦੁਬਾਰਾ ਚੈੱਕ ਕਰੋ, ਫਿਰ ਕੁਝ ਖਾਓ।']]),
+      S('5. Delivery and after', '5. ਜਣੇਪਾ ਅਤੇ ਬਾਅਦ ਵਿੱਚ', [
+        ["Delivery is usually planned around 38–39 weeks. The baby's sugar is checked after birth; breastfeed early and often.", 'ਜਣੇਪਾ ਆਮ ਤੌਰ \'ਤੇ 38–39 ਹਫ਼ਤਿਆਂ ਦੇ ਆਸ-ਪਾਸ ਤੈਅ ਕੀਤਾ ਜਾਂਦਾ ਹੈ। ਜਨਮ ਤੋਂ ਬਾਅਦ ਬੱਚੇ ਦੀ ਸ਼ੂਗਰ ਚੈੱਕ ਹੁੰਦੀ ਹੈ; ਜਲਦੀ ਅਤੇ ਵਾਰ-ਵਾਰ ਦੁੱਧ ਪਿਲਾਓ।'],
+        ['If diabetes started in pregnancy, have a sugar test (OGTT) 6–12 weeks after delivery and then every year.', 'ਜੇ ਸ਼ੂਗਰ ਗਰਭ ਦੌਰਾਨ ਸ਼ੁਰੂ ਹੋਈ ਸੀ, ਤਾਂ ਜਣੇਪੇ ਤੋਂ 6–12 ਹਫ਼ਤੇ ਬਾਅਦ ਅਤੇ ਫਿਰ ਹਰ ਸਾਲ ਸ਼ੂਗਰ ਦਾ ਟੈਸਟ (OGTT) ਕਰਵਾਓ।']])],
+      urgent: ["COME IMMEDIATELY if sugar stays below 70 after treatment or above 250, there is vomiting, baby moves less, severe headache, swelling, blurred vision, bleeding or leaking water.", 'ਤੁਰੰਤ ਆਓ ਜੇ ਇਲਾਜ ਤੋਂ ਬਾਅਦ ਵੀ ਸ਼ੂਗਰ 70 ਤੋਂ ਘੱਟ ਜਾਂ 250 ਤੋਂ ਵੱਧ ਰਹੇ, ਉਲਟੀਆਂ, ਬੱਚੇ ਦੀ ਹਿਲਜੁਲ ਘਟੇ, ਤੇਜ਼ ਸਿਰ ਦਰਦ, ਸੋਜ, ਧੁੰਦਲੀ ਨਜ਼ਰ, ਖ਼ੂਨ ਜਾਂ ਪਾਣੀ ਪਵੇ।'] },
     { id: 'infertility', dept: 'obg', extra: 'obg', title: ['Infertility Treatment — Instructions for the Couple', 'ਬੇਔਲਾਦੀ ਦਾ ਇਲਾਜ — ਪਤੀ-ਪਤਨੀ ਲਈ ਹਦਾਇਤਾਂ'], sections: [
       S('1. Tests for both partners', '1. ਦੋਵਾਂ ਲਈ ਟੈਸਟ', [
         ['Wife: hormone tests on day 2–3 of periods (FSH, LH, AMH, TSH, prolactin), ultrasound of uterus and ovaries', 'ਪਤਨੀ: ਮਾਹਵਾਰੀ ਦੇ ਦੂਜੇ-ਤੀਜੇ ਦਿਨ ਹਾਰਮੋਨ ਟੈਸਟ (FSH, LH, AMH, TSH, ਪ੍ਰੋਲੈਕਟਿਨ), ਬੱਚੇਦਾਨੀ ਅਤੇ ਅੰਡੇਦਾਨੀਆਂ ਦਾ ਅਲਟਰਾਸਾਊਂਡ'],

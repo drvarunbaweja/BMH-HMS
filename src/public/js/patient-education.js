@@ -18,6 +18,10 @@
   var DEPTS = [['ophtho', 'Eye', 'ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ', 'Eye Department'], ['obg', 'OBG', 'ਇਸਤਰੀ ਰੋਗ ਅਤੇ ਜਣੇਪਾ ਵਿਭਾਗ', 'Obstetrics & Gynaecology'], ['psych', 'Neuropsychiatry', 'ਮਾਨਸਿਕ ਅਤੇ ਨਸਾਂ ਦੇ ਰੋਗ ਵਿਭਾਗ', 'Neuropsychiatry'], ['skin', 'Skin & Cosmetology', 'ਚਮੜੀ ਰੋਗ ਵਿਭਾਗ', 'Skin & Cosmetology']];
   var THEMES = { teal: ['#1A3C6E', '#0B7B8C', '#E6F5F3', '#0B7B8C'], blue: ['#153A73', '#2E6FD8', '#E8F0FD', '#2E6FD8'], violet: ['#3B2A78', '#7B4FC9', '#F0EAFB', '#7B4FC9'], sky: ['#0E4C7A', '#1E9BD7', '#E5F5FD', '#1E9BD7'], indigo: ['#25306E', '#4E5BD0', '#ECEEFC', '#4E5BD0'], rose: ['#7A1F45', '#D64B7F', '#FDEBF2', '#D64B7F'], plum: ['#4A1D5E', '#A0458F', '#F7EAF5', '#A0458F'] };
 
+  function assetUrl(path) { try { return new URL(path, document.baseURI).href; } catch (e) { return path; } }
+  var LOGO_FLAME = assetUrl('websites/ropar/images/baweja-logo.png');
+  var LOGO_BMH = assetUrl('assets/bmh-logo-discharge.jpg');
+  function logosHtml(cls) { return '<div class="' + cls + '"><img class="lf" src="' + LOGO_FLAME + '" alt="Baweja Multi Speciality Hospital"><img class="lb" src="' + LOGO_BMH + '" alt="BMH"></div>'; }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function deptName(k, lang) { var d = DEPTS.find(function (x) { return x[0] === k; }); return d ? (lang === 'pa' ? d[2] : d[3]) : ''; }
@@ -70,18 +74,20 @@
   var BRO_CSS = [
     '.peb{width:210mm;height:297mm;background:#fff;overflow:hidden;position:relative;display:flex;flex-direction:column;font-family:Inter,"Noto Sans Gurmukhi",Arial,sans-serif;color:#1d2433;box-sizing:border-box}',
     '.peb *{box-sizing:border-box}',
-    '.peb .mast{background:linear-gradient(120deg,var(--c1) 0%,var(--c2) 100%);color:#fff;padding:7mm 9mm 5mm;position:relative}',
+    '.peb .logos{display:flex;justify-content:space-between;align-items:center;padding:3mm 9mm 2.5mm;background:#fff;border-bottom:1mm solid var(--c2)}',
+    '.peb .logos img{display:block;object-fit:contain}.peb .logos .lf{height:12mm}.peb .logos .lb{height:11mm}',
+    '.peb .mast{background:linear-gradient(120deg,var(--c1) 0%,var(--c2) 100%);color:#fff;padding:4.5mm 9mm 4mm;position:relative}',
     '.peb .hosp{font-size:8.5pt;letter-spacing:.14em;text-transform:uppercase;opacity:.88;font-weight:800}',
-    '.peb h1{font-family:Fraunces,Georgia,serif;font-size:28pt;line-height:1.02;margin:2mm 0 1.5mm;font-weight:800;max-width:150mm}',
-    '.peb.pa h1{font-family:"Noto Sans Gurmukhi",sans-serif;font-size:24pt}',
+    '.peb h1{font-family:Fraunces,Georgia,serif;font-size:26pt;line-height:1.02;margin:1.5mm 0 1.2mm;font-weight:800;max-width:150mm}',
+    '.peb.pa h1{font-family:"Noto Sans Gurmukhi",sans-serif;font-size:22pt}',
     '.peb .kicker{font-size:10pt;max-width:125mm;opacity:.95;line-height:1.35}',
-    '.peb .issue{position:absolute;right:9mm;top:7mm;background:#D4A017;color:#1d2433;font-weight:800;font-size:8pt;padding:2mm 3mm;border-radius:2mm;text-transform:uppercase;letter-spacing:.06em}',
-    '.peb .hero{display:grid;grid-template-columns:1.25fr 1fr;gap:4mm;padding:5mm 9mm 0}',
+    '.peb .issue{position:absolute;right:9mm;top:4.5mm;background:#D4A017;color:#1d2433;font-weight:800;font-size:8pt;padding:2mm 3mm;border-radius:2mm;text-transform:uppercase;letter-spacing:.06em}',
+    '.peb .hero{display:grid;grid-template-columns:1.25fr 1fr;gap:4mm;padding:4mm 9mm 0}',
     '.peb figure{margin:0;position:relative;border-radius:3mm;overflow:hidden;background:#dfe6ee}',
     '.peb figure img{display:block;width:100%;height:100%;object-fit:cover}',
     '.peb figcaption{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:6.3pt;padding:5mm 2.5mm 1.4mm;line-height:1.3}',
     '.peb figcaption b{font-size:7.6pt;display:block;margin-bottom:.4mm}',
-    '.peb .big{height:58mm}.peb .stack{display:grid;grid-template-rows:1fr 1fr;gap:3mm;height:58mm}',
+    '.peb .big{height:52mm}.peb .stack{display:grid;grid-template-rows:1fr 1fr;gap:3mm;height:52mm}',
     '.peb figure.noimg{background:linear-gradient(135deg,var(--c3),#eef1f6)}',
     '.peb figure.noimg img{visibility:hidden}',
     '.peb .grid{display:grid;grid-template-columns:1fr 1fr;gap:4mm;padding:4mm 9mm 3mm;flex:1;align-content:start;overflow:hidden}',
@@ -114,7 +120,8 @@
     '.pes{width:210mm;min-height:297mm;background:#fff;padding:8mm 10mm 7mm;box-sizing:border-box;font-family:"Noto Sans",Arial,sans-serif;color:#111}',
     '.pes *{box-sizing:border-box}',
     '.pes .pa{font-family:"Noto Sans Gurmukhi","Noto Sans",sans-serif}',
-    '.pes .lh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #222;padding-bottom:2.5mm}',
+    '.pes .lh{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4mm;border-bottom:2px solid #222;padding-bottom:2.5mm}',
+    '.pes .lh img{display:block;object-fit:contain}.pes .lh .lf{height:13mm}.pes .lh .lb{height:12mm}.pes .lh .mid{text-align:center}',
     '.pes .lh .h{font-weight:800;font-size:13pt;letter-spacing:.02em}.pes .lh .s{font-size:8pt;color:#555}',
     '.pes .title{text-align:center;margin:2.5mm 0 2mm}.pes .title .en{font-size:13pt;font-weight:800;text-transform:uppercase;letter-spacing:.03em}.pes .title .pa{font-size:12pt;font-weight:700}',
     '.pes .pt{display:grid;grid-template-columns:repeat(4,1fr);border:1.2px solid #222;font-size:8.6pt}',
@@ -175,6 +182,7 @@
     }
     function list(key, arr, tag, cls) { return '<' + tag + (cls ? ' class="' + cls + '"' : '') + '>' + (arr || []).map(function (x, i) { return k(lang + '.' + key + '.' + i, x, 'li'); }).join('') + '</' + tag + '><button type="button" class="pe-add" data-add="' + key + '">+ ' + (lang === 'pa' ? 'ਲਾਈਨ ਜੋੜੋ' : 'Add line') + '</button>'; }
     return '<div class="peb ' + (lang === 'pa' ? 'pa' : 'en') + '" style="--c1:' + t[0] + ';--c2:' + t[1] + ';--c3:' + t[2] + ';--c4:' + t[3] + '">'
+      + logosHtml('logos')
       + '<header class="mast"><div class="hosp">' + esc(C.hosp[lang] || C.hosp.en) + ' · ' + esc(unit) + '</div>'
       + k(lang + '.title', d.title, 'h1') + k(lang + '.kicker', d.kicker, 'div', 'kicker')
       + '<div class="issue">' + esc(C.guide[lang] || C.guide.en) + '</div></header>'
@@ -209,7 +217,7 @@
     });
     if (s.urgent) rows += '<tr class="urgent"><td data-k="urgent.0">' + (s.urgent[0] || '') + '</td><td class="pa" data-k="urgent.1">' + (s.urgent[1] || '') + '</td></tr>';
     return '<div class="pes">'
-      + '<div class="lh"><div><div class="h">BAWEJA MULTISPECIALITY HOSPITAL</div><div class="s">' + esc(deptName(s.dept, 'en')) + ' · Rupnagar / Chandigarh</div></div><div class="s">Ph: ' + esc(C.phones) + '</div></div>'
+      + '<div class="lh"><img class="lf" src="' + LOGO_FLAME + '" alt="Baweja Multi Speciality Hospital"><div class="mid"><div class="h">BAWEJA MULTISPECIALITY HOSPITAL</div><div class="s">' + esc(deptName(s.dept, 'en')) + ' · Rupnagar / Chandigarh · Ph: ' + esc(C.phones) + '</div></div><img class="lb" src="' + LOGO_BMH + '" alt="BMH"></div>'
       + '<div class="title"><div class="en" data-k="title.0">' + (s.title[0] || '') + '</div><div class="pa" data-k="title.1">' + (s.title[1] || '') + '</div></div>'
       + '<div class="pt">'
       + '<div><span>Patient name</span><b>' + esc(pt.name || '') + '</b></div>'
