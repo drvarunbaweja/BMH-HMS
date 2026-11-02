@@ -93,13 +93,14 @@
         var key = String(t.billId || t.billNo);
         (byBill[key] = byBill[key] || []).push(t);
       } else {
-        out.push({ kind: 'receipt', key: 'T:' + t.id, at: t.createdAt || t.date || t._day, bmhId: t.bmhId || '', name: t.patient || t.patientName || '', centre: t.centre || '', dept: t.dept || '', amount: Number(t.amount || 0), mode: t.mode || '', label: t.service || (t.type === 'advance' ? 'Advance deposit' : 'Payment'), no: t.id, txns: [t], type: t.type || '' });
+        var adj = t.type === 'advance-adjustment' || t.source === 'advance-adjustment';
+        out.push({ kind: 'receipt', adj: adj, refund: Number(t.amount || 0) < 0, key: 'T:' + t.id, at: t.createdAt || t.date || t._day, bmhId: t.bmhId || '', name: t.patient || t.patientName || '', centre: t.centre || '', dept: t.dept || '', amount: Number(t.amount || 0), mode: t.mode || '', label: t.service || (t.type === 'advance' ? 'Advance deposit' : 'Payment'), no: t.id, txns: [t], type: t.type || '' });
       }
     });
     Object.keys(byBill).forEach(function (key) {
       var ts = byBill[key].sort(function (a, b) { return String(a.date || '').localeCompare(String(b.date || '')); });
       var t0 = ts[0]; var full = saved[key] || null;
-      var paid = ts.reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
+      var paid = ts.reduce(function (s, t) { return s + (t.type === 'advance-adjustment' || t.source === 'advance-adjustment' ? 0 : Number(t.amount || 0)); }, 0);
       out.push({ kind: 'bill', key: 'B:' + key, at: (full && full.createdAt) || t0.createdAt || t0.date, bmhId: t0.bmhId || (full && full.bmhId) || '', name: t0.patient || (full && full.patientName) || '', centre: t0.centre || '', dept: t0.dept || '', amount: full ? Number(full.netPayable || paid) : paid, paid: paid, mode: ts.map(function (t) { return t.mode; }).filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' + '), label: billLabel(ts, full), no: t0.billNo || (full && full.billNo) || key, billId: key, txns: ts, full: full });
       delete saved[key];
     });
@@ -117,6 +118,7 @@
     if (!names.length) ts.forEach(function (t) { if (t.service && names.indexOf(t.service) === -1) names.push(t.service); });
     return names.filter(Boolean).join(', ') || 'Bill';
   }
+  function cash(e) { return e.adj ? 0 : (e.kind === 'bill' ? e.paid : e.amount); }
   function billObject(e) {
     if (e.full) return e.full;
     var items = []; var seen = {};
@@ -173,17 +175,17 @@
 
   function row(e) {
     var k = jsArg(e.key);
-    var tag = e.kind === 'bill' ? '<span style="font-size:9px;background:#e8f0fd;color:#153A73;padding:1px 6px;border-radius:4px;font-weight:800">BILL</span>' : (e.type === 'advance' ? '<span style="font-size:9px;background:#fff4dc;color:#8a5a00;padding:1px 6px;border-radius:4px;font-weight:800">ADVANCE</span>' : '<span style="font-size:9px;background:#eef6ee;color:#2d6a2d;padding:1px 6px;border-radius:4px;font-weight:800">RECEIPT</span>');
+    var tag = e.kind === 'bill' ? '<span style="font-size:9px;background:#e8f0fd;color:#153A73;padding:1px 6px;border-radius:4px;font-weight:800">BILL</span>' : e.adj ? '<span style="font-size:9px;background:#eee;color:#555;padding:1px 6px;border-radius:4px;font-weight:800">ADVANCE USED</span>' : e.refund ? '<span style="font-size:9px;background:#fde8e8;color:#a00;padding:1px 6px;border-radius:4px;font-weight:800">REFUND</span>' : (e.type === 'advance' ? '<span style="font-size:9px;background:#fff4dc;color:#8a5a00;padding:1px 6px;border-radius:4px;font-weight:800">ADVANCE</span>' : '<span style="font-size:9px;background:#eef6ee;color:#2d6a2d;padding:1px 6px;border-radius:4px;font-weight:800">RECEIPT</span>');
     var due = e.kind === 'bill' && e.amount > e.paid ? '<div style="font-size:9.5px;color:#b00;font-weight:700">Due ' + money(e.amount - e.paid) + '</div>' : '';
     return '<div style="display:grid;grid-template-columns:minmax(0,1.5fr) 110px 110px auto;gap:8px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--g5);font-size:12px">'
       + '<div style="min-width:0"><div style="font-weight:800">' + esc(e.name || '—') + ' ' + tag + '</div>'
       + '<div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)"><a href="javascript:void 0" onclick="bmhBillHistoryPatient(\'' + jsArg(e.bmhId) + '\')" title="Full billing history">' + esc(e.bmhId) + '</a> · ' + esc(e.no) + '</div>'
       + '<div style="font-size:10.5px;color:var(--g1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(e.label) + (e.dept ? ' · ' + esc(deptLabel(e.dept)) : '') + (e.centre ? ' · ' + esc(e.centre) : '') + '</div></div>'
       + '<div style="font-size:10.5px;color:var(--g1)">' + esc(fmtDate(e.at)) + '<div>' + esc(fmtTime(e.at)) + '</div></div>'
-      + '<div style="font-weight:900;color:var(--bmh-blue)">' + money(e.kind === 'bill' ? e.amount : e.amount) + '<div style="font-size:9.5px;font-weight:400;color:var(--g1)">' + esc(e.mode) + '</div>' + due + '</div>'
+      + '<div style="font-weight:900;color:var(--bmh-blue)">' + money(e.amount) + '<div style="font-size:9.5px;font-weight:400;color:var(--g1)">' + esc(e.mode) + '</div>' + due + '</div>'
       + '<div style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">'
       + (e.kind === 'bill' ? '<button type="button" class="btn btn-blue btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'bill\')">🖨 Bill</button>' : '')
-      + ((e.kind === 'bill' ? e.paid : e.amount) > 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'receipt\')">🧾 Receipt</button>' : '')
+      + ((e.kind === 'bill' ? e.paid : (e.adj ? 0 : e.amount)) !== 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'receipt\')">🧾 Receipt</button>' : '')
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryPatient(\'' + jsArg(e.bmhId) + '\')">History</button>'
       + '</div></div>';
   }
@@ -193,7 +195,7 @@
     if (!list.length) { setMsg(sq ? 'No bills or receipts found for “' + esc(sq) + '”. Try the BMSH ID, mobile number or part of the name.' : 'No bills or receipts on ' + esc(fmtDate(date || today())) + '.'); return; }
     var pids = list.map(function (e) { return e.bmhId; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
     if (sq && pids.length === 1 && !forceList) { patientView(pids[0]); return; }
-    var total = list.reduce(function (s, e) { return s + (e.kind === 'bill' ? e.paid : e.amount); }, 0);
+    var total = list.reduce(function (s, e) { return s + cash(e); }, 0);
     var shown = list.slice(0, 300);
     el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px;flex-wrap:wrap">'
       + '<div><strong>' + list.length + '</strong> record' + (list.length > 1 ? 's' : '') + (sq ? ' for “' + esc(sq) + '” · ' + pids.length + ' patient' + (pids.length > 1 ? 's' : '') : ' on ' + esc(fmtDate(date || today()))) + ' · collected <strong>' + money(total) + '</strong></div>'
@@ -208,7 +210,7 @@
     var list = buildEntries().filter(function (e) { return String(e.bmhId) === String(bmhId); });
     S.patient = bmhId; S.view = list;
     var p = patientInfo(bmhId); var name = (list[0] && list[0].name) || p.name || '';
-    var paid = list.reduce(function (s, e) { return s + (e.kind === 'bill' ? e.paid : e.amount); }, 0);
+    var paid = list.reduce(function (s, e) { return s + cash(e); }, 0);
     var billed = list.filter(function (e) { return e.kind === 'bill'; }).reduce(function (s, e) { return s + e.amount; }, 0);
     var due = list.filter(function (e) { return e.kind === 'bill'; }).reduce(function (s, e) { return s + Math.max(0, e.amount - e.paid); }, 0);
     var first = list.length ? list[list.length - 1].at : '';
@@ -241,7 +243,7 @@
     if (!list.length) { toast('Nothing to print', 'w'); return; }
     var p = patientInfo(bmhId); var name = list[0].name || p.name || '';
     var rows = list.slice().reverse(); var paid = 0;
-    var body = rows.map(function (e, i) { var amt = e.kind === 'bill' ? e.paid : e.amount; paid += amt; return '<tr><td>' + (i + 1) + '</td><td>' + esc(fmtDate(e.at)) + '</td><td>' + esc(e.no) + '</td><td>' + esc(e.label) + (e.kind === 'bill' && e.amount !== e.paid ? '<br><small>Bill ' + money(e.amount) + '</small>' : '') + '</td><td>' + esc(deptLabel(e.dept)) + ' ' + esc(e.centre) + '</td><td>' + esc(e.mode) + '</td><td class="r">' + money(amt) + '</td></tr>'; }).join('');
+    var body = rows.map(function (e, i) { var amt = cash(e); paid += amt; return '<tr><td>' + (i + 1) + '</td><td>' + esc(fmtDate(e.at)) + '</td><td>' + esc(e.no) + '</td><td>' + esc(e.label) + (e.adj ? '<br><small>Advance used ' + money(e.amount) + ' (not new payment)</small>' : '') + (e.kind === 'bill' && e.amount !== e.paid ? '<br><small>Bill ' + money(e.amount) + '</small>' : '') + '</td><td>' + esc(deptLabel(e.dept)) + ' ' + esc(e.centre) + '</td><td>' + esc(e.mode) + '</td><td class="r">' + money(amt) + '</td></tr>'; }).join('');
     var hosp = 'Baweja Multispeciality Hospital';
     try { if (typeof getHospitalDetailValue === 'function') hosp = getHospitalDetailValue('Hospital Name', hosp); } catch (x) {}
     var w = window.open('', '_blank', 'width=900,height=760'); if (!w) { toast('Allow pop-ups to print', 'w'); return; }
@@ -272,7 +274,7 @@
     else if (scope === 'admitted') { var adm = new Set((window.IPD_PATIENTS || []).filter(function (p) { return (p.status || 'admitted') !== 'discharged'; }).map(function (p) { return String(p.bmhId); })); list = list.filter(function (e) { return adm.has(String(e.bmhId)); }); }
     else if (scope === 'focus') { var f = window._bmhBillFocusPatient || window._bmhSelectedBillPatient; list = f ? list.filter(function (e) { return e.bmhId === f; }) : []; }
     var by = {};
-    list.forEach(function (e) { var k = e.bmhId || e.name; var r = by[k] = by[k] || { bmhId: e.bmhId, name: e.name, n: 0, paid: 0, due: 0, last: '' }; r.n++; r.paid += e.kind === 'bill' ? e.paid : e.amount; if (e.kind === 'bill') r.due += Math.max(0, e.amount - e.paid); if (String(e.at) > r.last) r.last = String(e.at); });
+    list.forEach(function (e) { var k = e.bmhId || e.name; var r = by[k] = by[k] || { bmhId: e.bmhId, name: e.name, n: 0, paid: 0, due: 0, last: '' }; r.n++; r.paid += cash(e); if (e.kind === 'bill') r.due += Math.max(0, e.amount - e.paid); if (String(e.at) > r.last) r.last = String(e.at); });
     var rows = Object.keys(by).map(function (k) { return by[k]; });
     if (q) { var dq = digits(q); var phoneIds = new Set(); try { if (dq.length >= 7) (findReceptionPatientsByPhone(q) || []).forEach(function (p) { phoneIds.add(p.bmhId); }); } catch (x) {} rows = rows.filter(function (r) { return phoneIds.has(r.bmhId) || String(r.name || '').toLowerCase().indexOf(q) !== -1 || String(r.bmhId || '').toLowerCase().indexOf(q) !== -1; }); }
     rows.sort(function (a, b) { return b.last.localeCompare(a.last); });
