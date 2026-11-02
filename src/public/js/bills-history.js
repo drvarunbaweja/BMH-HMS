@@ -54,9 +54,11 @@
     if (recent || force) return fromNet();
     return idbGet(day).then(function (rows) { if (rows) { S.cache.set(day, rows); return rows; } return fromNet(); });
   }
+  function withTimeout(p, ms, fallback) { return Promise.race([p, new Promise(function (r) { setTimeout(function () { r(fallback); }, ms); })]); }
   function loadSaved() {
-    if (!window.FBDB) return Promise.resolve();
-    return window.FBDB.ref('savedBills').once('value').then(function (snap) { S.saved = snap.val() || {}; S.savedLoaded = true; }).catch(function () {});
+    var p = fetch(dbUrl() + '/savedBills.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (v) { S.saved = v || {}; S.savedLoaded = true; }).catch(function () {});
+    return withTimeout(p, 8000);
   }
   // Loads everything once per session (past days from the browser cache); today is refreshed on every search.
   function ensureLoaded(onStep) {
@@ -137,7 +139,7 @@
     var add = function (rows) { (rows || []).forEach(function (p) { if (p && p.bmhId) ids.add(String(p.bmhId)); }); };
     try { if (dg.length >= 7 && typeof findReceptionPatientsByPhone === 'function') add(findReceptionPatientsByPhone(q)); } catch (e) {}
     if (dg.length >= 7 && typeof fetchReceptionPatientsFromFirebase === 'function') {
-      return fetchReceptionPatientsFromFirebase(q).then(function (rows) { add(rows); return ids; }).catch(function () { return ids; });
+      return withTimeout(fetchReceptionPatientsFromFirebase(q).then(function (rows) { add(rows); return ids; }).catch(function () { return ids; }), 6000, ids);
     }
     return Promise.resolve(ids);
   }
