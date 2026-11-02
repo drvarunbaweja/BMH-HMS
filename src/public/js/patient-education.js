@@ -340,14 +340,14 @@
     });
   }
   var MAX_PAGES = 8;
-  function canvasToJpeg(c) { return c.toDataURL('image/jpeg', 0.8); }
+  function canvasToJpeg(c) { return c.toDataURL('image/jpeg', 0.74); }
   function fileToPages(file) {
     if (/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name)) {
       return file.arrayBuffer().then(function (buf) { return loadPdfJs().then(function (lib) { return lib.getDocument({ data: buf }).promise; }); }).then(function (pdf) {
         var n = Math.min(pdf.numPages, MAX_PAGES); var out = []; var chain = Promise.resolve();
         for (var i = 1; i <= n; i++) (function (i) {
           chain = chain.then(function () { return pdf.getPage(i); }).then(function (page) {
-            var v1 = page.getViewport({ scale: 1 }); var scale = 1400 / Math.max(v1.width, v1.height); var vp = page.getViewport({ scale: scale });
+            var v1 = page.getViewport({ scale: 1 }); var scale = 1300 / Math.max(v1.width, v1.height); var vp = page.getViewport({ scale: scale });
             var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
             var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
             return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () { out.push(canvasToJpeg(c)); });
@@ -359,7 +359,7 @@
     if (/^image\//i.test(file.type)) {
       return new Promise(function (resolve, reject) {
         var fr = new FileReader();
-        fr.onload = function () { var img = new Image(); img.onload = function () { var r = Math.min(1, 1400 / Math.max(img.width, img.height)); var c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r); var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height); resolve([canvasToJpeg(c)]); }; img.onerror = reject; img.src = fr.result; };
+        fr.onload = function () { var img = new Image(); img.onload = function () { var r = Math.min(1, 1300 / Math.max(img.width, img.height)); var c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r); var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height); resolve([canvasToJpeg(c)]); }; img.onerror = reject; img.src = fr.result; };
         fr.onerror = reject; fr.readAsDataURL(file);
       });
     }
