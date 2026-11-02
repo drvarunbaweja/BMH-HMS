@@ -381,12 +381,38 @@
       + strip + '<div class="body"><img src="' + esc(src) + '" alt=""></div>'
       + '<div class="ft"><span>' + esc(C.hosp.en) + ' · ' + esc(C.centres.en) + '</span><span>Ph: ' + esc(C.phones) + '</span></div></div>';
   }
+  // Upload form on the page (no pop-ups, so the browser always opens the file picker)
   function startUpload(kind, dept, done) {
-    var title = window.prompt('Name for this ' + (kind === 'brochure' ? 'brochure' : 'instruction sheet') + ' (shown in the list):', ''); if (!title) return;
-    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf,image/*';
-    inp.onchange = function () {
-      var f = inp.files && inp.files[0]; if (!f) return;
-      toast('Preparing pages…', 'i');
+    var old = document.getElementById('pe-upform'); if (old) old.remove();
+    var what = kind === 'brochure' ? 'brochure' : 'instruction sheet';
+    var ov = document.createElement('div'); ov.id = 'pe-upform';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:440px;width:100%;padding:18px 18px 14px;box-shadow:0 10px 40px rgba(0,0,0,.3);font-size:14px;color:#111">'
+      + '<div style="font-weight:700;font-size:16px;margin-bottom:12px">⬆ Upload ' + what + ' (PDF / photo)</div>'
+      + '<label style="display:block;font-weight:600;margin-bottom:4px">1. Choose the file</label>'
+      + '<input type="file" id="pe-up-file" accept="application/pdf,image/*" style="display:block;width:100%;margin-bottom:12px">'
+      + '<label style="display:block;font-weight:600;margin-bottom:4px">2. Name (shown in the list)</label>'
+      + '<input type="text" id="pe-up-title" style="display:block;width:100%;padding:7px;border:1px solid #bbb;border-radius:6px;margin-bottom:12px">'
+      + '<label style="display:block;font-weight:600;margin-bottom:4px">3. Department</label>'
+      + '<select id="pe-up-dept" style="display:block;width:100%;padding:7px;border:1px solid #bbb;border-radius:6px;margin-bottom:14px">'
+      + DEPTS.map(function (d) { return '<option value="' + esc(d[0]) + '"' + (d[0] === dept ? ' selected' : '') + '>' + esc(d[3]) + '</option>'; }).join('') + '</select>'
+      + '<div id="pe-up-msg" style="font-size:12.5px;color:#555;min-height:16px;margin-bottom:8px"></div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn btn-outline btn-sm" id="pe-up-cancel">Cancel</button><button type="button" class="btn btn-gold btn-sm" id="pe-up-save">Save</button></div></div>';
+    document.body.appendChild(ov);
+    var fileEl = ov.querySelector('#pe-up-file'), titleEl = ov.querySelector('#pe-up-title'), msg = ov.querySelector('#pe-up-msg'), saveBtn = ov.querySelector('#pe-up-save');
+    var close = function () { ov.remove(); };
+    ov.querySelector('#pe-up-cancel').onclick = close;
+    fileEl.onchange = function () { var f = fileEl.files && fileEl.files[0]; if (f && !titleEl.value.trim()) titleEl.value = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim(); };
+    saveBtn.onclick = function () {
+      var f = fileEl.files && fileEl.files[0];
+      var title = titleEl.value.trim();
+      if (!f) { msg.style.color = '#b00'; msg.textContent = 'Please choose a PDF or photo first.'; return; }
+      if (!title) { msg.style.color = '#b00'; msg.textContent = 'Please type a name.'; titleEl.focus(); return; }
+      dept = ov.querySelector('#pe-up-dept').value || dept;
+      saveBtn.disabled = true; msg.style.color = '#555'; msg.textContent = 'Preparing pages… please wait';
+      processUpload(f, title, function (id) { close(); done(id); }, function (e) { saveBtn.disabled = false; msg.style.color = '#b00'; msg.textContent = (e && e.message) || 'Could not read this file'; });
+    };
+    function processUpload(f, title, ok, fail) {
       fileToPages(f).then(function (pages) {
         if (!pages.length) throw new Error('No pages found');
         var id = 'up-' + Date.now().toString(36);
@@ -394,10 +420,9 @@
         store.uploads[id] = meta; store.pages[id] = pages; saveCache();
         var w = window.FBDB ? Promise.all([window.FBDB.ref('patientEducation/uploadPages/' + id).set(pages), window.FBDB.ref('patientEducation/uploads/' + id).set(meta)]) : Promise.resolve();
         w.then(function () { toast('Uploaded ✓ — prints with the hospital header and footer', 's'); }).catch(function () { toast('Could not save the upload to the server — please try again', 'w'); });
-        done(id);
-      }).catch(function (e) { toast(e && e.message ? e.message : 'Could not read this file', 'w'); });
-    };
-    inp.click();
+        ok(id);
+      }).catch(fail);
+    }
   }
   function deleteUpload(id) {
     delete store.uploads[id]; delete store.pages[id]; saveCache();
@@ -533,8 +558,7 @@
     printHtml(html, (b[bro.lang] && plain(b[bro.lang].title)) || 'Brochure');
   };
   window.bmhPeUploadBrochure = function () {
-    var deptAns = window.prompt('Department: type Eye, OBG, Psych or Skin', 'Eye'); if (!deptAns) return;
-    startUpload('brochure', normDept(deptAns) || 'ophtho', function (id) { window.bmhPeOpenUpload(id); });
+    startUpload('brochure', 'ophtho', function (id) { window.bmhPeOpenUpload(id); });
   };
   window.bmhPeOpenUpload = function (id) {
     var root = broRoot(); var meta = store.uploads[id]; if (!root || !meta) return;
@@ -677,7 +701,7 @@
     saveItem('instructions', id, s).catch(function () {});
     ins.sheetId = id; ins.draft = clone(s); ins.editing = true; renderInstructions();
   };
-  window.bmhPeInsUpload = function () { startUpload('instruction', ins.dept, function (id) { ins.sheetId = id; ins.editing = false; ins.draft = null; renderInstructions(); }); };
+  window.bmhPeInsUpload = function () { startUpload('instruction', ins.dept, function (id) { if (store.uploads[id] && store.uploads[id].dept) ins.dept = store.uploads[id].dept; ins.sheetId = id; ins.editing = false; ins.draft = null; renderInstructions(); }); };
   window.bmhPeInsDeleteUpload = function () { if (!window.confirm('Delete this uploaded sheet for everyone?')) return; deleteUpload(ins.sheetId); ins.sheetId = null; renderInstructions(); };
   window.bmhPeInsPrint = function () {
     var entry = todayPatientsForDept(ins.dept).find(function (x) { return x.p.bmhId === ins.ptId; });
