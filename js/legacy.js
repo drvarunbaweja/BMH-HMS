@@ -3221,7 +3221,7 @@ function nav(id, el, opts) {
   document.body.classList.toggle('queue-sidebar-collapsed', ['doctor-queue','ophtho','obg','psych','skin'].includes(pageKey));
   // Update title
   const titles = {dashboard:'Dashboard','doctor-queue':'My Patient Queue',ophtho:'Eye Examination',
-    appointments:'Appointment Book','print-templates':'Print Templates',consents:'Consent Forms',
+    appointments:'Appointment Book','print-templates':'Print Instructions',consents:'Consent Forms',
     discharge:'Discharge Card',lab:'Lab Module',reception:'Reception',billing:'Billing',
     payments:'Payments',obg:'OBG Clinic',psych:'Neuropsychiatry',skin:'Skin & Cosmetology',
     inventory:'Inventory',tpa:'TPA / Cashless',centres:'Two-Centre View',settings:'Settings',attendance:'Attendance',
@@ -6982,7 +6982,7 @@ function buildSidebarForRole(role, dept, name) {
     inventory: `<div class="ni" onclick="nav('inventory',this)"><div class="ni-ic">📦</div>Inventory<span class="nbadge" id="nb-inv"></span></div>`,
     ipd: `<div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>`,
     ot: `<div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>`,
-    'print-templates': `<div class="ni" onclick="nav('print-templates',this)"><div class="ni-ic">🖨️</div>Print Templates</div>`,
+    'print-templates': `<div class="ni" onclick="nav('print-templates',this)"><div class="ni-ic">🖨️</div>Print Instructions</div>`,
     consents: `<div class="ni" onclick="nav('consents',this)"><div class="ni-ic">📋</div>Consents</div>`,
     discharge: `<div class="ni" onclick="nav('discharge',this)"><div class="ni-ic">🏠</div>Discharge Card</div>`,
     brochures: `<div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Surgery Brochures</div>`,
