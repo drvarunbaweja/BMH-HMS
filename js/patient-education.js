@@ -32,7 +32,7 @@
   function dayOf(v) { try { if (typeof localDateKey === 'function') return localDateKey(v); } catch (e) {} return String(v || '').slice(0, 10); }
 
   // ── Storage (Firebase patientEducation/*, cached in this browser) ─────────────
-  var store = { brochures: {}, instructions: {}, loaded: false, loading: null };
+  var store = { brochures: {}, instructions: {}, uploads: {}, pages: {}, loaded: false, loading: null };
   try { var cached = JSON.parse(localStorage.getItem('bmh_pe_cache') || 'null'); if (cached) { store.brochures = cached.brochures || {}; store.instructions = cached.instructions || {}; } } catch (e) {}
   function saveCache() { try { localStorage.setItem('bmh_pe_cache', JSON.stringify({ brochures: store.brochures, instructions: store.instructions })); } catch (e) { /* photos can be large; cache is optional */ } }
   function loadStore() {
@@ -40,7 +40,8 @@
     if (!window.FBDB) { store.loaded = true; return Promise.resolve(); }
     store.loading = Promise.all([
       window.FBDB.ref('patientEducation/brochures').once('value').then(function (s) { store.brochures = s.val() || {}; }),
-      window.FBDB.ref('patientEducation/instructions').once('value').then(function (s) { store.instructions = s.val() || {}; })
+      window.FBDB.ref('patientEducation/instructions').once('value').then(function (s) { store.instructions = s.val() || {}; }),
+      window.FBDB.ref('patientEducation/uploads').once('value').then(function (s) { store.uploads = s.val() || {}; })
     ]).then(function () { store.loaded = true; saveCache(); }).catch(function (e) { console.warn('patient education load', e); store.loaded = true; });
     return store.loading;
   }
@@ -139,6 +140,20 @@
     '.pes .foot{margin-top:3mm;font-size:7.4pt;color:#555;text-align:center}',
     '.pes,.pes *{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
   ].join('\n');
+  var UP_CSS = [
+    '.peu{width:210mm;height:297mm;background:#fff;box-sizing:border-box;padding:7mm 10mm 6mm;display:flex;flex-direction:column;font-family:"Noto Sans","Noto Sans Gurmukhi",Arial,sans-serif;color:#111;overflow:hidden}',
+    '.peu *{box-sizing:border-box}',
+    '.peu .lh{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4mm;border-bottom:2px solid #1A3C6E;padding-bottom:2mm}',
+    '.peu .lh img{display:block;object-fit:contain}.peu .lh .lf{height:13mm}.peu .lh .lb{height:12mm}.peu .lh .mid{text-align:center}',
+    '.peu .lh .h{font-weight:800;font-size:13pt;letter-spacing:.02em;color:#1A3C6E}.peu .lh .s{font-size:8pt;color:#555}',
+    '.peu .pt{display:grid;grid-template-columns:repeat(4,1fr);border:1.2px solid #222;font-size:8.4pt;margin-top:2mm}',
+    '.peu .pt div{padding:1mm 2mm;border-right:1px solid #999;border-bottom:1px solid #999}.peu .pt div:nth-child(4n){border-right:0}.peu .pt div:nth-last-child(-n+4){border-bottom:0}',
+    '.peu .pt span{display:block;font-size:6.6pt;text-transform:uppercase;color:#555;font-weight:700}.peu .pt b{font-size:9pt}',
+    '.peu .body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;margin:2.5mm 0}',
+    '.peu .body img{max-width:100%;max-height:100%;object-fit:contain;display:block}',
+    '.peu .ft{border-top:2px solid #1A3C6E;padding-top:1.5mm;display:flex;justify-content:space-between;font-size:7.8pt;color:#333}',
+    '.peu,.peu *{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+  ].join('\n');
   var APP_CSS = [
     '.pe-wrap{margin-bottom:18px}',
     '.pe-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}',
@@ -159,7 +174,8 @@
     '.pe-warn{display:none;background:#FFF4E5;border:1px solid #F0B35B;color:#8a4b00;border-radius:8px;padding:7px 10px;font-size:12px;margin-bottom:8px}',
     '.pe-note{font-size:11px;color:var(--g1,#667);margin:6px 2px 0}',
     '.pe-old>summary{cursor:pointer;font-size:12px;font-weight:800;color:var(--g1,#667);padding:8px 2px}',
-    BRO_CSS, SHEET_CSS
+    '.pe-pages{display:flex;flex-direction:column;gap:14px}',
+    BRO_CSS, SHEET_CSS, UP_CSS
   ].join('\n');
   function ensureStyles() {
     if (document.getElementById('pe-styles')) return;
@@ -281,7 +297,7 @@
     var w = window.open('', '_blank');
     if (!w) { toast('Please allow pop-ups to print', 'w'); return; }
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(title || 'Print') + '</title>' + FONTS
-      + '<style>@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0;background:#fff}' + BRO_CSS + SHEET_CSS
+      + '<style>@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0;background:#fff}' + BRO_CSS + SHEET_CSS + UP_CSS + '.peu{page-break-after:always;break-after:page}.peu:last-child{page-break-after:auto;break-after:auto}'
       + '.pe-add,.pe-addrow{display:none!important}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>' + inner + '</body></html>');
     w.document.close();
     var go = function () { try { w.focus(); w.print(); } catch (e) {} };
@@ -312,6 +328,93 @@
     inp.click();
   }
 
+  // ═══ UPLOADED DOCUMENTS (PDF / photo) with the hospital header & footer ═══
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    return new Promise(function (resolve, reject) {
+      var sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      sc.onload = function () { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; resolve(window.pdfjsLib); } catch (e) { reject(e); } };
+      sc.onerror = function () { reject(new Error('Could not load the PDF reader')); };
+      document.head.appendChild(sc);
+    });
+  }
+  var MAX_PAGES = 8;
+  function canvasToJpeg(c) { return c.toDataURL('image/jpeg', 0.74); }
+  function fileToPages(file) {
+    if (/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name)) {
+      return file.arrayBuffer().then(function (buf) { return loadPdfJs().then(function (lib) { return lib.getDocument({ data: buf }).promise; }); }).then(function (pdf) {
+        var n = Math.min(pdf.numPages, MAX_PAGES); var out = []; var chain = Promise.resolve();
+        for (var i = 1; i <= n; i++) (function (i) {
+          chain = chain.then(function () { return pdf.getPage(i); }).then(function (page) {
+            var v1 = page.getViewport({ scale: 1 }); var scale = 1300 / Math.max(v1.width, v1.height); var vp = page.getViewport({ scale: scale });
+            var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+            var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+            return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () { out.push(canvasToJpeg(c)); });
+          });
+        })(i);
+        return chain.then(function () { if (pdf.numPages > MAX_PAGES) toast('Only the first ' + MAX_PAGES + ' pages were kept', 'w'); return out; });
+      });
+    }
+    if (/^image\//i.test(file.type)) {
+      return new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { var img = new Image(); img.onload = function () { var r = Math.min(1, 1300 / Math.max(img.width, img.height)); var c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r); var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height); resolve([canvasToJpeg(c)]); }; img.onerror = reject; img.src = fr.result; };
+        fr.onerror = reject; fr.readAsDataURL(file);
+      });
+    }
+    return Promise.reject(new Error('Please upload a PDF or a photo (JPG / PNG). For Word files, use "Save as PDF" first.'));
+  }
+  function getUploadPages(id) {
+    if (store.pages[id]) return Promise.resolve(store.pages[id]);
+    if (!window.FBDB) return Promise.resolve([]);
+    return window.FBDB.ref('patientEducation/uploadPages/' + id).once('value').then(function (s) { var v = s.val() || []; store.pages[id] = Array.isArray(v) ? v : Object.values(v); return store.pages[id]; });
+  }
+  function uploadList(kind, dept) {
+    return Object.keys(store.uploads).map(function (id) { return Object.assign({ id: id }, store.uploads[id]); })
+      .filter(function (u) { return u && u.kind === kind && (!dept || u.dept === dept); })
+      .sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); });
+  }
+  function framedPageHtml(meta, src, pt) {
+    var strip = pt ? '<div class="pt"><div><span>Patient name</span><b>' + esc(pt.name || '') + '</b></div><div><span>Age / Sex</span><b>' + esc(pt.ageSex || '') + '</b></div><div><span>BMSH ID</span><b>' + esc(pt.id || '') + '</b></div><div><span>Date</span><b>' + esc(pt.date || '') + '</b></div></div>' : '';
+    return '<div class="peu"><div class="lh"><img class="lf" src="' + LOGO_FLAME + '" alt=""><div class="mid"><div class="h">BAWEJA MULTISPECIALITY HOSPITAL</div><div class="s">' + esc(deptName(meta.dept, 'en')) + ' · Rupnagar / Chandigarh</div></div><img class="lb" src="' + LOGO_BMH + '" alt=""></div>'
+      + strip + '<div class="body"><img src="' + esc(src) + '" alt=""></div>'
+      + '<div class="ft"><span>' + esc(C.hosp.en) + ' · ' + esc(C.centres.en) + '</span><span>Ph: ' + esc(C.phones) + '</span></div></div>';
+  }
+  function startUpload(kind, dept, done) {
+    var title = window.prompt('Name for this ' + (kind === 'brochure' ? 'brochure' : 'instruction sheet') + ' (shown in the list):', ''); if (!title) return;
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf,image/*';
+    inp.onchange = function () {
+      var f = inp.files && inp.files[0]; if (!f) return;
+      toast('Preparing pages…', 'i');
+      fileToPages(f).then(function (pages) {
+        if (!pages.length) throw new Error('No pages found');
+        var id = 'up-' + Date.now().toString(36);
+        var meta = { kind: kind, dept: dept, title: title, pageCount: pages.length, fileName: f.name, createdAt: new Date().toISOString(), createdBy: userName() };
+        store.uploads[id] = meta; store.pages[id] = pages; saveCache();
+        var w = window.FBDB ? Promise.all([window.FBDB.ref('patientEducation/uploadPages/' + id).set(pages), window.FBDB.ref('patientEducation/uploads/' + id).set(meta)]) : Promise.resolve();
+        w.then(function () { toast('Uploaded ✓ — prints with the hospital header and footer', 's'); }).catch(function () { toast('Could not save the upload to the server — please try again', 'w'); });
+        done(id);
+      }).catch(function (e) { toast(e && e.message ? e.message : 'Could not read this file', 'w'); });
+    };
+    inp.click();
+  }
+  function deleteUpload(id) {
+    delete store.uploads[id]; delete store.pages[id]; saveCache();
+    if (window.FBDB) { window.FBDB.ref('patientEducation/uploads/' + id).remove().catch(function () {}); window.FBDB.ref('patientEducation/uploadPages/' + id).remove().catch(function () {}); }
+  }
+  function renderUploadPages(container, meta, pt) {
+    container.innerHTML = '<div class="pe-note">Loading pages…</div>';
+    getUploadPages(meta.id).then(function (pages) {
+      container.innerHTML = '<div class="pe-pages">' + pages.map(function (src) { return '<div class="pe-view"><div><div class="pe-scale"><div class="pe-paper">' + framedPageHtml(meta, src, pt) + '</div></div></div></div>'; }).join('') + '</div>';
+      setTimeout(function () { container.querySelectorAll('.pe-view').forEach(fitPreview); }, 30);
+      setTimeout(function () { container.querySelectorAll('.pe-view').forEach(fitPreview); }, 600);
+    });
+  }
+  function printUpload(meta, pt) {
+    getUploadPages(meta.id).then(function (pages) { printHtml(pages.map(function (src) { return framedPageHtml(meta, src, pt); }).join(''), meta.title); });
+  }
+
   // ═══ SURGERY BROCHURES PAGE ═══════════════════════════════════════════════
   var bro = { id: null, lang: 'en', editing: false, draft: null };
   function broRoot() { return document.getElementById('pe-brochures'); }
@@ -322,7 +425,9 @@
       + '<div class="pe-cards">' + list.map(function (b) {
         var t = THEMES[b.theme] || THEMES.teal; var title = (b.en && plain(b.en.title)) || b.id;
         return '<div class="pe-card" style="background:linear-gradient(120deg,' + t[0] + ',' + t[1] + ')" onclick="bmhPeOpenBrochure(\'' + esc(b.id) + '\')"><div class="t">' + esc(title) + '</div><div class="s">' + esc(deptName(b.dept, 'en')) + (b.custom ? ' · added' : '') + (b._edited ? ' · edited' : '') + '</div></div>';
-      }).join('') + '<div class="pe-card new" onclick="bmhPeNewBrochure()">+ New brochure</div></div>'
+      }).join('') + uploadList('brochure').map(function (u) {
+        return '<div class="pe-card" style="background:linear-gradient(120deg,#3d4b63,#6b7a93)" onclick="bmhPeOpenUpload(\'' + esc(u.id) + '\')"><div class="t">📎 ' + esc(u.title) + '</div><div class="s">' + esc(deptName(u.dept, 'en')) + ' · uploaded · ' + (u.pageCount || 1) + ' page' + ((u.pageCount || 1) > 1 ? 's' : '') + '</div></div>';
+      }).join('') + '<div class="pe-card new" onclick="bmhPeNewBrochure()">+ New brochure</div><div class="pe-card new" onclick="bmhPeUploadBrochure()">⬆ Upload PDF / photo</div></div>'
       + '<div class="pe-note">Click a brochure to view, edit or print it. Photos are courtesy of their credited sources; in edit mode you can replace any photo with your own.</div></div>';
   }
   function renderBrochureView() {
@@ -427,6 +532,21 @@
     var html = brochureHtml(b, bro.lang).replace(/<button[^>]*class="pe-add"[^>]*>.*?<\/button>/g, '');
     printHtml(html, (b[bro.lang] && plain(b[bro.lang].title)) || 'Brochure');
   };
+  window.bmhPeUploadBrochure = function () {
+    var deptAns = window.prompt('Department: type Eye, OBG, Psych or Skin', 'Eye'); if (!deptAns) return;
+    startUpload('brochure', normDept(deptAns) || 'ophtho', function (id) { window.bmhPeOpenUpload(id); });
+  };
+  window.bmhPeOpenUpload = function (id) {
+    var root = broRoot(); var meta = store.uploads[id]; if (!root || !meta) return;
+    meta = Object.assign({ id: id }, meta); bro.id = null; bro.editing = false;
+    root.innerHTML = '<div class="pe-wrap"><div class="pe-bar"><button class="btn btn-outline btn-sm" onclick="bmhPeCloseBrochure()">← All brochures</button><b class="grow">📎 ' + esc(meta.title) + '</b>'
+      + '<button class="btn btn-outline btn-sm" onclick="bmhPeDeleteUpload(\'' + esc(id) + '\')">🗑 Delete</button><button class="btn btn-gold btn-sm" onclick="bmhPePrintUpload(\'' + esc(id) + '\')">🖨️ Print A4</button></div>'
+      + '<div class="pe-note" style="margin-bottom:8px">Uploaded file — printed with the Baweja header and footer added automatically.</div><div id="pe-up-pages"></div></div>';
+    renderUploadPages(document.getElementById('pe-up-pages'), meta, null);
+  };
+  window.bmhPePrintUpload = function (id) { var m = store.uploads[id]; if (m) printUpload(Object.assign({ id: id }, m), null); };
+  window.bmhPeDeleteUpload = function (id) { if (!window.confirm('Delete this uploaded brochure for everyone?')) return; deleteUpload(id); renderBrochureList(); };
+
   function renderBrochuresPage() {
     ensureStyles();
     if (!broRoot()) return;
@@ -477,31 +597,37 @@
     var root = insRoot(); if (!root) return;
     if (!ins.dept) ins.dept = defaultDeptForUser();
     var sheets = allSheets().filter(function (s) { return s.dept === ins.dept; });
-    if (!sheets.some(function (s) { return s.id === ins.sheetId; })) ins.sheetId = sheets[0] ? sheets[0].id : null;
+    var ups = uploadList('instruction', ins.dept);
+    if (!sheets.some(function (s) { return s.id === ins.sheetId; }) && !ups.some(function (u) { return u.id === ins.sheetId; })) ins.sheetId = sheets[0] ? sheets[0].id : (ups[0] ? ups[0].id : null);
+    var upMeta = ups.find(function (u) { return u.id === ins.sheetId; }) || null;
     var pts = todayPatientsForDept(ins.dept);
     if (ins.ptId && !pts.some(function (x) { return x.p.bmhId === ins.ptId; })) ins.ptId = '';
-    var sheet = ins.draft || sheets.find(function (s) { return s.id === ins.sheetId; });
+    var sheet = upMeta ? null : (ins.draft || sheets.find(function (s) { return s.id === ins.sheetId; }));
     var entry = pts.find(function (x) { return x.p.bmhId === ins.ptId; });
     var isDefault = sheet && !!defaultSheet(sheet.id);
     root.innerHTML = '<div class="card" style="margin-bottom:14px"><div class="card-hd"><div><div class="card-title">🖨️ Print Instructions</div><div class="card-sub">Black &amp; white · English + ਪੰਜਾਬੀ · patient details from today\'s queue</div></div></div>'
       + '<div class="pe-bar">'
       + '<select title="Department" onchange="bmhPeInsDept(this.value)"' + (ins.editing ? ' disabled' : '') + '>' + DEPTS.map(function (d) { return '<option value="' + d[0] + '"' + (d[0] === ins.dept ? ' selected' : '') + '>' + d[1] + '</option>'; }).join('') + '</select>'
       + '<select title="Patient from today\'s queue" onchange="bmhPeInsPatient(this.value)" style="min-width:220px"><option value="">— Patient (today\'s queue: ' + pts.length + ') —</option>' + pts.map(function (x) { return '<option value="' + esc(x.p.bmhId) + '"' + (x.p.bmhId === ins.ptId ? ' selected' : '') + '>' + esc((x.p.name || 'Patient') + ' · ' + x.p.bmhId) + '</option>'; }).join('') + '</select>'
-      + '<select title="Instruction sheet" onchange="bmhPeInsSheet(this.value)"' + (ins.editing ? ' disabled' : '') + '>' + (sheets.length ? sheets.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === ins.sheetId ? ' selected' : '') + '>' + esc(plain(s.title && s.title[0]).replace(/\s*—.*$/, '')) + '</option>'; }).join('') : '<option value="">No sheets yet</option>') + '</select>'
+      + '<select title="Instruction sheet" onchange="bmhPeInsSheet(this.value)"' + (ins.editing ? ' disabled' : '') + '>' + (sheets.length || ups.length ? sheets.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === ins.sheetId ? ' selected' : '') + '>' + esc(plain(s.title && s.title[0]).replace(/\s*—.*$/, '')) + '</option>'; }).join('') + ups.map(function (u) { return '<option value="' + esc(u.id) + '"' + (u.id === ins.sheetId ? ' selected' : '') + '>📎 ' + esc(u.title) + '</option>'; }).join('') : '<option value="">No sheets yet</option>') + '</select>'
       + '<span class="grow"></span>'
       + (ins.editing
         ? '<button class="btn btn-gold btn-sm" onclick="bmhPeInsSave()">💾 Save</button><button class="btn btn-outline btn-sm" onclick="bmhPeInsCancel()">Cancel</button>'
         : (sheet ? '<button class="btn btn-outline btn-sm" onclick="bmhPeInsEdit()">✏️ Edit</button>' : '')
           + (sheet && isDefault && store.instructions[sheet.id] ? '<button class="btn btn-outline btn-sm" onclick="bmhPeInsReset()">↺ Original</button>' : '')
           + (sheet && !isDefault ? '<button class="btn btn-outline btn-sm" onclick="bmhPeInsDelete()">🗑 Delete</button>' : '')
+          + (upMeta ? '<button class="btn btn-outline btn-sm" onclick="bmhPeInsDeleteUpload()">🗑 Delete</button>' : '')
           + '<button class="btn btn-outline btn-sm" onclick="bmhPeInsNew()">+ New sheet</button>'
-          + (sheet ? '<button class="btn btn-gold btn-sm" onclick="bmhPeInsPrint()">🖨️ Print A4</button>' : ''))
+          + '<button class="btn btn-outline btn-sm" onclick="bmhPeInsUpload()">⬆ Upload PDF / photo</button>'
+          + (sheet || upMeta ? '<button class="btn btn-gold btn-sm" onclick="bmhPeInsPrint()">🖨️ Print A4</button>' : ''))
       + '</div>'
       + (ins.editing ? '<div class="pe-note" style="margin-bottom:8px">Click any text to change it. Use “+ Add line” or “+ Add section” for new points; empty a line to remove it. Write ' + esc('___') + ' style blanks by typing them.</div>' : '')
       + '<div class="pe-warn" id="pe-ins-warn">This sheet is now longer than one A4 page — it will print on 2 pages.</div>'
-      + (sheet ? '<div class="pe-view"><div><div class="pe-scale"><div class="pe-paper' + (ins.editing ? ' pe-editing' : '') + '" id="pe-ins-paper">' + sheetHtml(sheet, patientStrip(entry)) + '</div></div></div></div>'
-        : '<div class="pe-note">No instruction sheets for this department yet. Use “+ New sheet” to add one.</div>')
+      + (upMeta ? '<div class="pe-note" style="margin-bottom:8px">Uploaded file — printed with the Baweja header, the patient\'s details and the footer added automatically.</div><div id="pe-ins-up"></div>'
+        : sheet ? '<div class="pe-view"><div><div class="pe-scale"><div class="pe-paper' + (ins.editing ? ' pe-editing' : '') + '" id="pe-ins-paper">' + sheetHtml(sheet, patientStrip(entry)) + '</div></div></div></div>'
+        : '<div class="pe-note">No instruction sheets for this department yet. Use “+ New sheet” or “⬆ Upload” to add one.</div>')
       + '</div>';
+    if (upMeta) { renderUploadPages(document.getElementById('pe-ins-up'), upMeta, patientStrip(entry)); return; }
     var paper = document.getElementById('pe-ins-paper'); if (!paper) return;
     var view = root.querySelector('.pe-view');
     if (ins.editing) paper.querySelectorAll('[data-k]').forEach(function (el) { el.contentEditable = 'true'; });
@@ -551,9 +677,13 @@
     saveItem('instructions', id, s).catch(function () {});
     ins.sheetId = id; ins.draft = clone(s); ins.editing = true; renderInstructions();
   };
+  window.bmhPeInsUpload = function () { startUpload('instruction', ins.dept, function (id) { ins.sheetId = id; ins.editing = false; ins.draft = null; renderInstructions(); }); };
+  window.bmhPeInsDeleteUpload = function () { if (!window.confirm('Delete this uploaded sheet for everyone?')) return; deleteUpload(ins.sheetId); ins.sheetId = null; renderInstructions(); };
   window.bmhPeInsPrint = function () {
-    var s = allSheets().find(function (x) { return x.id === ins.sheetId; }); if (!s) return;
     var entry = todayPatientsForDept(ins.dept).find(function (x) { return x.p.bmhId === ins.ptId; });
+    var up = store.uploads[ins.sheetId];
+    if (up) { if (!entry && !window.confirm('No patient selected — print without patient details?')) return; printUpload(Object.assign({ id: ins.sheetId }, up), entry ? patientStrip(entry) : null); return; }
+    var s = allSheets().find(function (x) { return x.id === ins.sheetId; }); if (!s) return;
     if (!entry && !window.confirm('No patient selected — print without patient details?')) return;
     var html = sheetHtml(s, patientStrip(entry)).replace(/<button[^>]*class="pe-add"[^>]*>.*?<\/button>/g, '');
     printHtml(html, plain(s.title && s.title[0]));
@@ -581,5 +711,5 @@
   // If either page is already open when this loads, paint it.
   if (document.getElementById('pg-brochures') && document.getElementById('pg-brochures').classList.contains('active')) renderBrochuresPage();
   if (document.getElementById('pg-print-templates') && document.getElementById('pg-print-templates').classList.contains('active')) renderInstructionsPage();
-  window.bmhPatientEducation = { brochureHtml: brochureHtml, sheetHtml: sheetHtml, allBrochures: allBrochures, allSheets: allSheets, todayPatientsForDept: todayPatientsForDept, store: store };
+  window.bmhPatientEducation = { brochureHtml: brochureHtml, sheetHtml: sheetHtml, allBrochures: allBrochures, allSheets: allSheets, todayPatientsForDept: todayPatientsForDept, store: store, fileToPages: fileToPages, framedPageHtml: framedPageHtml };
 })();
