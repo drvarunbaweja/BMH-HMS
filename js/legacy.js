@@ -7059,22 +7059,22 @@ function buildSidebarForRole(role, dept, name) {
     nav_el.innerHTML = `
       <div class="ngrp">Lab</div>
       <div class="ni active" onclick="nav('lab',this)"><div class="ni-ic">🧪</div>Lab Module</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
-      <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`;
+      ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}`;
   } else if(role==='Inventory') {
     nav_el.innerHTML = `
       <div class="ngrp">Inventory</div>
       <div class="ni active" onclick="nav('inventory',this)"><div class="ni-ic">📦</div>Inventory<span class="nbadge" id="nb-inv"></span></div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
-      <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>
-      <div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`;
+      ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}
+      ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='TPA') {
     nav_el.innerHTML = `
       <div class="ngrp">Insurance / TPA</div>
       <div class="ni active" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
-      <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
-      <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`;
+      ${allowNav('billing', `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing</div>`)}
+      ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}`;
   } else if(role==='Staff') {
     nav_el.innerHTML = `
       <div class="ngrp">Staff</div>
@@ -7082,6 +7082,12 @@ function buildSidebarForRole(role, dept, name) {
   }
   // Admin role keeps the full default sidebar — no change needed
   appendApprovedModules();
+  if (accessModules && accessModules.length) {
+    Array.prototype.slice.call(nav_el.querySelectorAll('.ngrp')).forEach(function (g) {
+      let n = g.nextElementSibling;
+      if (!n || n.classList.contains('ngrp')) g.remove();
+    });
+  }
 }
 // The menu is built at login from the built-in login profile; the pages ticked in
 // Settings → Logins arrive a moment later from userSettings. Apply them to the
