@@ -53767,6 +53767,123 @@ window.addEventListener('DOMContentLoaded', function() {
   let fillMeta = null;
   let listening = false;
   let lastRows = [];
+  // ── "Done in a prescription" — read from saved visits' Procedure-done entries ──
+  // READS visits/<bmhId> only; writes nothing.
+  const rxIndex = new Map();          // bmhId -> [{ proc, eye, date }]
+  const rxQueue = [];
+  let rxRunning = 0, rxTotal = 0, rxDoneCount = 0, rxRerenderTimer = null;
+  const TEST_FAMS = [['oct', /\boct\b|optical coherence/i], ['field', /visual field|\bfields?\b|perimetry|\bhvf\b|\bhfa\b|\b(24|30|10)-2\b/i],
+    ['fundus-photo', /fundus photo/i], ['ffa', /\bffa\b|angiograph/i], ['topography', /topograph|pentacam/i], ['biometry', /biometry|iol ?master|a ?-?scan/i],
+    ['bscan', /b ?-?scan|ultrasonograph/i], ['specular', /specular/i], ['gonioscopy', /gonioscopy/i]];
+  function testFam(name) { const t = String(name || ''); for (let i = 0; i < TEST_FAMS.length; i++) if (TEST_FAMS[i][1].test(t)) return TEST_FAMS[i][0]; return ''; }
+  function testWords(name) {
+    return new Set(String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(function (w) {
+      return w.length >= 3 && !STOP.has(w) && !/^(oct|test|scan|both|eye|eyes|right|left|visual|field|fields|perimetry|hvf|hfa)$/.test(w);
+    }));
+  }
+  function rxNamesMatch(a, b) {
+    const ta = testFam(a), tb = testFam(b);
+    if (ta || tb) {
+      if (ta !== tb) return false;
+      const wa = testWords(a), wb = testWords(b);
+      if (!wa.size || !wb.size) return true;   // e.g. "OCT" vs "OCT macula"
+      let shared = 0; wa.forEach(function (w) { if (wb.has(w)) shared += 1; });
+      return shared > 0;
+    }
+    return namesMatch(a, b);
+  }
+  function procDoneEntries(v) {
+    const out = [];
+    const add = function (pd) {
+      if (!pd || typeof pd !== 'object' || pd.enabled === false) return;
+      const proc = String(pd.procedure || pd.name || '').trim();
+      if (!proc) return;
+      out.push({ proc: proc, eye: eyeOf(pd.eye || proc), date: localDateKey(pd.doneAt || v.date || v.visitDate || v.createdAt || '') });
+    };
+    if (Array.isArray(v.procDone)) v.procDone.forEach(add); else add(v.procDone);
+    return out;
+  }
+  function indexVisits(id, visitsObj) {
+    const list = [];
+    asList(visitsObj).forEach(function (v) { if (v && typeof v === 'object') procDoneEntries(v).forEach(function (e) { list.push(e); }); });
+    rxIndex.set(id, list);
+  }
+  function queueRxLoad(ids) {
+    if (!window.FBDB) return;
+    ids.forEach(function (id) { if (id && !rxIndex.has(id) && rxQueue.indexOf(id) === -1) { rxQueue.push(id); rxTotal += 1; } });
+    const step = function () {
+      if (!rxQueue.length) { rxRunning -= 1; if (!rxRunning) scheduleRxRerender(0); return; }
+      const id = rxQueue.shift();
+      window.FBDB.ref('visits/' + id).once('value').then(function (snap) { indexVisits(id, snap.val() || {}); })
+        .catch(function () { if (!rxIndex.has(id)) rxIndex.set(id, []); })
+        .finally(function () { rxDoneCount += 1; if (rxDoneCount % 40 === 0) scheduleRxRerender(400); step(); });
+    };
+    while (rxRunning < 6 && rxQueue.length) { rxRunning += 1; step(); }
+  }
+  function scheduleRxRerender(ms) {
+    if (rxRerenderTimer) return;
+    rxRerenderTimer = setTimeout(function () { rxRerenderTimer = null; rerenderReportIfOpen(); }, ms || 0);
+  }
+  function findRxDone(row) {
+    const list = rxIndex.get(row.bmhId);
+    if (!list || !list.length) return null;
+    const earliest = row.advisedDate ? shiftDate(row.advisedDate, -2) : '';
+    const eye = row.eye || (/\bboth\b|\bou\b|bilateral/i.test(String(row.proc || '')) ? 'Both' : eyeOf(row.proc));
+    const hits = list.filter(function (e) {
+      return rxNamesMatch(row.proc, e.proc) && eyesCompatible(eye, e.eye) && (!earliest || !e.date || e.date >= earliest);
+    });
+    if (!hits.length) return null;
+    hits.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+    // Advised for both eyes: done only once both eyes are done (one "both" entry, or right + left).
+    if (eye === 'Both' && !rxTestOnly(row.proc)) {
+      const both = hits.find(function (e) { return e.eye === 'Both'; });
+      if (both) return both;
+      const right = hits.find(function (e) { return e.eye === 'Right'; }), left = hits.find(function (e) { return e.eye === 'Left'; });
+      if (!(right && left)) return null;
+    }
+    return hits[0];
+  }
+  function rxTestOnly(name) { return !!testFam(name); }
+  // ── Calls logged before today, not yet marked "Seen" (pinned on top) ──
+  function unseenCallEntries(rec) {
+    if (!rec || !rec.log) return [];
+    const t = today(), from = shiftDate(t, -7);
+    const seen = String(rec.callsReviewedAt || '');
+    return Object.values(rec.log).filter(function (e) {
+      if (!e || !e.at) return false;
+      const d = localDateKey(e.at);
+      return d && d < t && d >= from && String(e.at) > seen;
+    }).sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+  }
+  function markCallsSeen(keys) {
+    keys = (keys || []).filter(Boolean);
+    if (!keys.length || !window.FBDB) return;
+    const now = new Date().toISOString(), by = (currentUser() && currentUser().name) || '';
+    const updates = {};
+    keys.forEach(function (k) { updates['procedureFollowups/' + k + '/callsReviewedAt'] = now; updates['procedureFollowups/' + k + '/callsReviewedBy'] = by; });
+    window.FBDB.ref().update(updates).then(function () {
+      keys.forEach(function (k) { if (followups[k]) { followups[k].callsReviewedAt = now; followups[k].callsReviewedBy = by; } });
+      rerenderReportIfOpen();
+    }).catch(function () { showToast('Could not save — please try again', 'e'); });
+  }
+  function callEntryHtml(e) {
+    return '<div style="margin-top:3px"><b>' + esc(fmt(localDateKey(e.at))) + ' ' + esc(new Date(e.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })) + '</b>'
+      + (e.by ? ' · ' + esc(e.by) : '') + ' — ' + esc([e.outcome, e.reason].filter(Boolean).join(' — ') || '—')
+      + (e.remark ? '<div style="font-style:italic">“' + esc(e.remark) + '”</div>' : '')
+      + (e.nextDate ? '<div style="color:var(--g1)">Next call: ' + esc(fmt(e.nextDate)) + '</div>' : '') + '</div>';
+  }
+  function printCalls(keys) {
+    const rows = keys.map(function (k) { return findRow(k); }).filter(Boolean);
+    const w = window.open('', '_blank', 'width=1000,height=760'); if (!w) { showToast('Allow pop-ups to print', 'w'); return; }
+    w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Follow-up calls</title><style>body{font-family:Arial,sans-serif;padding:8mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:5px 6px;font-size:10.5px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E}@page{size:A4 landscape;margin:7mm}</style></head><body>'
+      + '<div style="font-size:17px;font-weight:900;color:#1A3C6E;margin-bottom:8px">Follow-up calls not yet reviewed — ' + rows.length + ' patients</div>'
+      + '<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID / phone</th><th>Procedure</th><th>Dept</th><th>Calls (outcome, reason, remarks)</th></tr></thead><tbody>'
+      + rows.map(function (r, i) {
+        return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.patient) + '</td><td>' + esc(r.bmhId) + (r.mobile ? '<br>' + esc(r.mobile) : '') + '</td><td>' + esc(r.proc) + '</td><td>' + esc(deptLabel(r.dept)) + '</td><td>'
+          + unseenCallEntries(followups[r.key]).map(callEntryHtml).join('') + '</td></tr>';
+      }).join('') + '</tbody></table></body></html>');
+    w.document.close(); setTimeout(function () { try { w.focus(); w.print(); } catch (e) {} }, 400);
+  }
   let currentRow = null;
   let selectedNext = null; // '' = no further follow-up, 'YYYY-MM-DD' = date, null = not chosen
   let fillRunning = false;
@@ -54041,6 +54158,8 @@ window.addEventListener('DOMContentLoaded', function() {
       if (ot) usedOt.add(ot);
       row.ot = ot;
       row.status = statusFromOt(ot);
+      row.rx = findRxDone(row);
+      if (row.rx && row.status !== 'done') row.status = 'done';
     });
     // 3. Operated / booked patients with no advice on record
     ots.forEach(function (o) {
@@ -54095,7 +54214,7 @@ window.addEventListener('DOMContentLoaded', function() {
       if (ignoreStatus) return true;
       if (f.status === 'dropped') return r.dropped;
       if (r.dropped) return false;
-      if (f.status === 'due') return isDue(followups[r.key]);
+      if (f.status === 'due') return isDue(followups[r.key]) && r.status !== 'done';
       if (f.status === 'pending') return r.status === 'advised';
       if (f.status !== 'all' && r.status !== f.status) return false;
       return true;
@@ -54127,6 +54246,9 @@ window.addEventListener('DOMContentLoaded', function() {
       const rec = followups[r.key] || {};
       return '<span class="badge bd-gray">Dropped ' + esc(fmt(localDateKey(rec.droppedAt || ''))) + '</span>'
         + (rec.dropReason ? '<div style="font-size:10px;color:var(--g1);margin-top:3px">' + esc(rec.dropReason) + '</div>' : '');
+    }
+    if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && r.rx) {
+      return '<span class="badge bd-green">Done ' + esc(fmt(r.rx.date)) + '</span><div style="font-size:10px;color:var(--g1);margin-top:3px">Per prescription: ' + esc(r.rx.proc) + (r.rx.eye ? ' · ' + esc(r.rx.eye === 'Both' ? 'Both eyes' : r.rx.eye + ' eye') : '') + '</div>';
     }
     if (r.status === 'done') {
       return '<span class="badge bd-green">Done ' + esc(fmt(r.ot.date)) + '</span>' + otDetailHtml(r.ot, true);
@@ -54183,6 +54305,29 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     return '';
   }
+  function medicinesText(v) {
+    const out = [];
+    Object.keys(v || {}).forEach(function (k) {
+      const arr = v[k];
+      if (!Array.isArray(arr) || !arr.length || typeof arr[0] !== 'object' || !arr[0]) return;
+      if (!/rx|drug|med|presc/i.test(k) && !('brand' in arr[0]) && !('drug' in arr[0])) return;
+      arr.forEach(function (d) {
+        if (!d || typeof d !== 'object') return;
+        const name = d.brand || d.drug || d.name || d.medicine || '';
+        if (!name) return;
+        out.push([name, d.eye, d.freq || d.frequency || d.dose || d.dosage, d.dur || d.duration].filter(Boolean).join(' '));
+      });
+    });
+    return Array.from(new Set(out)).join('; ');
+  }
+  window.bmhAdvViewReport = function (k) {
+    const x = (window._bmhAdvReports || {})[k]; if (!x || !x.data) return;
+    const w = window.open('', '_blank'); if (!w) { showToast('Allow pop-ups to view', 'w'); return; }
+    const src = String(x.data);
+    w.document.write('<!DOCTYPE html><title>' + esc(x.name || 'Report') + '</title><body style="margin:0;background:#333">'
+      + (/^data:application\/pdf/i.test(src) ? '<iframe src="' + esc(src) + '" style="border:0;width:100vw;height:100vh"></iframe>' : '<img src="' + esc(src) + '" style="max-width:100%;display:block;margin:auto">') + '</body>');
+    w.document.close();
+  };
   function showVisitHistory(bmhId) {
     const id = String(bmhId || '').trim();
     if (!id) return;
@@ -54208,7 +54353,11 @@ window.addEventListener('DOMContentLoaded', function() {
           + ' · <span style="font-weight:800;color:' + (otDone(o) ? '#1a8c3c' : '#0B5FA5') + '">' + (otDone(o) ? 'Done' : 'Booked / pending') + '</span>'
           + (o.eye || otIolText(o) || o.surgeon ? '<div style="color:var(--g1);font-size:10.5px">' + esc([o.eye ? o.eye + ' eye' : '', otIolText(o), o.surgeon].filter(Boolean).join(' · ')) + '</div>' : '') + '</div>';
       }).join('') : '';
+    const details = [p.age || p.ageY ? 'Age ' + (p.age || p.ageY) : '', p.sex || p.gender || '', p.mob ? '📞 ' + p.mob : '', p.centre ? '📍 ' + centreName(p.centre) : '', p.address || p.addr || p.city || ''].filter(Boolean);
+    const headHtml = details.length ? '<div style="padding:7px 10px;margin-bottom:8px;border-radius:8px;background:var(--g6,#f5f7fa);font-size:11.5px">' + esc(details.join(' · ')) + '</div>' : '';
+    let reportsHtml = '';
     const done = function (visitsObj) {
+      indexVisits(id, visitsObj);
       const visits = asList(visitsObj).filter(function (v) { return v && typeof v === 'object'; })
         .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
       const visitHtml = visits.length ? visits.map(function (v) {
@@ -54216,10 +54365,16 @@ window.addEventListener('DOMContentLoaded', function() {
         const procs = []
           .concat(asList(v.procedures), asList(v.obgProcAdvised), asList(v.psychProcAdvised), asList(v.skinProcAdvised))
           .map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+        const pdone = procDoneEntries(v).map(function (e) { return e.proc + (e.eye ? ' (' + (e.eye === 'Both' ? 'both eyes' : e.eye.toLowerCase() + ' eye') + ')' : '') + (e.date ? ' — ' + fmt(e.date) : ''); });
         const lines = [
+          ['Complaints', visitText(v, ['chiefComplaints', 'mainComplaint', 'complaints'])],
+          ['Vision', v.vaOD || v.vaOS ? 'RE ' + (v.vaOD || '—') + ' · LE ' + (v.vaOS || '—') : ''],
+          ['IOP', v.iopGatOD || v.iopGatOS || v.iopNctOD || v.iopNctOS ? 'RE ' + (v.iopGatOD || v.iopNctOD || '—') + ' · LE ' + (v.iopGatOS || v.iopNctOS || '—') : ''],
           ['Diagnosis', visitText(v, ['diagnoses', 'diagnosisText', 'dx'])],
+          ['Medicines', medicinesText(v)],
           ['Procedures advised', Array.from(new Set(procs)).join(', ')],
-          ['Procedure done', v.procDone && v.procDone.procedure ? String(v.procDone.procedure) : ''],
+          ['Procedure done', pdone.join('; ')],
+          ['Reports attached', asList(v.investigations).map(function (x) { return x && (x.name || x.title) ? String(x.name || x.title).slice(0, 60) : ''; }).filter(Boolean).join(', ')],
           ['EDD', dk === 'obg' ? visitText(v, ['obg-obs-edd-usg', 'obg-obs-edd-date', 'edd']) : ''],
           ['Follow-up', localDateKey(v.rxFuDate || v.followupDate || '') ? fmt(localDateKey(v.rxFuDate || v.followupDate)) : ''],
           ['Instructions', visitText(v, ['advice', 'obgAdvice', 'psychAdvice', 'skinAdvice'])]
@@ -54228,14 +54383,31 @@ window.addEventListener('DOMContentLoaded', function() {
           + '<div style="display:flex;justify-content:space-between;gap:8px"><b style="color:var(--bmh-blue)">' + esc(fmt(localDateKey(v.date || v.visitDate || v.createdAt || ''))) + ' · ' + esc(deptLabel(dk) || '') + '</b><span style="color:var(--g1);font-size:10.5px">' + esc(v.doctor || v.savedBy || '') + '</span></div>'
           + lines.map(function (x) { return '<div><b>' + esc(x[0]) + ':</b> ' + esc(x[1]) + '</div>'; }).join('') + '</div>';
       }).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No saved visits found.</div>';
-      body.innerHTML = otHtml + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Visits (' + visits.length + ')</div>' + visitHtml;
+      body.innerHTML = headHtml + otHtml + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Visits (' + visits.length + ')</div>' + visitHtml + '<div id="adv-hist-reports">' + reportsHtml + '</div>';
+      rerenderReportIfOpen();
     };
+    // Uploaded reports (OCT, fields, lab) — read-only list with a View link.
+    if (window.FBDB) {
+      window.FBDB.ref('investigations/' + id).once('value').then(function (snap) {
+        const items = asList(snap.val() || {}).filter(function (x) { return x && typeof x === 'object'; })
+          .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+        window._bmhAdvReports = window._bmhAdvReports || {};
+        reportsHtml = items.length ? '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Uploaded reports (' + items.length + ')</div>'
+          + items.map(function (x, i) {
+            const k = id + ':' + i; window._bmhAdvReports[k] = x;
+            return '<div style="display:flex;gap:8px;align-items:center;border:1px solid var(--g5,#eee);border-radius:8px;padding:6px 9px;margin-bottom:5px;font-size:11.5px"><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>' + esc(fmt(localDateKey(x.date || ''))) + '</b> · ' + esc(String(x.name || x.title || 'Report')) + '</div>'
+              + (x.data ? '<button type="button" class="btn btn-xs btn-outline" onclick="bmhAdvViewReport(\'' + esc(k) + '\')">View</button>' : '') + '</div>';
+          }).join('') : '';
+        const host = document.getElementById('adv-hist-reports'); if (host) host.innerHTML = reportsHtml;
+      }).catch(function () {});
+    }
     if (!window.FBDB) { done(typeof getCachedPatientVisits === 'function' ? getCachedPatientVisits(id) : {}); return; }
     window.FBDB.ref('visits/' + id).once('value').then(function (snap) { done(snap.val() || {}); })
       .catch(function () { done(typeof getCachedPatientVisits === 'function' ? getCachedPatientVisits(id) : {}); });
   }
   function patientNameHtml(r) {
-    return '<a href="javascript:void(0)" title="Open visit history" onclick="bmhShowPatientVisitHistory(\'' + String(r.bmhId || '').replace(/[^A-Za-z0-9-]/g, '') + '\')" style="font-weight:800;color:var(--bmh-blue);text-decoration:underline dotted">' + esc(r.patient) + '</a>';
+    return '<a href="javascript:void(0)" title="Open patient file" onclick="bmhShowPatientVisitHistory(\'' + String(r.bmhId || '').replace(/[^A-Za-z0-9-]/g, '') + '\')" style="font-weight:800;color:var(--bmh-blue);text-decoration:underline dotted">' + esc(r.patient) + '</a>'
+      + (r.rx ? ' <span class="badge bd-green" style="font-size:9.5px" title="' + esc(r.rx.proc) + '">✓ Done per prescription ' + esc(fmt(r.rx.date)) + '</span>' : '');
   }
 
   function renderReport(el) {
@@ -54249,11 +54421,29 @@ window.addEventListener('DOMContentLoaded', function() {
       advised: live.filter(function (r) { return r.status === 'advised'; }).length,
       scheduled: live.filter(function (r) { return r.status === 'scheduled'; }).length,
       done: live.filter(function (r) { return r.status === 'done'; }).length,
-      due: live.filter(function (r) { return isDue(followups[r.key]); }).length,
+      due: live.filter(function (r) { return isDue(followups[r.key]) && r.status !== 'done'; }).length,
       dropped: base.filter(function (r) { return r.dropped; }).length,
       all: live.length
     };
     const rows = sortRows(applyFilters(all, f, false));
+    // Check saved prescriptions for these patients in the background (once per session).
+    queueRxLoad(Array.from(new Set(all.filter(function (r) { return !r.dropped && r.status !== 'done'; }).map(function (r) { return r.bmhId; }))));
+    const rxPending = rxQueue.length + (rxRunning ? 1 : 0);
+    // Calls logged before today and not yet marked Seen: pinned on top, with their usual number.
+    const numberOf = new Map(rows.map(function (r, i) { return [r.key, i + 1]; }));
+    const pinned = sortRows(base.filter(function (r) { return unseenCallEntries(followups[r.key]).length; }));
+    const pinnedKeys = new Set(pinned.map(function (r) { return r.key; }));
+    const rowHtml = function (r, n, pin) {
+      return '<tr' + (pin ? ' style="background:#fff8d6"' : (isDue(followups[r.key]) && r.status !== 'done' ? ' style="background:#fff1f0"' : '')) + '><td>' + (n || '—') + '</td>'
+        + '<td style="white-space:nowrap">' + (r.advisedDate ? esc(fmt(r.advisedDate)) : '<span style="color:var(--g1);font-size:10px">from OT register</span>') + '</td>'
+        + '<td><div>' + patientNameHtml(r) + '</div><div style="font-size:10px;color:var(--g1)">' + esc(r.bmhId) + (r.mobile ? ' · ' + esc(r.mobile) : '') + '</div></td>'
+        + '<td>' + centreBadge(r.centre) + '</td><td>' + esc(deptLabel(r.dept)) + '</td><td style="font-weight:700">' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td>'
+        + '<td>' + statusCell(r) + '</td><td>' + followupCell(r)
+        + (pin ? '<div style="margin-top:6px;padding:6px 8px;background:#fff;border:1px solid #f0d878;border-radius:6px;font-size:10.5px;line-height:1.35"><b>Calls to review</b>'
+          + unseenCallEntries(followups[r.key]).map(callEntryHtml).join('')
+          + '<div style="margin-top:5px"><button type="button" class="btn btn-xs btn-blue" onclick="bmhAdvisedCallsSeen([\'' + r.key + '\'])">✓ Seen</button></div></div>' : '')
+        + '</td></tr>';
+    };
     const chip = function (value, label, n) {
       const on = f.status === value;
       return '<button type="button" class="btn btn-xs ' + (on ? 'btn-blue' : 'btn-outline') + '" onclick="bmhSetAdvisedFilter(\'status\',\'' + value + '\')">' + label + ' <b>' + n + '</b></button>';
@@ -54265,6 +54455,11 @@ window.addEventListener('DOMContentLoaded', function() {
       + '<div class="card-sub">Every procedure advised in any department stays here until it is done in OT or marked "Drop from list".</div></div>'
       + '<button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>'
       + (!followupsLoaded ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Loading saved follow-ups…</div>' : '')
+      + (rxPending ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking saved prescriptions for procedures already done… (' + rxPending + ' patients left)</div>' : '')
+      + (pinned.length ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff8d6;border:1px solid #f0d878;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        + '<b>📞 ' + pinned.length + ' patient' + (pinned.length === 1 ? '' : 's') + ' called before today — shown on top until marked Seen</b>'
+        + '<button type="button" class="btn btn-xs btn-blue" onclick="bmhAdvisedCallsSeen(' + esc(JSON.stringify(pinned.map(function (r) { return r.key; }))) + ')">✓ Mark all seen</button>'
+        + '<button type="button" class="btn btn-xs btn-outline" onclick="bmhAdvisedPrintCalls(' + esc(JSON.stringify(pinned.map(function (r) { return r.key; }))) + ')">🖨 Print calls</button></div>' : '')
       + (smallPool ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff7e0;font-size:11.5px">This login has only part of the patient list loaded. Open this report from the admin login to see every advised patient.</div>' : '')
       + (showFill ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#eef3fb;font-size:11.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
         + '<span>One-time step: add procedures advised at earlier visits since April (from visit history).</span>'
@@ -54278,14 +54473,9 @@ window.addEventListener('DOMContentLoaded', function() {
       + centreChipsHtml(applyFilters(all, f, false, true), f.centre)
       + '<label style="margin-left:auto;font-size:11.5px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ' + (f.tests ? 'checked' : '') + ' onchange="bmhSetAdvisedFilter(\'tests\',this.checked)"> Include tests (OCT, fields, etc.)</label>'
       + '</div>'
-      + (rows.length ? '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>Centre</th><th>Dept</th><th>Procedure advised</th><th>Doctor</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>'
-        + rows.map(function (r, i) {
-          return '<tr' + (isDue(followups[r.key]) ? ' style="background:#fff1f0"' : '') + '><td>' + (i + 1) + '</td>'
-            + '<td style="white-space:nowrap">' + (r.advisedDate ? esc(fmt(r.advisedDate)) : '<span style="color:var(--g1);font-size:10px">from OT register</span>') + '</td>'
-            + '<td><div>' + patientNameHtml(r) + '</div><div style="font-size:10px;color:var(--g1)">' + esc(r.bmhId) + (r.mobile ? ' · ' + esc(r.mobile) : '') + '</div></td>'
-            + '<td>' + centreBadge(r.centre) + '</td><td>' + esc(deptLabel(r.dept)) + '</td><td style="font-weight:700">' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td>'
-            + '<td>' + statusCell(r) + '</td><td>' + followupCell(r) + '</td></tr>';
-        }).join('') + '</tbody></table></div>'
+      + (rows.length || pinned.length ? '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>Centre</th><th>Dept</th><th>Procedure advised</th><th>Doctor</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>'
+        + pinned.map(function (r) { return rowHtml(r, numberOf.get(r.key), true); }).join('')
+        + rows.filter(function (r) { return !pinnedKeys.has(r.key); }).map(function (r) { return rowHtml(r, numberOf.get(r.key), false); }).join('') + '</tbody></table></div>'
         : '<div style="padding:20px;text-align:center;color:var(--g1)">No patients for this filter.</div>')
       + '</div>';
   }
@@ -54299,6 +54489,7 @@ window.addEventListener('DOMContentLoaded', function() {
         const bits = [r.ot.eye ? (r.ot.eye === 'Both' ? 'Both eyes' : r.ot.eye + ' eye') : '', otIolText(r.ot), withSurgeon ? r.ot.surgeon : ''].filter(Boolean);
         return bits.length ? ' (' + bits.join(' · ') + ')' : '';
       };
+      if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && r.rx) return 'Done ' + fmt(r.rx.date) + ' (per prescription: ' + r.rx.proc + ')';
       if (r.status === 'done') return 'Done ' + fmt(r.ot.date) + detail(true);
       if (r.status === 'scheduled') return 'OT booked ' + fmt(r.ot.date) + detail(false);
       return 'Not done yet';
@@ -54505,6 +54696,7 @@ window.addEventListener('DOMContentLoaded', function() {
         const ot = findOtMatch({ bmhId: rec.bmhId, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate }, ots);
         if (ot && otDone(ot)) return false;
       }
+      if (rec.kind !== 'delivery' && findRxDone({ bmhId: rec.bmhId, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate })) return false;
       return true;
     });
   }
@@ -54579,6 +54771,8 @@ window.addEventListener('DOMContentLoaded', function() {
   window.bmhSaveAdvisedFollowup = saveFollowup;
   window.bmhAdvisedQuickDrop = quickDrop;
   window.bmhShowPatientVisitHistory = showVisitHistory;
+  window.bmhAdvisedCallsSeen = markCallsSeen;
+  window.bmhAdvisedPrintCalls = printCalls;
   // For the Deliveries Expected list (same call sheet, log, remove and reminder).
   window.bmhAdvisedFollowupApi = {
     key: rowKey,
