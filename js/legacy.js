@@ -50881,7 +50881,7 @@ function buildQCard(p, sno) {
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${isPreCheckin
           ? `<button title="Check In & Collect Fee" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check In</button>`
-          : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}','${String(p.dept || '').replace(/'/g, "\\'")}')` : (p._deptQueueId ? `markDeptQueueSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `markSeen('${p.bmhId}','${String(p.dept || '').replace(/'/g, "\\'")}')`)}">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : (p._deptQueueId ? `restoreDeptQueueToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `restorePatientToActiveQueue('${p.bmhId}')`)}">↩ Active</button>`}
+          : `${!isQueueRowMarkedSeen(p)?(!bmhCanMarkSeenDept(p.dept || p.department || '') ? `<span title="Only the ${bmhSeenDeptLabel(p.dept || p.department || '')} doctor can mark seen" style="font-size:10px;color:var(--g2);padding:0 4px">🔒</span>` : `<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}','${String(p.dept || '').replace(/'/g, "\\'")}')` : (p._deptQueueId ? `markDeptQueueSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `markSeen('${p.bmhId}','${String(p.dept || '').replace(/'/g, "\\'")}')`)}">✓</button>`):`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : (p._deptQueueId ? `restoreDeptQueueToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `restorePatientToActiveQueue('${p.bmhId}')`)}">↩ Active</button>`}
         ${isOphtho&&!p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${String(p.name||p.patient||'Patient').replace(/'/g,"\\'")}')">💧</button>`:''}
         ${isOphtho&&p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
         ${isOphtho&&!isQueueRowMarkedSeen(p)?`<button title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
@@ -50970,7 +50970,7 @@ function buildQTableRow(p, sno, opts) {
   // Badge on cross-refer entry row showing which dept referred them in
   const xrefFromDeptLabel = p._xrefEntry && p._xrefFromDept ? (deptShort[p._xrefFromDept] || p._xrefFromDept) : '';
   const xrefInBadge = p._xrefEntry
-    ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#fff3e0;color:#8a4200;border-radius:4px;font-weight:800;vertical-align:middle">${p._xrefPendingPay ? '💳 Pay' : '↔ Ref'}${xrefFromDeptLabel ? ' from ' + xrefFromDeptLabel : ''}</span>`
+    ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#fff3e0;color:#8a4200;border-radius:4px;font-weight:800;vertical-align:middle">${p._xrefPendingPay ? '💳 Pay' : '↔ Ref'}${deptShort[normalizeDeptKeyForQueue(p.dept || '')] ? ' to ' + deptShort[normalizeDeptKeyForQueue(p.dept || '')] : ''}${xrefFromDeptLabel ? ' from ' + xrefFromDeptLabel : ''}</span>`
     : '';
   const deptQueueBadge = p._deptQueueEntry
     ? '<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#eef3fb;color:var(--bmh-blue);border-radius:4px;font-weight:800;vertical-align:middle">Also OPD</span>'
@@ -51021,7 +51021,7 @@ function buildQTableRow(p, sno, opts) {
     <td class="q-actions" style="${actionCellStyle}" onclick="event.stopPropagation()">
       ${isPreRegRow
         ? `<button type="button" title="Check In" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check in</button>`
-        : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="${markSeenClick}">✓</button>`:doneActionHtml}
+        : `${!seenRow?(bmhCanMarkSeenDept(p.dept || p.department || '') ? `<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="${markSeenClick}">✓</button>` : `<span title="Only the ${bmhSeenDeptLabel(p.dept || p.department || '')} doctor can mark seen" style="font-size:10px;color:var(--g2);padding:0 4px">🔒</span>`):doneActionHtml}
       ${isOphtho&&!p.dilated&&!seenRow?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
       ${isOphtho&&p.dilated&&!seenRow?`<button type="button" title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
       ${isOphtho&&!seenRow?`<button type="button" title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
@@ -51040,12 +51040,40 @@ function toggleQueueSidebarCollapse(forceExpand) {
   document.body.classList.toggle('queue-sidebar-collapsed', shouldCollapse);
 }
 
+// Rule: a doctor whose login belongs to a department (Eye, OBG, Neuropsychiatry, Skin)
+// can mark seen only patients of that department. Logins without a clinical
+// department (reception, staff) work as before.
+function bmhUserClinicalDept() {
+  const role = String(CURRENT_USER?.role || '').toLowerCase();
+  if (['doctor', 'admin', 'optometrist'].indexOf(role) === -1) return '';
+  const rawOwn = String(CURRENT_USER?.dept || '');
+  const own = normalizeDeptKeyForQueue((typeof normalizeQueueDeptForUser === 'function' && normalizeQueueDeptForUser(rawOwn)) || rawOwn);
+  return ['ophtho', 'obg', 'psych', 'skin'].indexOf(own) === -1 ? '' : own;
+}
+function bmhCanMarkSeenDept(dept) {
+  try {
+    const target = normalizeDeptKeyForQueue(dept || '');
+    const own = bmhUserClinicalDept();
+    return !target || !own || own === target;
+  } catch (e) { return true; }
+}
+function bmhSeenDeptLabel(dept) {
+  return { ophtho: 'Eye', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' }[normalizeDeptKeyForQueue(dept || '')] || String(dept || '');
+}
+function bmhConfirmSeenForOtherDept(dept) {
+  if (bmhCanMarkSeenDept(dept)) return true;
+  showToast('Only the ' + bmhSeenDeptLabel(dept) + ' doctor can mark this patient seen', 'w');
+  return false;
+}
+window.bmhCanMarkSeenDept = bmhCanMarkSeenDept;
+window.bmhConfirmSeenForOtherDept = bmhConfirmSeenForOtherDept;
 function markSeen(bmhId, deptOverride) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
   if (p && isQueuePreCheckinPatient(p)) {
     checkInPatient(bmhId);
     return;
   }
+  if (!bmhConfirmSeenForOtherDept(deptOverride || activeClinicDeptKey() || p?.dept || p?.department || '', p?.name)) return;
   const nowIso = new Date().toISOString();
   const seenDept = normalizeDeptKeyForQueue(deptOverride || activeClinicDeptKey() || p?.dept || p?.department || '');
   const seenByDept = Object.assign({}, p?.seenByDept || p?.deptSeenAt || {});
@@ -51145,6 +51173,7 @@ function markCrossRefSeen(bmhId, xrefId, deptOverride) {
     showToast('Referral can only be completed from its destination department', 'w');
     return;
   }
+  if (!bmhConfirmSeenForOtherDept(targetDept, p.name)) return;
   const refs = p.crossRefs.map(function (r) {
     if (!r || String(r.id) !== String(xrefId)) return r;
     return Object.assign({}, r, { seen: true, status: 'seen', seenAt: nowIso, seenDept: targetDept, completedDept: targetDept, updatedAt: nowIso });
@@ -51224,6 +51253,8 @@ function markDeptQueueSeen(bmhId, queueId) {
     return;
   }
   const nowIso = new Date().toISOString();
+  const guardRow = p.deptQueueEntries.find(function (row) { return row && String(row.id) === String(queueId); });
+  if (guardRow && !bmhConfirmSeenForOtherDept(guardRow.dept || '', p.name)) return;
   let seenDept = '';
   const rows = p.deptQueueEntries.map(function (row) {
     if (!row || String(row.id) !== String(queueId)) return row;
