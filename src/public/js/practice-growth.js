@@ -1,7 +1,9 @@
 /* BMH — Practice Growth (Reports → 🚀 Practice Growth)
  * Add-on, visible only on Dr Varun Baweja's admin login.
- * READ-ONLY: reads transactions/<day> (through the Bills & History cache when present),
- * otCases, procedureFollowups, payRequests and iolCatalog. It never writes to the database.
+ * Reads transactions/<day> (through the Bills & History cache when present), otCases,
+ * procedureFollowups, payRequests, iolCatalog and practiceGrowth/*. PIN-locked (15 minutes).
+ * Writes ONLY when you press a button: "Mark OT completed"/"Undo" (otCases/<id> status fields +
+ * practiceGrowth/otMarks), "✏️ amount" (practiceGrowth/amounts) and the PIN (practiceGrowth/pin).
  * Nothing is read until "Show report" is pressed. Tick-box choices are kept in this browser only.
  * Off switch (this browser): localStorage.setItem('bmh_disable_practice_growth','1') then reload.
  */
@@ -235,11 +237,13 @@
       getJson('/otCases.json').catch(function () { return {}; }),
       getJson('/procedureFollowups.json').catch(function () { return {}; }),
       getJson('/iolCatalog.json').catch(function () { return []; }),
-      getJson('/payRequests.json').catch(function () { return {}; })
+      getJson('/payRequests.json').catch(function () { return {}; }),
+      getJson('/practiceGrowth/amounts.json').catch(function () { return {}; }),
+      getJson('/practiceGrowth/otMarks.json').catch(function () { return {}; })
     ]).then(function (r) {
       var cat = r[3]; cat = Array.isArray(cat) ? cat : Object.values(cat || {});
       var obj = function (o, key) { return Object.keys(o || {}).map(function (k) { return Object.assign({}, o[k], key ? { _key: k } : {}); }).filter(function (x) { return x && typeof x === 'object'; }); };
-      G.data = { txns: r[0], ot: obj(r[1], true).map(function (c) { if (!c.id) c.id = c._key; return c; }), pf: obj(r[2], true), catalog: cat.filter(function (x) { return x && x.name; }), pr: obj(r[4], true), at: new Date() };
+      G.data = { txns: r[0], ot: obj(r[1], true).map(function (c) { if (!c.id) c.id = c._key; return c; }), pf: obj(r[2], true), catalog: cat.filter(function (x) { return x && x.name; }), pr: obj(r[4], true), amounts: r[5] || {}, marks: r[6] || {}, at: new Date() };
       G.recon = reconcile(G.data);
       return G.data;
     }).finally(function () { G.loading = null; });
@@ -250,6 +254,8 @@
   var INS_RX = /echs|cghs|\btpa\b|insur|cashless|ayushman|pmjay|esic?\b|bajaj|star\s*health|hdfc\s*ergo|icici\s*lomb|niva|care\s*health|tata\s*aig|sbi\s*gen|united\s*india|oriental|national\s*insur|new\s*india|reliance\s*gen|cholamandal|medi\s*assist|paramount|vidal|heritage|raksha|ericson|fhpl|md\s*india|good\s*health|park\s*mediclaim|health\s*india|future\s*generali|iffco|universal\s*sompo|royal\s*sundaram|aditya\s*birla|manipal\s*cigna|digit|acko/i;
   var SURG_TXT = /\biol\b|implant|cataract|pmics|phaco|surg|\bicl\b|vitrect|\bppv\b|squint|trab|pterygium|lscs|caesar|deliver|\bnvd\b|\bmtp\b|package|inject|avastin|ranibiz|ozurdex|punctoplast|chalazion|hydrus|kerato|\bot\b/i;
   function isIns(x) { return INS_RX.test(String(x || '')); }
+  var ECHS_CATARACT = 14500;
+  function caseValue(r) { return r.override != null ? r.override : r.paid + r.claim; }
   function reconcile(data) {
     var today = todayKey_();
     var insPatients = {}, campPatients = {};
@@ -307,6 +313,7 @@
         var r = nearest(p.bmhId, day, -90, 60);
         if (!r) return;
         r._hit = true;
+        r.claimFromRequest = true;
         r.claim += claimAmt;
         r.insurer = r.insurer || String(p.ins || p.mode || '');
         var recv = Number(p.receivedAmount || 0);
@@ -327,6 +334,17 @@
       else if (!r.done && (byPt[r.bmhId] || []).some(function (o) { return o !== r && o.done && Math.abs((new Date(o.day) - new Date(r.day)) / 864e5) <= 3; })) r.cls = 'duplicate';
       else r.cls = 'none';
       r.future = r.day >= today;
+      // ECHS / CGHS cataract: ₹14,500 claim per surgery unless a received claim is on record
+      var insName = String(r.insurer || insPatients[r.bmhId] || '');
+      if (r.group === 'Cataract (IOL)' && /echs|cghs/i.test(insName) && (r.cls === 'cashless' || r.cls === 'ins-noclaim')) {
+        r.insurer = /cghs/i.test(insName) && !/echs/i.test(insName) ? 'CGHS' : 'ECHS';
+        r.echs = true;
+        if (r.claimStatus !== 'received') { r.claim = ECHS_CATARACT; r.claimPending = ECHS_CATARACT; r.claimStatus = r.claimStatus && r.claimStatus !== 'recorded at billing' ? r.claimStatus : 'pending'; }
+        r.cls = 'cashless';
+      }
+      var ov = data.amounts && data.amounts[r.id];
+      r.override = ov && ov.amount != null && ov.amount !== '' ? Number(ov.amount) : null;
+      r.mark = data.marks && data.marks[r.id] || null;
     });
     return { rows: rows, insPatients: insPatients };
   }
@@ -421,7 +439,7 @@
         mm.iol[nm] = (mm.iol[nm] || 0) + 1;
         if (io) {
           mm.iolCount++; var tier = iolTier(io.type, io.name); mm.iolTier[tier] = (mm.iolTier[tier] || 0) + 1;
-          var val = r.paid + r.claim;
+          var val = caseValue(r);
           if (val >= 5000) { var tp = tierPay[tier] || (tierPay[tier] = { n: 0, amt: 0 }); tp.n++; tp.amt += val; }
         }
       }
@@ -489,6 +507,12 @@
       if (!passDept(dk) || !passCentre(centreKey(p.centre))) return;
       claimsOut.push({ bmhId: p.bmhId, patient: p.patient, insurer: p.ins || p.mode, for: p.procedure || p.for, day: dayOf(p.date), amount: amt, patientDue: Number(p.patientDue || 0) });
     });
+    recon.rows.forEach(function (r) {
+      if (!r.echs || r.claimStatus === 'received' || r.cancelled || r.future || !(r.done)) return;
+      if (r.claimFromRequest) return;
+      if (!passDept(r.dept) || !passCentre(r.centre)) return;
+      claimsOut.push({ bmhId: r.bmhId, patient: r.patient, insurer: r.insurer + ' (no claim entered yet)', for: r.proc, day: r.day, amount: r.override != null ? r.override : ECHS_CATARACT, patientDue: 0 });
+    });
     claimsOut.sort(function (a, b) { return String(a.day).localeCompare(String(b.day)); });
     return { months: months, M: M, conv: conv, cohort: cohort, opt: opt, today: today, recon: reconRows, claimsOut: claimsOut, openPipeline: openPipeline,
       weekday: weekday.map(function (n, i) { return weekdayDays[i].size ? n / weekdayDays[i].size : 0; }), tierPay: tierPay, depts: depts, centres: centres, streams: streams };
@@ -504,8 +528,8 @@
     var add = function (pri, title, finding, action, impact) { items.push({ pri: pri, title: title, finding: finding, action: action, impact: impact || 0 }); };
     var surgRevAll = sumBy(res, function (x) { return x.rev.surgery; }, full);
     var surgCnt = sumBy(res, function (x) { return x.surg; }, full);
-    var paidRows = res.recon.filter(function (r) { return r.paid + r.claim >= 5000 && r.group === 'Cataract (IOL)'; });
-    var vals = paidRows.map(function (r) { return r.paid + r.claim; }).sort(function (x, y) { return x - y; });
+    var paidRows = res.recon.filter(function (r) { return caseValue(r) >= 5000 && r.group === 'Cataract (IOL)' && !r.echs; });
+    var vals = paidRows.map(function (r) { return caseValue(r); }).sort(function (x, y) { return x - y; });
     var avgCataract = vals.length ? vals[Math.floor(vals.length / 2)] : 18000;
 
     // 1. OT entries paid but not marked completed
@@ -771,13 +795,21 @@
       h += section('otbills', '🧾 OT entries vs bills & ECHS / cashless claims',
         table(['What was found for the same patient', 'OT marked Completed', 'OT still pending', 'Total'], rowsC, { boldLast: true })
         + '<div style="margin:10px 0 6px">' + fbtn('attention', 'Needs attention') + fbtn('pendpaid', 'Pending but paid / claimed') + fbtn('donenobill', 'Completed, no bill') + fbtn('cashless', 'ECHS / TPA') + fbtn('pendnone', 'Pending, no bill') + fbtn('all', 'All') + '</div>'
-        + (shown.length ? table(['Date', 'Patient', 'Procedure', 'OT status', 'Found', 'Paid', 'Claim', 'Details'], shown.map(function (r) {
-          return [fmtDay(r.day), ptLink(r.bmhId, r.patient), esc(r.proc).slice(0, 60), r.done ? '<span style="color:#1a8c3c;font-weight:700">Completed</span>' : '<span style="color:#b45309;font-weight:700">' + esc(r.status) + '</span>',
-            '<span style="color:' + CLS[r.cls][1] + ';font-weight:700">' + CLS[r.cls][0] + '</span>', r.paid ? money(r.paid) : '–', r.claim ? money(r.claim) : (r.cls === 'ins-noclaim' ? '—' : '–'),
+        + (shown.length ? table(['Date', 'Patient', 'Procedure', 'OT status', 'Found', 'Paid', 'Claim', 'Case amount', 'Action', 'Details'], shown.map(function (r) {
+          var sid = String(r.id || '').replace(/[^A-Za-z0-9_-]/g, '');
+          var status = r.done ? '<span style="color:#1a8c3c;font-weight:700">Completed</span>' + (r.c.completedVia === 'practice-growth' ? '<div style="font-size:9.5px;color:var(--g1)">marked here</div>' : '') : '<span style="color:#b45309;font-weight:700">' + esc(r.status) + '</span>';
+          var action = !sid ? '' : !r.done
+            ? '<button type="button" class="btn btn-sm" id="pg-mk-' + sid + '" style="background:#1a8c3c;color:#fff;border:0;white-space:nowrap" onclick="bmhPracticeGrowth.markDone(\'' + sid + '\')">✓ Mark OT completed</button>'
+            : (r.c.completedVia === 'practice-growth' && r.mark ? '<button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="bmhPracticeGrowth.undoDone(\'' + sid + '\')">↶ Undo</button>' : '');
+          var amtCell = '<span id="pg-amt-' + sid + '">' + (r.override != null ? '<b>' + money(r.override) + '</b> <span style="font-size:9.5px;color:#6b3fa0">edited</span>' : (caseValue(r) ? money(caseValue(r)) : '–'))
+            + (sid ? ' <a href="javascript:void(0)" title="Correct the amount for this surgery" onclick="bmhPracticeGrowth.editAmount(\'' + sid + '\')">✏️</a>' : '') + '</span>';
+          return [fmtDay(r.day), ptLink(r.bmhId, r.patient), esc(r.proc).slice(0, 60), status,
+            '<span style="color:' + CLS[r.cls][1] + ';font-weight:700">' + CLS[r.cls][0] + '</span>', r.paid ? money(r.paid) : '–', r.claim ? money(r.claim) + (r.echs && !r.claimFromRequest ? '<div style="font-size:9.5px;color:var(--g1)">ECHS rate</div>' : '') : (r.cls === 'ins-noclaim' ? '—' : '–'),
+            amtCell, action,
             esc([r.insurer ? r.insurer + (r.claimStatus ? ' (' + r.claimStatus + ')' : '') : '', r.unpaidBill ? 'Unpaid bill ' + money(r.unpaidBill) : '', r.paidItems.join('; ')].filter(Boolean).join(' · ')).slice(0, 160)];
         }), { leftCols: 5, wrap: true }) : '<div style="font-size:12px;color:var(--g1);padding:6px">Nothing in this view.</div>')
         + (list.length > shown.length ? '<div style="font-size:11px;color:var(--g1);margin-top:4px">Showing the latest 300 of ' + num(list.length) + '.</div>' : ''),
-        'Each OT entry dated before today is matched to the same patient\'s surgery payments (cash/UPI/card, including advances), ECHS/TPA/cashless claims and unpaid bills, from up to 60 days before to 90 days after the OT date; each payment goes to the nearest OT entry only. Click a name to open the patient file.');
+        'Each OT entry dated before today is matched to the same patient\'s surgery payments (cash/UPI/card, including advances), ECHS/TPA/cashless claims and unpaid bills, from up to 60 days before to 90 days after the OT date; each payment goes to the nearest OT entry only. ECHS/CGHS cataracts are taken at ₹14,500 each. Click a name to open the patient file. "✓ Mark OT completed" changes only that OT entry\'s status (no stock deduction, no follow-up booking) and can be undone here; "✏️" stores a corrected case amount for this report only — bills are not touched.');
       if (res.claimsOut.length) {
         var ctot = res.claimsOut.reduce(function (s, c) { return s + c.amount; }, 0);
         h += section('otbills', '⏳ ECHS / TPA / cashless claims not yet received — ' + money(ctot), table(['Date', 'Patient', 'Insurer', 'For', 'Claim due', 'Patient due'], res.claimsOut.map(function (c) {
@@ -881,7 +913,7 @@
         + box('count', 'paid', 'Also pending OT entries with a surgery payment', !!p.countPaid) + box('count', 'cashless', 'Also pending OT entries with an ECHS / TPA claim', !!p.countCashless))
       + row('Show sections', SECTIONS.map(function (s) { return box('sec', s[0], s[1], has(p.sections, s[0], true)); }).join('')
         + '<span style="font-size:11px;white-space:nowrap"><a href="javascript:void(0)" onclick="bmhPracticeGrowth.allSections(true)">all</a> · <a href="javascript:void(0)" onclick="bmhPracticeGrowth.allSections(false)">none</a></span>')
-      + '<div style="font-size:11px;color:var(--g1);margin-top:4px">Visible only on your login. Ticks apply instantly and are remembered on this computer. Reading only — nothing in the software is changed.</div></div>';
+      + '<div style="font-size:11px;color:var(--g1);margin-top:4px">Visible only on your login, behind your PIN. Ticks apply instantly and are remembered on this computer. Nothing is changed unless you press ✓ Mark OT completed, ↶ Undo or ✏️ Save.</div></div>';
   }
   function readOpts() {
     var f = document.getElementById('rep-growth-from'), t = document.getElementById('rep-growth-to');
@@ -897,17 +929,19 @@
   }
   function draw() {
     var out = document.getElementById('rep-growth-result');
-    if (!out || !G.data) return;
+    if (!out || !G.data || !isUnlocked()) return;
     var t0 = Date.now();
     var res = compute(G.data, readOpts());
     G.last = res;
     var html = render(res), cut = html.indexOf('<!--PG-HERO-END-->');
     var heroEl = document.getElementById('rep-growth-hero');
     if (heroEl && cut > 0) { heroEl.innerHTML = html.slice(0, cut); html = html.slice(cut); }
-    out.innerHTML = html + '<div style="font-size:10.5px;color:var(--g3);text-align:right">Data read at ' + G.data.at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ' · worked out in ' + (Date.now() - t0) + ' ms · read-only</div>';
+    out.innerHTML = html + '<div style="font-size:10.5px;color:var(--g3);text-align:right">Data read at ' + G.data.at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ' · worked out in ' + (Date.now() - t0) + ' ms</div>';
+    updateLockBar();
   }
   function generate(force) {
     if (!allowed()) return;
+    if (!isUnlocked()) { lockNow(); return; }
     var out = document.getElementById('rep-growth-result');
     if (!out) return;
     out.innerHTML = '<div style="text-align:center;padding:30px;color:var(--g1);font-size:13px">⏳ Reading records… <span id="rep-growth-prog"></span></div>';
@@ -922,6 +956,175 @@
     if (f) f.value = from; if (t) t.value = cur;
     refresh();
   }
+
+  // ── actions from the report (only these write, and only when you press them) ──
+  function who() { var u = window.CURRENT_USER || {}; return String(u.name || u.username || 'Admin'); }
+  function toast(m, t) { try { showToast(m, t || 'i'); } catch (e) {} }
+  function dbRef(path) { if (!window.FBDB || typeof window.FBDB.ref !== 'function') throw new Error('Not connected to the database'); return window.FBDB.ref(path); }
+  function findRow(id) { return G.recon && G.recon.rows.filter(function (r) { return String(r.id) === String(id); })[0]; }
+  function syncLocalOt(id, fields) {
+    try {
+      var list = (typeof OT_CASES !== 'undefined' && Array.isArray(OT_CASES)) ? OT_CASES : null;
+      var c = list && list.filter(function (x) { return String(x.id) === String(id); })[0];
+      if (c) Object.keys(fields).forEach(function (k) { if (fields[k] === null) delete c[k]; else c[k] = fields[k]; });
+    } catch (e) {}
+  }
+  function rebuild() { G.recon = reconcile(G.data); draw(); }
+  function markDone(id) {
+    if (!allowed() || !isUnlocked()) { lockNow(); return; }
+    var r = findRow(id); if (!r || r.done) return;
+    var btn = document.getElementById('pg-mk-' + id);
+    if (btn && btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1'; btn.textContent = 'Tap again to confirm'; btn.style.background = '#c0392b';
+      setTimeout(function () { if (btn && btn.isConnected) { btn.dataset.armed = ''; btn.textContent = '✓ Mark OT completed'; btn.style.background = '#1a8c3c'; } }, 4000);
+      return;
+    }
+    var now = new Date().toISOString();
+    var setCompletedAt = !r.c.completedAt;
+    var fields = { status: 'completed', lastUpdated: now, completedVia: 'practice-growth', completedBy: who(), completedMarkedAt: now };
+    if (setCompletedAt) fields.completedAt = r.day + 'T12:00:00+05:30';
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var prev = String(r.c.status || 'pending');
+    var mark = { prevStatus: prev, setCompletedAt: setCompletedAt, otDate: r.day, bmhId: r.bmhId, patient: r.patient, by: who(), at: now };
+    try {
+      dbRef('practiceGrowth/otMarks/' + id).set(mark).then(function () {
+        return dbRef('otCases/' + id).update(fields);
+      }).then(function () {
+        Object.assign(r.c, fields); syncLocalOt(id, fields);
+        G.data.marks[id] = mark;
+        toast((r.patient || 'Patient') + ' — OT marked completed ✓', 's');
+        rebuild();
+      }).catch(function (e) { toast('Could not save: ' + (e && e.message || 'error'), 'e'); if (btn) { btn.disabled = false; btn.textContent = '✓ Mark OT completed'; } });
+    } catch (e) { toast(e.message, 'e'); }
+  }
+  function undoDone(id) {
+    if (!allowed() || !isUnlocked()) { lockNow(); return; }
+    var r = findRow(id), m = G.data && G.data.marks[id];
+    if (!r || !m || r.c.completedVia !== 'practice-growth') return;
+    var prev = m.prevStatus && m.prevStatus !== 'completed' ? m.prevStatus : 'pending';
+    var fields = { status: prev, lastUpdated: new Date().toISOString(), completedVia: null, completedBy: null, completedMarkedAt: null };
+    if (m.setCompletedAt) fields.completedAt = null;
+    try {
+      dbRef('otCases/' + id).update(fields).then(function () { return dbRef('practiceGrowth/otMarks/' + id).remove(); }).then(function () {
+        Object.keys(fields).forEach(function (k) { if (fields[k] === null) delete r.c[k]; else r.c[k] = fields[k]; });
+        syncLocalOt(id, fields);
+        delete G.data.marks[id];
+        toast('Undone — OT entry is back to ' + prev, 's');
+        rebuild();
+      }).catch(function (e) { toast('Could not undo: ' + (e && e.message || 'error'), 'e'); });
+    } catch (e) { toast(e.message, 'e'); }
+  }
+  function editAmount(id) {
+    if (!allowed() || !isUnlocked()) { lockNow(); return; }
+    var r = findRow(id), el = document.getElementById('pg-amt-' + id);
+    if (!r || !el) return;
+    var curV = r.override != null ? r.override : caseValue(r);
+    el.innerHTML = '<input type="number" min="0" step="100" id="pg-amt-in-' + id + '" value="' + Math.round(curV || 0) + '" style="width:90px;padding:2px 4px"> '
+      + '<button type="button" class="btn btn-gold btn-xs" onclick="bmhPracticeGrowth.saveAmount(\'' + id + '\')">Save</button> '
+      + (r.override != null ? '<button type="button" class="btn btn-outline btn-xs" onclick="bmhPracticeGrowth.saveAmount(\'' + id + '\',true)">Use found amount</button> ' : '')
+      + '<button type="button" class="btn btn-outline btn-xs" onclick="bmhPracticeGrowth.refresh()">✕</button>';
+    var inp = document.getElementById('pg-amt-in-' + id); if (inp) { inp.focus(); inp.select(); inp.onkeydown = function (e) { if (e.key === 'Enter') saveAmount(id); }; }
+  }
+  function saveAmount(id, clear) {
+    if (!allowed() || !isUnlocked()) { lockNow(); return; }
+    var inp = document.getElementById('pg-amt-in-' + id);
+    var v = clear ? null : Math.round(Number(inp && inp.value));
+    if (!clear && !(v >= 0)) { toast('Enter an amount', 'w'); return; }
+    try {
+      var ref = dbRef('practiceGrowth/amounts/' + id);
+      (clear ? ref.remove() : ref.set({ amount: v, by: who(), at: new Date().toISOString() })).then(function () {
+        if (clear) delete G.data.amounts[id]; else G.data.amounts[id] = { amount: v };
+        toast(clear ? 'Amount reset to what was found' : 'Amount saved for this report ✓', 's');
+        rebuild();
+      }).catch(function (e) { toast('Could not save: ' + (e && e.message || 'error'), 'e'); });
+    } catch (e) { toast(e.message, 'e'); }
+  }
+
+  // ── PIN lock ──────────────────────────────────────────────────────────────
+  var UNLOCK_MS = 15 * 60 * 1000;
+  var PIN_PATH = 'practiceGrowth/pin';
+  function isUnlocked() { return G.unlockedUntil && Date.now() < G.unlockedUntil; }
+  function hex(buf) { return [].map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function derive(pin, saltHex, iter) {
+    var enc = new TextEncoder();
+    var salt = new Uint8Array(saltHex.match(/../g).map(function (h) { return parseInt(h, 16); }));
+    return crypto.subtle.importKey('raw', enc.encode(String(pin)), 'PBKDF2', false, ['deriveBits']).then(function (key) {
+      return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' }, key, 256);
+    }).then(hex);
+  }
+  function readPin() { return getJson('/' + PIN_PATH + '.json', 15000); }
+  function lockHtml(mode, msg) {
+    var inp = function (id, ph) { return '<input type="password" inputmode="numeric" autocomplete="off" maxlength="8" id="' + id + '" placeholder="' + ph + '" style="font-size:20px;letter-spacing:6px;text-align:center;width:180px;padding:8px;border-radius:10px;border:2px solid #6b3fa0;margin:4px">'; };
+    var body = mode === 'set'
+      ? '<div style="font-size:13px;margin-bottom:8px">Choose a PIN of 4 to 8 digits for Practice Growth.</div>' + inp('pg-pin1', 'New PIN') + inp('pg-pin2', 'Repeat PIN')
+        + '<div><button type="button" class="btn btn-gold" style="margin-top:8px;background:linear-gradient(135deg,#ff8a00,#e52e71);color:#fff;border:0" onclick="bmhPracticeGrowth.setPin()">Save PIN</button>'
+        + (G.changingPin ? ' <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px" onclick="bmhPracticeGrowth.cancelChange()">Cancel</button>' : '') + '</div>'
+      : '<div style="font-size:13px;margin-bottom:8px">Enter your Practice Growth PIN.</div>' + inp('pg-pin', 'PIN')
+        + '<div><button type="button" class="btn btn-gold" style="margin-top:8px;background:linear-gradient(135deg,#ff8a00,#e52e71);color:#fff;border:0" onclick="bmhPracticeGrowth.unlock()">🔓 Unlock</button></div>';
+    return '<div style="max-width:420px;margin:30px auto;text-align:center;background:linear-gradient(135deg,#1A3C6E 0%,#6b3fa0 55%,#e52e71 100%);color:#fff;border-radius:18px;padding:22px;box-shadow:0 8px 24px rgba(107,63,160,.3)">'
+      + '<div style="font-size:30px">🔒</div><div style="font-size:18px;font-weight:900;margin-bottom:6px">Practice Growth</div>'
+      + '<div style="background:#fff;color:#111;border-radius:12px;padding:14px">' + body + '<div id="pg-pin-msg" style="font-size:12px;color:#c0392b;margin-top:6px;min-height:16px">' + esc(msg || '') + '</div></div>'
+      + '<div style="font-size:11px;opacity:.85;margin-top:8px">Stays open for 15 minutes after unlocking.</div></div>';
+  }
+  function showLock(msg) {
+    var lock = document.getElementById('rep-growth-lock'), main = document.getElementById('rep-growth-main');
+    if (!lock || !main) return;
+    main.style.display = 'none';
+    var hero = document.getElementById('rep-growth-hero'), res = document.getElementById('rep-growth-result');
+    if (hero && G.heroIdle) hero.innerHTML = G.heroIdle;
+    if (res) res.innerHTML = '';
+    lock.style.display = '';
+    lock.innerHTML = '<div style="text-align:center;padding:30px;color:var(--g1)">Checking…</div>';
+    readPin().then(function (pin) {
+      G.pinRec = pin && pin.hash ? pin : null;
+      lock.innerHTML = lockHtml(G.pinRec && !G.changingPin ? 'enter' : 'set', msg);
+      var f = document.getElementById(G.pinRec && !G.changingPin ? 'pg-pin' : 'pg-pin1'); if (f) f.focus();
+      [].slice.call(lock.querySelectorAll('input')).forEach(function (i) { i.onkeydown = function (e) { if (e.key === 'Enter') { if (G.pinRec && !G.changingPin) unlock(); else if (i.id === 'pg-pin1') document.getElementById('pg-pin2').focus(); else setPin(); } }; });
+    }).catch(function () { lock.innerHTML = '<div style="text-align:center;padding:30px;color:#c0392b">Could not reach the database. <button class="btn btn-outline btn-sm" onclick="bmhPracticeGrowth.opened()">Retry</button></div>'; });
+  }
+  function showMain() {
+    var lock = document.getElementById('rep-growth-lock'), main = document.getElementById('rep-growth-main');
+    if (lock) { lock.style.display = 'none'; lock.innerHTML = ''; }
+    if (main) main.style.display = '';
+    updateLockBar();
+  }
+  function updateLockBar() {
+    var bar = document.getElementById('rep-growth-lockbar');
+    if (!bar) return;
+    var t = new Date(G.unlockedUntil || 0);
+    bar.innerHTML = '🔓 Unlocked until ' + t.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      + ' · <a href="javascript:void(0)" onclick="bmhPracticeGrowth.lock()">🔒 Lock now</a> · <a href="javascript:void(0)" onclick="bmhPracticeGrowth.changePin()">Change PIN</a>';
+  }
+  function pinMsg(m) { var el = document.getElementById('pg-pin-msg'); if (el) el.textContent = m; }
+  function unlock() {
+    if (G.waitUntil && Date.now() < G.waitUntil) { pinMsg('Too many tries — wait ' + Math.ceil((G.waitUntil - Date.now()) / 1000) + ' s'); return; }
+    var v = (document.getElementById('pg-pin') || {}).value || '';
+    if (!G.pinRec) { showLock(); return; }
+    derive(v, G.pinRec.salt, Number(G.pinRec.iter) || 150000).then(function (h) {
+      if (h === G.pinRec.hash) { G.tries = 0; G.unlockedUntil = Date.now() + UNLOCK_MS; showMain(); }
+      else { G.tries = (G.tries || 0) + 1; if (G.tries >= 5) { G.waitUntil = Date.now() + 60000; G.tries = 0; } pinMsg('Wrong PIN'); var f = document.getElementById('pg-pin'); if (f) { f.value = ''; f.focus(); } }
+    }).catch(function () { pinMsg('This browser cannot check the PIN'); });
+  }
+  function setPin() {
+    var a = (document.getElementById('pg-pin1') || {}).value || '', b = (document.getElementById('pg-pin2') || {}).value || '';
+    if (!/^\d{4,8}$/.test(a)) { pinMsg('Use 4 to 8 digits'); return; }
+    if (a !== b) { pinMsg('The two PINs do not match'); return; }
+    if (G.pinRec && !G.changingPin) { pinMsg('A PIN is already set'); return; }
+    var salt = hex(crypto.getRandomValues(new Uint8Array(16))), iter = 150000;
+    derive(a, salt, iter).then(function (h) {
+      return dbRef(PIN_PATH).set({ salt: salt, hash: h, iter: iter, setAt: new Date().toISOString(), setBy: who() });
+    }).then(function () { G.changingPin = false; G.unlockedUntil = Date.now() + UNLOCK_MS; toast('PIN saved ✓', 's'); showMain(); })
+      .catch(function (e) { pinMsg('Could not save the PIN: ' + (e && e.message || 'error')); });
+  }
+  function lockNow() { G.unlockedUntil = 0; G.changingPin = false; showLock(); }
+  function changePin() { if (!isUnlocked()) { lockNow(); return; } G.changingPin = true; showLock(); }
+  function checkExpiry() {
+    var tab = document.getElementById('rep-growth');
+    if (!tab) return;
+    var main = document.getElementById('rep-growth-main');
+    if (main && main.style.display !== 'none' && !isUnlocked()) lockNow();
+  }
+  function opened() { if (isUnlocked()) showMain(); else lockNow(); }
 
   // ── tab wiring ────────────────────────────────────────────────────────────
   function ensureStyle() {
@@ -955,20 +1158,22 @@
     var content = document.createElement('div');
     content.className = 'tab-content';
     content.id = 'rep-growth';
-    content.innerHTML = '<div id="rep-growth-hero"><div style="background:linear-gradient(135deg,#1A3C6E 0%,#6b3fa0 55%,#e52e71 100%);color:#fff;border-radius:16px;padding:18px;margin-bottom:12px"><div style="font-size:18px;font-weight:900">🚀 Practice Growth</div><div style="font-size:12px;opacity:.9;margin-top:4px">Revenue, OPD, new patients, surgeries, IOLs, conversion and a growth plan — tick the options below and press Show report.</div></div></div>'
-      + optionsHtml() + '<div id="rep-growth-result"><div style="text-align:center;padding:30px;color:var(--g1);font-size:13px">Press <b>🚀 Show report</b> to read the figures (takes a few seconds the first time).</div></div>';
+    G.heroIdle = '<div style="background:linear-gradient(135deg,#1A3C6E 0%,#6b3fa0 55%,#e52e71 100%);color:#fff;border-radius:16px;padding:18px;margin-bottom:12px"><div style="font-size:18px;font-weight:900">🚀 Practice Growth</div><div style="font-size:12px;opacity:.9;margin-top:4px">Revenue, OPD, new patients, surgeries, IOLs, conversion and a growth plan — tick the options below and press Show report.</div></div>';
+    content.innerHTML = '<div id="rep-growth-lock"></div><div id="rep-growth-main" style="display:none"><div id="rep-growth-lockbar" style="text-align:right;font-size:11.5px;margin-bottom:6px"></div><div id="rep-growth-hero"><div style="background:linear-gradient(135deg,#1A3C6E 0%,#6b3fa0 55%,#e52e71 100%);color:#fff;border-radius:16px;padding:18px;margin-bottom:12px"><div style="font-size:18px;font-weight:900">🚀 Practice Growth</div><div style="font-size:12px;opacity:.9;margin-top:4px">Revenue, OPD, new patients, surgeries, IOLs, conversion and a growth plan — tick the options below and press Show report.</div></div></div>'
+      + optionsHtml() + '<div id="rep-growth-result"><div style="text-align:center;padding:30px;color:var(--g1);font-size:13px">Press <b>🚀 Show report</b> to read the figures (takes a few seconds the first time).</div></div></div>';
     anyContent.parentNode.appendChild(content);
   }
 
   window.bmhPracticeGrowth = {
     generate: generate, refresh: refresh, preset: preset, print: printReport,
-    opened: function () { if (G.data && G.last) return; },
+    opened: opened, lock: lockNow, unlock: unlock, setPin: setPin, changePin: changePin, cancelChange: function () { G.changingPin = false; if (isUnlocked()) showMain(); else lockNow(); },
+    markDone: markDone, undoDone: undoDone, editAmount: editAmount, saveAmount: saveAmount,
     csv: function () { if (G.last) csv(G.last); else { try { showToast('Show the report first', 'i'); } catch (e) {} } },
     otFilter: function (k) { G.otFilter = k; draw(); },
     allSections: function (v) { [].slice.call(document.querySelectorAll('#rep-growth input[data-pg="sec"]')).forEach(function (i) { i.checked = v; }); refresh(); },
     compute: compute, load: load, txnLines: txnLines, iolName: iolName, reconcile: reconcile, plan: plan
   };
-  function tick() { try { ensureTab(); } catch (e) {} }
+  function tick() { try { ensureTab(); checkExpiry(); } catch (e) {} }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tick); else tick();
   setInterval(tick, 3000);
 })();
