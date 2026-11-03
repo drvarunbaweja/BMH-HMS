@@ -1101,7 +1101,7 @@
     var v = (document.getElementById('pg-pin') || {}).value || '';
     if (!G.pinRec) { showLock(); return; }
     derive(v, G.pinRec.salt, Number(G.pinRec.iter) || 150000).then(function (h) {
-      if (h === G.pinRec.hash) { G.tries = 0; G.unlockedUntil = Date.now() + UNLOCK_MS; showMain(); }
+      if (h === G.pinRec.hash) { G.tries = 0; G.unlockedUntil = Date.now() + UNLOCK_MS; showMain(); if (G.afterUnlock) { var fn = G.afterUnlock; G.afterUnlock = null; fn(); } }
       else { G.tries = (G.tries || 0) + 1; if (G.tries >= 5) { G.waitUntil = Date.now() + 60000; G.tries = 0; } pinMsg('Wrong PIN'); var f = document.getElementById('pg-pin'); if (f) { f.value = ''; f.focus(); } }
     }).catch(function () { pinMsg('This browser cannot check the PIN'); });
   }
@@ -1125,6 +1125,250 @@
     if (main && main.style.display !== 'none' && !isUnlocked()) lockNow();
   }
   function opened() { if (isUnlocked()) showMain(); else lockNow(); }
+
+  // ── Reports → Surgery / Procedure → "💰 Total Eye" (PIN protected, read-only) ──
+  var EYE = { xrefCache: {}, busy: false };
+  function median(arr) { var a = arr.filter(function (x) { return x > 0; }).sort(function (x, y) { return x - y; }); return a.length ? a[Math.floor(a.length / 2)] : 0; }
+  function eyeFee(centre, isNew, fallback) {
+    try {
+      var v = resolveConsultationChargeAmountForVisit({ centre: centre || 'RPR', dept: 'ophtho', purpose: isNew ? 'New Consultation' : 'Follow-up' });
+      if (v > 0) return v;
+    } catch (e) {}
+    return fallback || 0;
+  }
+  // Cross-referrals live on each patient record, so they are read per patient and kept in this
+  // browser (IndexedDB) — only patients seen again since the last check are read the next time.
+  function xrefDb() {
+    if (EYE._db) return EYE._db;
+    EYE._db = new Promise(function (resolve) {
+      try { var r = indexedDB.open('bmh-practice-growth', 1); r.onupgradeneeded = function () { r.result.createObjectStore('xref'); }; r.onsuccess = function () { resolve(r.result); }; r.onerror = function () { resolve(null); }; } catch (e) { resolve(null); }
+    });
+    return EYE._db;
+  }
+  function xrefLoadAll() {
+    return xrefDb().then(function (db) {
+      if (!db) return {};
+      return new Promise(function (res) {
+        var out = {};
+        try {
+          var cur = db.transaction('xref').objectStore('xref').openCursor();
+          cur.onsuccess = function () { var c = cur.result; if (c) { out[c.key] = c.value; c.continue(); } else res(out); };
+          cur.onerror = function () { res(out); };
+        } catch (e) { res(out); }
+      });
+    });
+  }
+  function xrefSave(id, val) { return xrefDb().then(function (db) { if (!db) return; try { db.transaction('xref', 'readwrite').objectStore('xref').put(val, id); } catch (e) {} }); }
+  function fetchCrossRefs(ids, lastSeen, onStep) {
+    return (EYE.loadedIdb ? Promise.resolve({}) : xrefLoadAll()).then(function (stored) {
+      Object.keys(stored).forEach(function (id) { if (!(id in EYE.xrefCache)) EYE.xrefCache[id] = stored[id]; });
+      EYE.loadedIdb = true;
+      var todo = ids.filter(function (id) { var c = EYE.xrefCache[id]; return !c || !c.at || (lastSeen[id] && lastSeen[id] >= String(c.at).slice(0, 10)); });
+      var i = 0, done = 0;
+      function worker() {
+        if (i >= todo.length) return Promise.resolve();
+        var id = todo[i++];
+        return getJson('/patients/' + encodeURIComponent(id) + '/crossRefs.json', 10000).then(function (v) {
+          var rec = { at: new Date().toISOString(), refs: (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean).map(function (x) { return { toDept: x.toDept || '', fromDept: x.fromDept || '', createdAt: x.createdAt || x.at || '', seenAt: x.seenAt || '', fee: x.fee, paid: x.paid }; }) };
+          EYE.xrefCache[id] = rec; xrefSave(id, rec);
+        }).catch(function () {}).then(function () { done++; if (onStep && done % 50 === 0) onStep(done + ' / ' + todo.length + ' patients checked for referrals (first time only)'); return worker(); });
+      }
+      var n = []; for (var k = 0; k < 16; k++) n.push(worker());
+      return Promise.all(n);
+    });
+  }
+  function eyeRange() {
+    var f = (document.getElementById('rep-surg-from') || {}).value || '', t = (document.getElementById('rep-surg-to') || {}).value || '';
+    var cur = todayKey_();
+    var from = f || ((addMonth(cur.slice(0, 7), -11) < '2026-04' ? '2026-04' : addMonth(cur.slice(0, 7), -11)) + '-01');
+    var to = t || cur;
+    if (from > to) { var x = from; from = to; to = x; }
+    return { from: from, to: to };
+  }
+  function computeEyeTotal(data, rg, onStep) {
+    var inR = function (d) { return d && d >= rg.from && d <= rg.to; };
+    var months = monthsBetween(rg.from.slice(0, 7), rg.to.slice(0, 7));
+    var M = {};
+    months.forEach(function (m) { M[m] = { newV: 0, fu: 0, opdPot: 0, opdPaid: 0, refN: 0, refPaidN: 0, refPot: 0, refPaid: 0, refOther: 0, refFree: 0, refSeen: 0, otN: 0, otDone: 0, otPot: 0, otPaid: 0, otEst: 0 }; });
+    // OPD visits (eye) — potential at the standard fee, collected as received
+    var paidAmts = { 'RPR|1': [], 'RPR|0': [], 'CHD|1': [], 'CHD|0': [] };
+    var visits = {};
+    data.txns.forEach(function (t) {
+      var dk = deptKey(t.dept) || 'ophtho';
+      if (dk !== 'ophtho') return;
+      var svc = String(t.service || ''), day = String(t._day || dayOf(t.date || t.createdAt));
+      var lines = txnLines(t);
+      if (!lines.length || !lines.every(function (l) { return l.stream === 'opd'; }) || /cross[\s-]*ref/i.test(svc) || t.collected === false) return;
+      var ck = centreKey(t.centre) || 'RPR', isNew = /\bnew\b/i.test(svc);
+      var amt = Math.max(0, Number(t.amount || 0));
+      if (amt > 0 && paidAmts[ck + '|' + (isNew ? 1 : 0)]) paidAmts[ck + '|' + (isNew ? 1 : 0)].push(amt);
+      var vk = (t.bmhId || ('x' + t.id)) + '|' + day;
+      var v = visits[vk] || (visits[vk] = { day: day, centre: ck, isNew: false, paid: 0 });
+      if (isNew) v.isNew = true;
+      v.paid += amt;
+    });
+    var fees = {};
+    ['RPR', 'CHD'].forEach(function (c) { [1, 0].forEach(function (n) { fees[c + '|' + n] = eyeFee(c, !!n, median(paidAmts[c + '|' + n]) || median(paidAmts['RPR|' + n]) || 200); }); });
+    Object.keys(visits).forEach(function (k) {
+      var v = visits[k]; if (!inR(v.day)) return;
+      var mm = M[v.day.slice(0, 7)];
+      if (v.isNew) mm.newV++; else mm.fu++;
+      mm.opdPot += Math.max(fees[v.centre + '|' + (v.isNew ? 1 : 0)] || 0, v.paid);
+      mm.opdPaid += v.paid;
+    });
+    // Surgeries: every eye OT entry booked in the period (not cancelled / not a duplicate)
+    var recon = G.recon || reconcile(data);
+    var eyeRows = recon.rows.filter(function (r) { return r.dept === 'ophtho' && !r.cancelled && r.cls !== 'duplicate'; });
+    var known = eyeRows.filter(function (r) { return r.override != null || r.paid + r.claim >= 5000; });
+    var byIol = {}, byTier = {}, byGroup = {};
+    known.forEach(function (r) {
+      var v = caseValue(r);
+      var io = iolName(r.c, data.catalog);
+      if (io) { (byIol[io.name] = byIol[io.name] || []).push(v); var tr = iolTier(io.type, io.name); (byTier[tr] = byTier[tr] || []).push(v); }
+      (byGroup[r.group] = byGroup[r.group] || []).push(v);
+    });
+    var allMed = median(known.map(caseValue)) || 18000;
+    var surgRows = [];
+    eyeRows.forEach(function (r) {
+      if (!inR(r.day)) return;
+      var mm = M[r.day.slice(0, 7)];
+      var val, est = false;
+      if (r.override != null) val = r.override;
+      else if (r.paid + r.claim >= 5000) val = r.paid + r.claim;
+      else if (r.echs && r.group === 'Cataract (IOL)') val = ECHS_CATARACT;
+      else {
+        est = true;
+        var io = iolName(r.c, data.catalog);
+        val = (io && median(byIol[io.name] || [])) || (io && median(byTier[iolTier(io.type, io.name)] || [])) || median(byGroup[r.group] || []) || allMed;
+      }
+      mm.otN++; if (r.done) mm.otDone++;
+      mm.otPot += val; mm.otPaid += r.paid + (r.claimStatus === 'received' ? r.claim : 0);
+      if (est) mm.otEst++;
+      surgRows.push({ r: r, val: val, est: est });
+    });
+    // Referrals to the eye department (psych and others), from the patients' cross-referral records
+    var ids = {}, lastSeen = {};
+    data.txns.forEach(function (t) { var d = String(t._day || ''); if (t.bmhId && inR(d) && (deptKey(t.dept) === 'psych' || /cross[\s-]*ref.*varun/i.test(String(t.service || '')))) { ids[t.bmhId] = true; if (!lastSeen[t.bmhId] || d > lastSeen[t.bmhId]) lastSeen[t.bmhId] = d; } });
+    var refAmts = [];
+    data.pr.forEach(function (p) { if (p.xref && /ophtho/.test(String(p.xrefDept || '')) && p.bmhId) { ids[p.bmhId] = true; if (Number(p.amount) > 0) refAmts.push(Number(p.amount)); } });
+    var refFee = median(refAmts) || 200;
+    return fetchCrossRefs(Object.keys(ids), lastSeen, onStep).then(function () {
+      var refList = [];
+      Object.keys(ids).forEach(function (id) {
+        ((EYE.xrefCache[id] || {}).refs || []).forEach(function (x) {
+          if (!/ophtho/.test(String(x.toDept || ''))) return;
+          var d = dayOf(x.createdAt || x.at || x.seenAt);
+          if (!inR(d)) return;
+          var mm = M[d.slice(0, 7)];
+          if (String(x.fromDept || '') !== 'psych') { mm.refOther++; return; }
+          mm.refN++; mm.refPot += refFee;
+          var paidRef = x.fee === true && x.paid === true;
+          if (paidRef) { mm.refPaidN++; mm.refPaid += refFee; }
+          if (x.fee !== true) mm.refFree = (mm.refFree || 0) + 1;
+          if (x.seenAt) mm.refSeen = (mm.refSeen || 0) + 1;
+          refList.push({ bmhId: id, day: d, paid: paidRef, fee: x.fee === true, seen: !!x.seenAt });
+        });
+      });
+      return { months: months, M: M, fees: fees, refFee: refFee, surgRows: surgRows, refList: refList, rg: rg };
+    });
+  }
+  function renderEyeTotal(res) {
+    var M = res.M, months = res.months;
+    var T = months.reduce(function (s, m) { Object.keys(M[m]).forEach(function (k) { s[k] = (s[k] || 0) + M[m][k]; }); return s; }, {});
+    var tot = function (x) { return x.opdPot + x.refPot + x.otPot; }, got = function (x) { return x.opdPaid + x.refPaid + x.otPaid; };
+    var rows = months.map(function (m) {
+      var x = M[m];
+      return [monthName(m), num(x.newV + x.fu), money(x.opdPot), num(x.refN), money(x.refPot), num(x.otN) + (x.otEst ? ' <span style="font-size:9.5px;color:var(--g1)">(' + x.otEst + ' est.)</span>' : ''), money(x.otPot), '<b>' + money(tot(x)) + '</b>', money(got(x)), '<span style="color:#c0392b">' + money(tot(x) - got(x)) + '</span>'];
+    });
+    rows.push(['Total', num(T.newV + T.fu), money(T.opdPot), num(T.refN), money(T.refPot), num(T.otN), money(T.otPot), money(tot(T)), money(got(T)), money(tot(T) - got(T))]);
+    var heroBox = function (l, v, s) { return '<div style="flex:1;min-width:150px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:12px 14px"><div style="font-size:10.5px;font-weight:800;text-transform:uppercase;opacity:.9">' + l + '</div><div style="font-size:22px;font-weight:900">' + v + '</div><div style="font-size:11px;opacity:.95">' + (s || '&nbsp;') + '</div></div>'; };
+    var h = '<div style="background:linear-gradient(135deg,#1A3C6E 0%,#0e7490 60%,#22a06b 100%);color:#fff;border-radius:16px;padding:16px;margin-bottom:12px">'
+      + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><div style="font-size:17px;font-weight:900">👁️ Total Eye — value if everything were paid</div><div style="font-size:11.5px;opacity:.9">' + fmtDay(res.rg.from) + ' – ' + fmtDay(res.rg.to) + ' · both centres</div></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      + heroBox('Total Eye', money(tot(T)), 'collected ' + money(got(T)))
+      + heroBox('Eye OPD', money(T.opdPot), num(T.newV + T.fu) + ' visits · collected ' + money(T.opdPaid))
+      + heroBox('Referred from Psych', money(T.refPot), num(T.refN) + ' referrals · ' + num(T.refFree) + ' sent with no fee · ' + num(T.refPaidN) + ' paid')
+      + heroBox('OT booked (eye)', money(T.otPot), num(T.otN) + ' cases · ' + num(T.otDone) + ' marked completed')
+      + heroBox('Not yet collected', money(tot(T) - got(T)), pctTxt(got(T), tot(T)) + ' collected so far')
+      + '</div></div>';
+    h += '<div class="card" style="margin-bottom:12px"><div class="card-hd"><div class="card-title">💰 Total Eye — month by month</div></div>'
+      + table(['Month', 'Eye OPD visits', 'OPD if all paid', 'Psych → Eye referrals', 'Referrals if all paid', 'OT booked (eye)', 'Surgeries if all paid', 'Total Eye', 'Collected', 'Difference'], rows, { boldLast: true })
+      + '<div style="font-size:11px;color:var(--g1);margin-top:8px;line-height:1.5">'
+      + '<b>OPD:</b> every eye OPD visit (including no-fee ones) valued at the standard fee — New ' + money(res.fees['RPR|1']) + ' / Follow-up ' + money(res.fees['RPR|0']) + ' at Rupnagar, New ' + money(res.fees['CHD|1']) + ' / Follow-up ' + money(res.fees['CHD|0']) + ' at Chandigarh. '
+      + '<b>Referrals:</b> each Psychiatry → Eye cross-referral at ' + money(res.refFee) + ' (' + num(T.refSeen) + ' of ' + num(T.refN) + ' marked seen by Eye; referrals from other departments: ' + num(T.refOther) + ', not included). '
+      + '<b>Surgeries:</b> every eye OT entry booked in the month (completed or pending — pending ones may include patients who did not come; cancelled and duplicate entries left out), at the amount found or edited in Practice Growth; ECHS cataracts at ' + money(ECHS_CATARACT) + '; where nothing is billed yet, the usual amount for that IOL (or that type of surgery) from your own billing — shown as "est.". '
+      + '<b>Collected</b> = consultation fees received + referral fees paid + surgery payments and received claims.</div></div>';
+    var est = res.surgRows.filter(function (s) { return s.est; }).sort(function (a, b) { return String(b.r.day).localeCompare(String(a.r.day)); });
+    var bySurg = {};
+    res.surgRows.forEach(function (s) { var g = s.r.group; var o = bySurg[g] || (bySurg[g] = { n: 0, v: 0 }); o.n++; o.v += s.val; });
+    h += '<div class="card" style="margin-bottom:12px"><div class="card-hd"><div class="card-title">⚕️ Eye OT bookings by surgery</div></div>'
+      + table(['Surgery', 'Cases', 'Value if all paid', 'Average'], Object.keys(bySurg).sort(function (a, b) { return bySurg[b].v - bySurg[a].v; }).map(function (g) { return [esc(g), num(bySurg[g].n), money(bySurg[g].v), money(bySurg[g].v / bySurg[g].n)]; }))
+      + (est.length ? '<div style="font-size:11px;font-weight:800;color:var(--g1);margin-top:10px">Cases valued by estimate (nothing billed yet) — ' + num(est.length) + '</div>'
+        + table(['Date', 'Patient', 'Procedure', 'IOL', 'OT status', 'Estimated'], est.slice(0, 200).map(function (s) {
+          return [fmtDay(s.r.day), ptLink(s.r.bmhId, s.r.patient), esc(s.r.proc).slice(0, 50), esc(String(s.r.c.iolType || s.r.c.iol || '–')).slice(0, 30), s.r.done ? 'Completed' : esc(s.r.status), money(s.val)];
+        }), { leftCols: 5, wrap: true }) + (est.length > 200 ? '<div style="font-size:11px;color:var(--g1)">Showing the latest 200.</div>' : '') : '')
+      + '</div>';
+    return h;
+  }
+  function eyeTotalGenerate() {
+    var el = document.getElementById('rep-surgery-result');
+    if (!el) return;
+    if (!allowed()) { el.innerHTML = ''; return; }
+    if (!isUnlocked()) {
+      el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--g1)">Checking…</div>';
+      readPin().then(function (pin) {
+        G.pinRec = pin && pin.hash ? pin : null;
+        if (!G.pinRec) { el.innerHTML = '<div class="card" style="padding:16px;text-align:center">Set your PIN first in <b>🚀 Practice Growth</b>, then come back.</div>'; return; }
+        G.afterUnlock = eyeTotalGenerate;
+        el.innerHTML = lockHtml('enter');
+        var f = document.getElementById('pg-pin'); if (f) { f.focus(); f.onkeydown = function (e) { if (e.key === 'Enter') unlock(); }; }
+      }).catch(function () { el.innerHTML = '<div class="card" style="padding:16px;color:#c0392b">Could not reach the database.</div>'; });
+      return;
+    }
+    if (EYE.busy) return;
+    EYE.busy = true;
+    el.innerHTML = '<div class="card" style="padding:18px;text-align:center;color:var(--g1);font-size:13px">⏳ Working out Total Eye… <span id="pg-eye-prog"></span></div>';
+    var step = function (p) { var s = document.getElementById('pg-eye-prog'); if (s) s.textContent = typeof p === 'string' ? p : ''; };
+    load(step).then(function (data) { return computeEyeTotal(data, eyeRange(), step); }).then(function (res) {
+      EYE.last = res;
+      if (isUnlocked()) el.innerHTML = renderEyeTotal(res);
+    }).catch(function (e) {
+      el.innerHTML = '<div class="card" style="padding:16px;color:#c0392b">Could not work out Total Eye (' + esc(e && e.message || 'error') + ').</div>';
+    }).finally(function () { EYE.busy = false; });
+  }
+  function eyeTotalPrint(openOnly) {
+    if (!EYE.last || !isUnlocked()) { eyeTotalGenerate(); return; }
+    var w = window.open('', '_blank', openOnly ? 'width=1200,height=800' : '');
+    if (!w) { toast('Please allow pop-ups', 'w'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Total Eye</title><style>:root{--g1:#555;--g3:#999;--g4:#ccc;--g5:#e5e5e5;--g6:#f6f6f6}body{font-family:Arial,sans-serif;margin:14px;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}.card{border:1px solid #ddd;border-radius:8px;padding:10px;margin-bottom:10px}.card-title{font-weight:800;font-size:13px;margin-bottom:6px}table{font-size:10px}a{color:inherit;text-decoration:none}@page{size:A4 landscape;margin:10mm}</style></head><body><h2 style="margin:0 0 6px">Baweja Multispeciality Hospital — Total Eye</h2>' + renderEyeTotal(EYE.last) + '</body></html>');
+    w.document.close();
+    if (!openOnly) setTimeout(function () { w.focus(); w.print(); }, 400);
+  }
+  function ensureEyeOption() {
+    var sel = document.getElementById('rep-surg-source');
+    if (!sel) return;
+    var opt = sel.querySelector('option[value="eye-total"]');
+    if (!allowed()) {
+      if (opt) { if (sel.value === 'eye-total') { sel.value = 'ot'; var el = document.getElementById('rep-surgery-result'); if (el) el.innerHTML = ''; } opt.remove(); }
+      return;
+    }
+    if (!opt) { opt = document.createElement('option'); opt.value = 'eye-total'; opt.textContent = '💰 Total Eye'; sel.appendChild(opt); }
+    if (!window._bmhEyeTotalWrapped) {
+      var wrap = function (name, mine) {
+        var orig = window[name];
+        if (typeof orig !== 'function') return;
+        window[name] = function () {
+          var s = document.getElementById('rep-surg-source');
+          if (s && s.value === 'eye-total') return mine();
+          return orig.apply(this, arguments);
+        };
+      };
+      wrap('generateSurgeryReport', eyeTotalGenerate);
+      wrap('openSurgeryReportWindow', function () { eyeTotalPrint(true); });
+      wrap('printSurgeryReportCurrent', function () { eyeTotalPrint(false); });
+      window._bmhEyeTotalWrapped = true;
+    }
+  }
 
   // ── tab wiring ────────────────────────────────────────────────────────────
   function ensureStyle() {
@@ -1171,9 +1415,10 @@
     csv: function () { if (G.last) csv(G.last); else { try { showToast('Show the report first', 'i'); } catch (e) {} } },
     otFilter: function (k) { G.otFilter = k; draw(); },
     allSections: function (v) { [].slice.call(document.querySelectorAll('#rep-growth input[data-pg="sec"]')).forEach(function (i) { i.checked = v; }); refresh(); },
-    compute: compute, load: load, txnLines: txnLines, iolName: iolName, reconcile: reconcile, plan: plan
+    compute: compute, load: load, txnLines: txnLines, iolName: iolName, reconcile: reconcile, plan: plan, computeEyeTotal: computeEyeTotal
   };
-  function tick() { try { ensureTab(); checkExpiry(); } catch (e) {} }
+  function tick() { try { ensureTab(); checkExpiry(); ensureEyeOption(); checkEyeExpiry(); } catch (e) {} }
+  function checkEyeExpiry() { if (EYE.last && !isUnlocked()) { var s = document.getElementById('rep-surg-source'), el = document.getElementById('rep-surgery-result'); EYE.last = null; if (s && s.value === 'eye-total' && el) el.innerHTML = ''; } }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tick); else tick();
   setInterval(tick, 3000);
 })();
