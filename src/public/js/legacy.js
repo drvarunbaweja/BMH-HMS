@@ -38694,17 +38694,26 @@ function localDateKey(value) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
+  const memoKey = value instanceof Date ? null : (typeof value === 'number' ? 'n' + value : 's' + raw);
+  const memo = localDateKey._memo || (localDateKey._memo = new Map());
+  if (memoKey && memo.has(memoKey)) return memo.get(memoKey);
   try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
+    // One shared formatter (same settings as before) — building a new one on every call was slow.
+    const fmt = localDateKey._fmt || (localDateKey._fmt = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Kolkata',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'
-    }).formatToParts(d).reduce(function (acc, part) {
+    }));
+    const parts = fmt.formatToParts(d).reduce(function (acc, part) {
       acc[part.type] = part.value;
       return acc;
     }, {});
-    if (parts.year && parts.month && parts.day) return parts.year + '-' + parts.month + '-' + parts.day;
+    if (parts.year && parts.month && parts.day) {
+      const out = parts.year + '-' + parts.month + '-' + parts.day;
+      if (memoKey) { if (memo.size > 60000) memo.clear(); memo.set(memoKey, out); }
+      return out;
+    }
   } catch (e) {}
   const india = new Date(d.getTime() + (330 * 60 * 1000));
   return india.getUTCFullYear() + '-' + String(india.getUTCMonth() + 1).padStart(2, '0') + '-' + String(india.getUTCDate()).padStart(2, '0');
