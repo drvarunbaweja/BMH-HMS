@@ -48175,6 +48175,15 @@ function normalizeAttendanceGeofence(raw) {
   });
   return base;
 }
+// Attendance reads must never leave a punch waiting: after 5 s the phone's own copy is used,
+// and the punch is saved on the phone and sent to the server when the connection is back.
+function bmhAttendanceWithTimeout(promise, ms) {
+  return new Promise(function (resolve, reject) {
+    let done = false;
+    const t = setTimeout(function () { if (!done) { done = true; reject(new Error('Database slow - saved on phone, will sync')); } }, ms || 5000);
+    Promise.resolve(promise).then(function (v) { if (!done) { done = true; clearTimeout(t); resolve(v); } }, function (e) { if (!done) { done = true; clearTimeout(t); reject(e); } });
+  });
+}
 function loadAttendanceGeofenceConfig() {
   if (BMH_ATTENDANCE_GEOFENCE) return Promise.resolve(BMH_ATTENDANCE_GEOFENCE);
   try {
@@ -48185,7 +48194,7 @@ function loadAttendanceGeofenceConfig() {
     BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(BMH_ATTENDANCE_GEOFENCE);
     return Promise.resolve(BMH_ATTENDANCE_GEOFENCE);
   }
-  return window.FBDB.ref('settings/attendanceGeofence').once('value').then(function (snap) {
+  const fresh = bmhAttendanceWithTimeout(window.FBDB.ref('settings/attendanceGeofence').once('value'), 3000).then(function (snap) {
     BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(snap.val() || BMH_ATTENDANCE_GEOFENCE || {});
     try { localStorage.setItem('bmh_attendance_geofence', JSON.stringify(BMH_ATTENDANCE_GEOFENCE)); } catch (e) {}
     return BMH_ATTENDANCE_GEOFENCE;
@@ -48193,6 +48202,8 @@ function loadAttendanceGeofenceConfig() {
     BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(BMH_ATTENDANCE_GEOFENCE);
     return BMH_ATTENDANCE_GEOFENCE;
   });
+  // A copy saved on the phone is used straight away; the server copy refreshes it in the background.
+  return BMH_ATTENDANCE_GEOFENCE ? Promise.resolve(BMH_ATTENDANCE_GEOFENCE) : fresh;
 }
 function saveAttendanceGeofenceConfig() {
   if (!CURRENT_USER?.isAdmin) { showToast('Admin access required to change geofence', 'w'); return; }
@@ -48363,7 +48374,7 @@ function saveAttendanceRowToCloud(dateKey, userKey, row) {
     syncError: '',
     syncedAt: new Date().toISOString()
   });
-  return fbSet(getAttendancePathForDate(dateKey, userKey), synced).then(function () {
+  return bmhAttendanceWithTimeout(fbSet(getAttendancePathForDate(dateKey, userKey), synced), 15000).then(function () {
     const local = getLocalAttendanceForDate(dateKey, userKey);
     if (!local || attendanceRowTimestamp(local) <= attendanceRowTimestamp(row)) {
       setAttendanceLocalForDate(dateKey, synced, userKey);
@@ -48410,7 +48421,7 @@ function fetchAttendanceForDate(dateKey, userKey) {
   const dk = dateKey || todayKey();
   const uk = userKey || attendanceUserKey();
   if (!window.FBDB) return Promise.resolve(getLocalAttendanceForDate(dk, uk));
-  return window.FBDB.ref(getAttendancePathForDate(dk, uk)).once('value').then(function (snap) {
+  return bmhAttendanceWithTimeout(window.FBDB.ref(getAttendancePathForDate(dk, uk)).once('value'), 3000).then(function (snap) {
     const remote = snap.val();
     const local = getLocalAttendanceForDate(dk, uk);
     const row = local && (!remote || local.syncStatus === 'pending' || attendanceRowTimestamp(local) >= attendanceRowTimestamp(remote)) ? local : (remote || local);
@@ -48779,6 +48790,7 @@ function renderAttendanceRowCard(row) {
 }
 function renderAttendancePage() {
   schedulePendingAttendanceSync && schedulePendingAttendanceSync(2000);
+  try { bmhEnsureAttendanceRepairButton(); } catch (e) {}
   const card = document.getElementById('att-today-card');
   const sub = document.getElementById('att-status-sub');
   const recent = document.getElementById('att-my-recent');
@@ -48792,6 +48804,56 @@ function renderAttendancePage() {
     renderAttendanceKioskCard();
   });
 }
+function bmhIsAttendanceOnlyUser() {
+  const u = CURRENT_USER || {};
+  return !!u && !u.isAdmin && !u.canSeeAllCentres && String(u.role || '').toLowerCase() === 'staff';
+}
+function bmhEnsureAttendanceRepairButton() {
+  const card = document.getElementById('att-today-card');
+  if (!card || document.getElementById('att-repair-btn') || !bmhIsAttendanceOnlyUser()) return;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'text-align:right;margin:-4px 0 10px';
+  wrap.innerHTML = '<button type="button" id="att-repair-btn" class="btn btn-outline btn-xs" onclick="bmhRepairAttendanceApp()" title="Use this if punching stops working, instead of reinstalling">🛠 Fix app</button>';
+  card.parentNode.insertBefore(wrap, card.nextSibling);
+}
+// Clears this app's stored data on this phone (keeps the login and any punch not yet sent), then reloads.
+function bmhRepairAttendanceApp() {
+  if (!confirm('Fix the app on this phone? Your login and any punch not yet sent are kept. The app will reload.')) return;
+  try {
+    const keep = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k === 'bmh_creds' || k === 'bmh_attendance_geofence') { keep[k] = localStorage.getItem(k); continue; }
+      if (k.indexOf('bmh_attendance_') === 0) {
+        try { const row = JSON.parse(localStorage.getItem(k) || 'null'); if (row && row.syncStatus !== 'synced') keep[k] = localStorage.getItem(k); } catch (e) {}
+      }
+    }
+    localStorage.clear();
+    Object.keys(keep).forEach(function (k) { try { localStorage.setItem(k, keep[k]); } catch (e) {} });
+  } catch (e) {}
+  try { if (window.caches && caches.keys) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }); } catch (e) {}
+  setTimeout(function () { location.replace(location.pathname + '?fix=' + Date.now() + '#/attendance'); }, 300);
+}
+// When an attendance-only staff phone brings the app back after a while, reconnect to the database
+// and send any punch that was saved on the phone. Doctors, reception and admin are not affected.
+(function () {
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', function () {
+    try {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+      if (!bmhIsAttendanceOnlyUser()) return;
+      if (hiddenAt && Date.now() - hiddenAt > 2 * 60 * 1000 && window.FBDB && typeof window.FBDB.goOffline === 'function') {
+        window.FBDB.goOffline();
+        setTimeout(function () { try { window.FBDB.goOnline(); } catch (e) {} }, 300);
+      }
+      hiddenAt = 0;
+      setTimeout(function () {
+        try { schedulePendingAttendanceSync(1000); if (document.getElementById('att-today-card') && document.getElementById('att-today-card').offsetParent !== null) renderAttendancePage(); } catch (e) {}
+      }, 1500);
+    } catch (e) {}
+  });
+})();
 function renderMyRecentAttendanceLocal() {
   const rows = [];
   const prefix = 'bmh_attendance_';
