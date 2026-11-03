@@ -53834,8 +53834,16 @@ window.addEventListener('DOMContentLoaded', function() {
     });
     if (!hits.length) return null;
     hits.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+    // Advised for both eyes: done only once both eyes are done (one "both" entry, or right + left).
+    if (eye === 'Both' && !rxTestOnly(row.proc)) {
+      const both = hits.find(function (e) { return e.eye === 'Both'; });
+      if (both) return both;
+      const right = hits.find(function (e) { return e.eye === 'Right'; }), left = hits.find(function (e) { return e.eye === 'Left'; });
+      if (!(right && left)) return null;
+    }
     return hits[0];
   }
+  function rxTestOnly(name) { return !!testFam(name); }
   // ── Calls logged before today, not yet marked "Seen" (pinned on top) ──
   function unseenCallEntries(rec) {
     if (!rec || !rec.log) return [];
