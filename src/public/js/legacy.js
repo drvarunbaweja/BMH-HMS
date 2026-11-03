@@ -53828,7 +53828,7 @@ window.addEventListener('DOMContentLoaded', function() {
     const list = rxIndex.get(row.bmhId);
     if (!list || !list.length) return null;
     const earliest = row.advisedDate ? shiftDate(row.advisedDate, -2) : '';
-    const eye = row.eye || eyeOf(row.proc);
+    const eye = row.eye || (/\bboth\b|\bou\b|bilateral/i.test(String(row.proc || '')) ? 'Both' : eyeOf(row.proc));
     const hits = list.filter(function (e) {
       return rxNamesMatch(row.proc, e.proc) && eyesCompatible(eye, e.eye) && (!earliest || !e.date || e.date >= earliest);
     });
