@@ -53844,6 +53844,59 @@ window.addEventListener('DOMContentLoaded', function() {
     return hits[0];
   }
   function rxTestOnly(name) { return !!testFam(name); }
+  // ── Payment received for OCT / visual fields / YAG (in case "Procedure done" wasn't noted) ──
+  // READS the payment records (transactions) through the Bills & History loader; writes nothing.
+  let payIndex = null, payLoading = false;
+  function payFamilies(desc) {
+    const t = String(desc || ''); const out = [];
+    if (/\boct\b/i.test(t)) out.push('oct');
+    if (/visual field|\bfields?\b|\bvf\b|\bhvf\b|\bhfa\b|perimetry|\b(24|30|10)-2\b/i.test(t)) out.push('field');
+    if (procFamily(t) === 'yag') out.push('yag');
+    return out;
+  }
+  function payEligible(proc) { const f = testFam(proc); return f === 'oct' || f === 'field' || procFamily(proc) === 'yag'; }
+  function loadPayments() {
+    if (payIndex || payLoading || !window.bmhBillsHistory || typeof window.bmhBillsHistory.ensureLoaded !== 'function') return;
+    payLoading = true;
+    window.bmhBillsHistory.ensureLoaded().then(function () {
+      const m = new Map();
+      window.bmhBillsHistory.state.cache.forEach(function (rows) {
+        (rows || []).forEach(function (t) {
+          if (!t || !t.bmhId || Number(t.amount || 0) < 0 || t.type === 'advance' || t.type === 'advance-adjustment' || t.source === 'advance-adjustment') return;
+          const date = localDateKey(t.createdAt || t.date || t._day || '');
+          const descs = (Array.isArray(t.chargeAllocations) ? t.chargeAllocations : []).map(function (c) { return c && c.desc; }).concat([t.service]).filter(Boolean);
+          Array.from(new Set(descs)).forEach(function (desc) {
+            if (!payFamilies(desc).length) return;
+            const list = m.get(t.bmhId) || []; list.push({ desc: String(desc), date: date, amount: Number(t.amount || 0), eye: eyeOf(desc) }); m.set(t.bmhId, list);
+          });
+        });
+      });
+      payIndex = m;
+      scheduleRxRerender(0);
+    }).catch(function () {}).finally(function () { payLoading = false; });
+  }
+  function payMatches(proc, desc) {
+    const fam = procFamily(proc) === 'yag' ? 'yag' : testFam(proc);
+    if (payFamilies(desc).indexOf(fam) === -1) return false;
+    if (fam === 'yag' || /work ?-?up|package/i.test(desc)) return true;
+    const wa = testWords(proc), wb = testWords(desc);
+    if (!wa.size || !wb.size) return true;
+    let shared = 0; wa.forEach(function (w) { if (wb.has(w)) shared += 1; });
+    return shared > 0;
+  }
+  function findPayDone(row) {
+    if (!payIndex || !payEligible(row.proc)) return null;
+    const list = payIndex.get(row.bmhId);
+    if (!list || !list.length) return null;
+    const earliest = row.advisedDate ? shiftDate(row.advisedDate, -2) : '';
+    const eye = row.eye || (/\bboth\b|\bou\b|bilateral/i.test(String(row.proc || '')) ? 'Both' : eyeOf(row.proc));
+    const hits = list.filter(function (e) { return payMatches(row.proc, e.desc) && eyesCompatible(eye, e.eye) && (!earliest || !e.date || e.date >= earliest); })
+      .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+    if (!hits.length) return null;
+    // YAG advised for both eyes: needs a both-eyes charge, or two charges.
+    if (eye === 'Both' && procFamily(row.proc) === 'yag' && !hits.some(function (e) { return e.eye === 'Both'; }) && hits.length < 2) return null;
+    return hits[0];
+  }
   // ── Calls logged before today, not yet marked "Seen" (pinned on top) ──
   function unseenCallEntries(rec) {
     if (!rec || !rec.log) return [];
@@ -54159,7 +54212,8 @@ window.addEventListener('DOMContentLoaded', function() {
       row.ot = ot;
       row.status = statusFromOt(ot);
       row.rx = findRxDone(row);
-      if (row.rx && row.status !== 'done') row.status = 'done';
+      row.pay = row.rx ? null : findPayDone(row);
+      if ((row.rx || row.pay) && row.status !== 'done') row.status = 'done';
     });
     // 3. Operated / booked patients with no advice on record
     ots.forEach(function (o) {
@@ -54246,6 +54300,9 @@ window.addEventListener('DOMContentLoaded', function() {
       const rec = followups[r.key] || {};
       return '<span class="badge bd-gray">Dropped ' + esc(fmt(localDateKey(rec.droppedAt || ''))) + '</span>'
         + (rec.dropReason ? '<div style="font-size:10px;color:var(--g1);margin-top:3px">' + esc(rec.dropReason) + '</div>' : '');
+    }
+    if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && !r.rx && r.pay) {
+      return '<span class="badge bd-green">Done ' + esc(fmt(r.pay.date)) + '</span><div style="font-size:10px;color:var(--g1);margin-top:3px">Payment received: ' + esc(r.pay.desc) + (r.pay.amount ? ' · ₹' + esc(Number(r.pay.amount).toLocaleString('en-IN')) : '') + '</div>';
     }
     if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && r.rx) {
       return '<span class="badge bd-green">Done ' + esc(fmt(r.rx.date)) + '</span><div style="font-size:10px;color:var(--g1);margin-top:3px">Per prescription: ' + esc(r.rx.proc) + (r.rx.eye ? ' · ' + esc(r.rx.eye === 'Both' ? 'Both eyes' : r.rx.eye + ' eye') : '') + '</div>';
@@ -54407,7 +54464,8 @@ window.addEventListener('DOMContentLoaded', function() {
   }
   function patientNameHtml(r) {
     return '<a href="javascript:void(0)" title="Open patient file" onclick="bmhShowPatientVisitHistory(\'' + String(r.bmhId || '').replace(/[^A-Za-z0-9-]/g, '') + '\')" style="font-weight:800;color:var(--bmh-blue);text-decoration:underline dotted">' + esc(r.patient) + '</a>'
-      + (r.rx ? ' <span class="badge bd-green" style="font-size:9.5px" title="' + esc(r.rx.proc) + '">✓ Done per prescription ' + esc(fmt(r.rx.date)) + '</span>' : '');
+      + (r.rx ? ' <span class="badge bd-green" style="font-size:9.5px" title="' + esc(r.rx.proc) + '">✓ Done per prescription ' + esc(fmt(r.rx.date)) + '</span>' : '')
+      + (!r.rx && r.pay ? ' <span class="badge bd-green" style="font-size:9.5px" title="' + esc(r.pay.desc) + '">✓ Paid ' + esc(fmt(r.pay.date)) + ' · ' + esc(r.pay.desc) + '</span>' : '');
   }
 
   function renderReport(el) {
@@ -54429,6 +54487,7 @@ window.addEventListener('DOMContentLoaded', function() {
     // Check saved prescriptions for these patients in the background (once per session).
     queueRxLoad(Array.from(new Set(all.filter(function (r) { return !r.dropped && r.status !== 'done'; }).map(function (r) { return r.bmhId; }))));
     const rxPending = rxQueue.length + (rxRunning ? 1 : 0);
+    loadPayments();
     // Calls logged before today and not yet marked Seen: pinned on top, with their usual number.
     const numberOf = new Map(rows.map(function (r, i) { return [r.key, i + 1]; }));
     const pinned = sortRows(base.filter(function (r) { return unseenCallEntries(followups[r.key]).length; }));
@@ -54456,6 +54515,7 @@ window.addEventListener('DOMContentLoaded', function() {
       + '<button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>'
       + (!followupsLoaded ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Loading saved follow-ups…</div>' : '')
       + (rxPending ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking saved prescriptions for procedures already done… (' + rxPending + ' patients left)</div>' : '')
+      + (payLoading ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking payments for OCT / fields / YAG…</div>' : '')
       + (pinned.length ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff8d6;border:1px solid #f0d878;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
         + '<b>📞 ' + pinned.length + ' patient' + (pinned.length === 1 ? '' : 's') + ' called before today — shown on top until marked Seen</b>'
         + '<button type="button" class="btn btn-xs btn-blue" onclick="bmhAdvisedCallsSeen(' + esc(JSON.stringify(pinned.map(function (r) { return r.key; }))) + ')">✓ Mark all seen</button>'
@@ -54489,6 +54549,7 @@ window.addEventListener('DOMContentLoaded', function() {
         const bits = [r.ot.eye ? (r.ot.eye === 'Both' ? 'Both eyes' : r.ot.eye + ' eye') : '', otIolText(r.ot), withSurgeon ? r.ot.surgeon : ''].filter(Boolean);
         return bits.length ? ' (' + bits.join(' · ') + ')' : '';
       };
+      if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && !r.rx && r.pay) return 'Done ' + fmt(r.pay.date) + ' (payment received: ' + r.pay.desc + ')';
       if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && r.rx) return 'Done ' + fmt(r.rx.date) + ' (per prescription: ' + r.rx.proc + ')';
       if (r.status === 'done') return 'Done ' + fmt(r.ot.date) + detail(true);
       if (r.status === 'scheduled') return 'OT booked ' + fmt(r.ot.date) + detail(false);
@@ -54696,7 +54757,7 @@ window.addEventListener('DOMContentLoaded', function() {
         const ot = findOtMatch({ bmhId: rec.bmhId, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate }, ots);
         if (ot && otDone(ot)) return false;
       }
-      if (rec.kind !== 'delivery' && findRxDone({ bmhId: rec.bmhId, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate })) return false;
+      if (rec.kind !== 'delivery' && (findRxDone({ bmhId: rec.bmhId, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate }) || findPayDone({ bmhId: rec.bmhId, proc: rec.proc, eye: rec.eye, advisedDate: rec.advisedDate }))) return false;
       return true;
     });
   }
