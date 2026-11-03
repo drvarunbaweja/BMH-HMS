@@ -3279,7 +3279,7 @@ function nav(id, el, opts) {
 	  else if(pageKey==='reports')         deferPageWork(function(){ if (typeof renderReports === 'function') renderReports(); });
 	  else if(pageKey==='audits')          deferPageWork(function(){ if (typeof renderAuditsPage === 'function') renderAuditsPage(); });
   else if(pageKey==='brochures')       deferPageWork(function(){ renderBrochures && renderBrochures(); });
-  else if(pageKey==='centres')         deferPageWork(function(){ renderCentresView && renderCentresView(); });
+  else if(pageKey==='centres')         deferPageWork(function(){ const cd = document.getElementById('centres-date'); if (cd) cd.dataset.manualDay = ''; renderCentresView && renderCentresView(); });
   else if(pageKey==='settings')        deferPageWork(function(){ renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); });
   else if(pageKey==='discharge')       deferPageWork(function(){ renderDischargeBuilder && renderDischargeBuilder(); });
   if(['obg','psych','skin'].includes(pageKey)) clearSharedPrescriptionEditor();
@@ -20143,10 +20143,62 @@ function calcPend(inp){const row=inp.closest('tr');if(!row)return;const inputs=r
 // ═══════════════════════════════════════
 // CENTRES CHARGES
 // ═══════════════════════════════════════
+function bmhShowCentreTpaDue(centreCode, deptKey) {
+  const esc = function (v) { return escapeHtmlConsent(String(v == null ? '' : v)); };
+  const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+  const rows = (window._bmhCentreTpaRows || []).filter(function (r) {
+    return (!centreCode || normalizeAppointmentCentreValue(r.centre || 'CHD') === centreCode)
+      && (!deptKey || normalizeDeptKeyForQueue(r.dept || '') === deptKey);
+  }).map(function (r) {
+    const insurer = Math.max(0, Number(r.claimedAmount || r.amount || 0) - Number(r.receivedAmount || 0));
+    const patient = Number(r.patientDue || 0);
+    return { r: r, insurer: insurer, patient: patient, total: insurer + patient };
+  }).filter(function (x) { return x.total > 0; }).sort(function (a, b) { return b.total - a.total; });
+  const total = rows.reduce(function (s, x) { return s + x.total; }, 0);
+  let ov = document.getElementById('m-centre-tpa');
+  if (!ov) {
+    ov = document.createElement('div'); ov.className = 'modal-ov'; ov.id = 'm-centre-tpa';
+    ov.innerHTML = '<div class="modal modal-lg" style="max-width:820px;width:100%"><div class="modal-hd"><div class="modal-title" id="m-centre-tpa-title">TPA / Cashless due</div><button class="modal-close" onclick="closeM(\'m-centre-tpa\')">✕</button></div><div id="m-centre-tpa-body" style="max-height:70vh;overflow:auto"></div></div>';
+    document.body.appendChild(ov);
+  }
+  const deptNames = { ophtho: 'Eye', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' };
+  document.getElementById('m-centre-tpa-title').textContent = 'TPA / Cashless due' + (centreCode ? ' — ' + (centreCode === 'RPR' ? 'Ropar' : 'Chandigarh') : '') + (deptKey ? ' · ' + (deptNames[deptKey] || deptKey) : '') + ' — ' + fmt(total);
+  document.getElementById('m-centre-tpa-body').innerHTML = rows.length
+    ? '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--g6)"><th style="padding:6px;text-align:left">#</th><th style="padding:6px;text-align:left">Patient</th><th style="padding:6px;text-align:left">Procedure / insurer</th><th style="padding:6px;text-align:left">Centre</th><th style="padding:6px;text-align:right">Insurer due</th><th style="padding:6px;text-align:right">Patient due</th><th style="padding:6px;text-align:right">Total</th></tr></thead><tbody>'
+      + rows.map(function (x, i) {
+        const r = x.r; const id = String(r.bmhId || '').replace(/[^A-Za-z0-9-]/g, '');
+        const name = esc(r.patient || r.patientName || 'Patient');
+        return '<tr style="border-bottom:1px solid var(--g5)"><td style="padding:6px">' + (i + 1) + '</td>'
+          + '<td style="padding:6px"><b>' + (id && typeof window.bmhShowPatientVisitHistory === 'function' ? '<a href="javascript:void(0)" onclick="bmhShowPatientVisitHistory(\'' + id + '\')" style="color:var(--bmh-blue);text-decoration:underline dotted">' + name + '</a>' : name) + '</b><div style="font-size:10px;color:var(--g1)">' + esc(r.bmhId || '') + '</div></td>'
+          + '<td style="padding:6px">' + esc(r.procedure || r.for || 'Claim') + '<div style="font-size:10px;color:var(--g1)">' + esc(r.insurer || r.tpaCompany || r.ins || '') + '</div></td>'
+          + '<td style="padding:6px">' + esc(normalizeAppointmentCentreValue(r.centre || 'CHD') === 'RPR' ? 'Ropar' : 'Chandigarh') + '</td>'
+          + '<td style="padding:6px;text-align:right">' + fmt(x.insurer) + '</td><td style="padding:6px;text-align:right">' + fmt(x.patient) + '</td><td style="padding:6px;text-align:right;font-weight:800">' + fmt(x.total) + '</td></tr>';
+      }).join('') + '</tbody></table>'
+    : '<div style="padding:16px;text-align:center;color:var(--g1)">No cashless dues.</div>';
+  openM('m-centre-tpa');
+}
+window.bmhShowCentreTpaDue = bmhShowCentreTpaDue;
 function renderCentresView() {
   const dateEl = document.getElementById('centres-date');
   const today = localDateKey(new Date());
-  if (dateEl && !dateEl.value) dateEl.value = today;
+  // Show today unless a date was picked by hand during this visit to the page.
+  if (dateEl && (!dateEl.value || (dateEl.dataset.manualDay !== today && dateEl.value !== today))) dateEl.value = today;
+  if (dateEl && !dateEl.dataset.bmhWired) {
+    dateEl.dataset.bmhWired = '1';
+    dateEl.addEventListener('input', function () { dateEl.dataset.manualDay = localDateKey(new Date()); });
+  }
+  if (!window._bmhCentresAutoTimer) {
+    // While the page is open on today's date, refresh the figures every 2 minutes.
+    window._bmhCentresAutoTimer = setInterval(function () {
+      try {
+        const page = document.getElementById('pg-centres');
+        const d = document.getElementById('centres-date');
+        if (!page || !page.classList.contains('active') || document.hidden) return;
+        if (d && d.dataset.manualDay === localDateKey(new Date()) && d.value !== localDateKey(new Date())) return;
+        renderCentresView();
+      } catch (e) {}
+    }, 120000);
+  }
   const selectedDate = dateEl?.value || today;
   const centreCodes = (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) ? ['RPR', 'CHD'] : [normalizeAppointmentCentreValue(CURRENT_USER?.centre || 'CHD')];
   const centreMeta = {
@@ -20182,6 +20234,7 @@ function renderCentresView() {
     return centreCodes.includes(normalizeAppointmentCentreValue(p.centre || 'CHD')) && patientHasVisitOnSelectedDate(p);
   });
   const selectedTxn = bmhGetCollectionTransactionsForDate(centreCodes, selectedDate);
+  window._bmhCentreTpaRows = null;
   const selectedClaims = getDisplayTpaClaims().filter(function (r) {
     return centreCodes.includes(normalizeAppointmentCentreValue(r.centre || 'CHD')) && String(r.status || '').toLowerCase() !== 'paid';
   });
@@ -20300,8 +20353,8 @@ function renderCentresView() {
           </div>
           <div style="border:1px solid var(--g5);border-radius:8px;padding:8px">
             <div style="font-size:10px;font-weight:900;color:#b55a00;text-transform:uppercase;margin-bottom:6px">TPA / Cashless Due</div>
-            <div style="font-size:18px;font-weight:900;color:#b55a00;margin-bottom:6px">${fmt(claimDue)}</div>
-            ${deptClaims.length ? deptClaims.map(function (r) { const insurerDue = Math.max(0, Number(r.claimedAmount || r.amount || 0) - Number(r.receivedAmount || 0)); const patientDue = Number(r.patientDue || 0); const parts = []; if (insurerDue > 0) parts.push('Insurer ' + fmt(insurerDue)); if (patientDue > 0) parts.push('Patient ' + fmt(patientDue)); return `<div style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--g5)"><strong>${esc(r.patient || 'Patient')}</strong><div style="color:var(--g1)">${esc(r.procedure || r.for || 'Claim')} · ${esc(parts.join(' · ') || fmt(0))}</div></div>`; }).join('') : '<div style="font-size:11px;color:var(--g1)">No cashless due</div>'}
+            <div style="font-size:18px;font-weight:900;color:#b55a00;margin-bottom:6px;cursor:pointer" onclick="bmhShowCentreTpaDue('${centreCode}','${dept.key}')" title="Show patients">${fmt(claimDue)}</div>
+            ${deptClaims.length ? `<button type="button" class="btn btn-xs btn-outline" onclick="bmhShowCentreTpaDue('${centreCode}','${dept.key}')">View ${deptClaims.length} patient${deptClaims.length === 1 ? '' : 's'}</button>` : '<div style="font-size:11px;color:var(--g1)">No cashless due</div>'}
           </div>
         </div>
       </div>`;
@@ -20344,6 +20397,7 @@ function renderCentresView() {
       </div>`
     };
   });
+  window._bmhCentreTpaRows = selectedClaims;
   const summaryEl = document.getElementById('centres-summary-blocks');
   if (summaryEl) {
     const allTotal = centreSheets.reduce(function (s, c) { return s + c.total; }, 0);
@@ -20352,7 +20406,7 @@ function renderCentresView() {
     summaryEl.innerHTML = `
       <div class="sc green"><div class="sc-lbl">Total Collection</div><div class="sc-val green">${fmt(allTotal)}</div></div>
       <div class="sc blue"><div class="sc-lbl">Total OPD Entries</div><div class="sc-val blue">${allOpd}</div></div>
-      <div class="sc orange"><div class="sc-lbl">TPA / Cashless Due</div><div class="sc-val orange">${fmt(allTpa)}</div></div>
+      <div class="sc orange" style="cursor:pointer" onclick="bmhShowCentreTpaDue('','')" title="Show patients"><div class="sc-lbl">TPA / Cashless Due</div><div class="sc-val orange">${fmt(allTpa)}</div><div style="font-size:10px;color:var(--g1)">Click to see patients</div></div>
       <div class="sc red"><div class="sc-lbl">Centres Covered</div><div class="sc-val red">${centreSheets.length}</div></div>
     `;
   }
@@ -35666,7 +35720,10 @@ function appointmentListRow(a, opts) {
   const cellStyle = 'min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
   return '<div class="apt-slot booked apt-list-grid" style="font-size:12px;padding:7px 8px">'
     + '<div style="' + cellStyle + ';font-size:11.5px;font-weight:900;color:var(--bmh-blue)" title="' + escapeHtmlConsent(time) + '">' + time + '</div>'
-    + '<div style="' + cellStyle + ';font-size:12.5px;font-weight:900" title="' + patient + dateLine + '">' + patient + dateLine + '</div>'
+    + '<div style="' + cellStyle + ';font-size:12.5px;font-weight:900" title="' + patient + dateLine + '">'
+      + (bmhId !== '—' && typeof window.bmhShowPatientVisitHistory === 'function'
+        ? '<a href="javascript:void(0)" onclick="event.stopPropagation();bmhShowPatientVisitHistory(\'' + String(bmhId).replace(/[^A-Za-z0-9-]/g, '') + '\')" title="Open patient file" style="color:inherit;text-decoration:underline dotted">' + patient + '</a>'
+        : patient) + dateLine + '</div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + bmhId + '</div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(phone) + '</div>'
     + '<div style="' + cellStyle + ';font-size:10.5px;color:var(--tx)" title="' + purpose + '">' + purpose + '</div>'
@@ -35861,7 +35918,7 @@ function renderFollowupRegister() {
       ? `<span style="font-size:10px;color:#27ae60;font-weight:700">✓ Booked</span>`
       : `<button class="btn btn-xs btn-outline" onclick="openBookAptForPatient('${e.bmhId}','${e.date}')">+ Book Slot</button>`;
     return `<tr>
-      <td style="font-weight:700;font-size:12.5px">${escapeHtmlConsent(e.name)}</td>
+      <td style="font-weight:700;font-size:12.5px">${e.bmhId && typeof window.bmhShowPatientVisitHistory === 'function' ? `<a href="javascript:void(0)" onclick="bmhShowPatientVisitHistory('${String(e.bmhId).replace(/[^A-Za-z0-9-]/g, '')}')" title="Open patient file" style="color:inherit;text-decoration:underline dotted">${escapeHtmlConsent(e.name)}</a>` : escapeHtmlConsent(e.name)}</td>
       <td style="font-size:11.5px;color:var(--bmh-blue)">${e.bmhId}</td>
       <td style="font-size:11.5px">${e.mob || '—'}</td>
       <td style="font-size:11.5px">${deptLabel}</td>
