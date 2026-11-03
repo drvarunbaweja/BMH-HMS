@@ -50970,7 +50970,7 @@ function buildQTableRow(p, sno, opts) {
   // Badge on cross-refer entry row showing which dept referred them in
   const xrefFromDeptLabel = p._xrefEntry && p._xrefFromDept ? (deptShort[p._xrefFromDept] || p._xrefFromDept) : '';
   const xrefInBadge = p._xrefEntry
-    ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#fff3e0;color:#8a4200;border-radius:4px;font-weight:800;vertical-align:middle">${p._xrefPendingPay ? '💳 Pay' : '↔ Ref'}${xrefFromDeptLabel ? ' from ' + xrefFromDeptLabel : ''}</span>`
+    ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#fff3e0;color:#8a4200;border-radius:4px;font-weight:800;vertical-align:middle">${p._xrefPendingPay ? '💳 Pay' : '↔ Ref'}${deptShort[normalizeDeptKeyForQueue(p.dept || '')] ? ' to ' + deptShort[normalizeDeptKeyForQueue(p.dept || '')] : ''}${xrefFromDeptLabel ? ' from ' + xrefFromDeptLabel : ''}</span>`
     : '';
   const deptQueueBadge = p._deptQueueEntry
     ? '<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#eef3fb;color:var(--bmh-blue);border-radius:4px;font-weight:800;vertical-align:middle">Also OPD</span>'
@@ -51040,12 +51040,27 @@ function toggleQueueSidebarCollapse(forceExpand) {
   document.body.classList.toggle('queue-sidebar-collapsed', shouldCollapse);
 }
 
+// Guard: a doctor marking a patient "seen" for a department that is not their own
+// (e.g. the Eye referral row in the all-departments view) must confirm first.
+function bmhConfirmSeenForOtherDept(dept, name) {
+  try {
+    const target = normalizeDeptKeyForQueue(dept || '');
+    if (!target) return true;
+    const rawOwn = String(CURRENT_USER?.dept || '');
+    const own = normalizeDeptKeyForQueue((typeof normalizeQueueDeptForUser === 'function' && normalizeQueueDeptForUser(rawOwn)) || rawOwn);
+    if (['ophtho', 'obg', 'psych', 'skin'].indexOf(own) === -1 || own === target) return true;
+    const label = { ophtho: 'Eye (Ophthalmology)', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin & Cosmetology' }[target] || target;
+    return window.confirm((name ? name + ': this' : 'This') + ' row is for the ' + label + ' department, not yours.\n\nMark the patient SEEN in ' + label + '?');
+  } catch (e) { return true; }
+}
+window.bmhConfirmSeenForOtherDept = bmhConfirmSeenForOtherDept;
 function markSeen(bmhId, deptOverride) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
   if (p && isQueuePreCheckinPatient(p)) {
     checkInPatient(bmhId);
     return;
   }
+  if (!bmhConfirmSeenForOtherDept(deptOverride || activeClinicDeptKey() || p?.dept || p?.department || '', p?.name)) return;
   const nowIso = new Date().toISOString();
   const seenDept = normalizeDeptKeyForQueue(deptOverride || activeClinicDeptKey() || p?.dept || p?.department || '');
   const seenByDept = Object.assign({}, p?.seenByDept || p?.deptSeenAt || {});
@@ -51145,6 +51160,7 @@ function markCrossRefSeen(bmhId, xrefId, deptOverride) {
     showToast('Referral can only be completed from its destination department', 'w');
     return;
   }
+  if (!bmhConfirmSeenForOtherDept(targetDept, p.name)) return;
   const refs = p.crossRefs.map(function (r) {
     if (!r || String(r.id) !== String(xrefId)) return r;
     return Object.assign({}, r, { seen: true, status: 'seen', seenAt: nowIso, seenDept: targetDept, completedDept: targetDept, updatedAt: nowIso });
@@ -51224,6 +51240,8 @@ function markDeptQueueSeen(bmhId, queueId) {
     return;
   }
   const nowIso = new Date().toISOString();
+  const guardRow = p.deptQueueEntries.find(function (row) { return row && String(row.id) === String(queueId); });
+  if (guardRow && !bmhConfirmSeenForOtherDept(guardRow.dept || '', p.name)) return;
   let seenDept = '';
   const rows = p.deptQueueEntries.map(function (row) {
     if (!row || String(row.id) !== String(queueId)) return row;
