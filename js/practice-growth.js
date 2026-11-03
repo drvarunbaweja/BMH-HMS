@@ -1242,7 +1242,7 @@
         val = (io && median(byIol[io.name] || [])) || (io && median(byTier[iolTier(io.type, io.name)] || [])) || median(byGroup[r.group] || []) || allMed;
       }
       mm.otN++; if (r.done) mm.otDone++;
-      mm.otPot += val; mm.otPaid += r.paid + (r.claimStatus === 'received' ? r.claim : 0);
+      mm.otPot += val; mm.otPaid += Math.min(val, r.paid + (r.claimStatus === 'received' ? r.claim : 0));
       if (est) mm.otEst++;
       surgRows.push({ r: r, val: val, est: est });
     });
@@ -1415,7 +1415,7 @@
     csv: function () { if (G.last) csv(G.last); else { try { showToast('Show the report first', 'i'); } catch (e) {} } },
     otFilter: function (k) { G.otFilter = k; draw(); },
     allSections: function (v) { [].slice.call(document.querySelectorAll('#rep-growth input[data-pg="sec"]')).forEach(function (i) { i.checked = v; }); refresh(); },
-    compute: compute, load: load, txnLines: txnLines, iolName: iolName, reconcile: reconcile, plan: plan, computeEyeTotal: computeEyeTotal
+    compute: compute, load: load, txnLines: txnLines, iolName: iolName, reconcile: reconcile, plan: plan
   };
   function tick() { try { ensureTab(); checkExpiry(); ensureEyeOption(); checkEyeExpiry(); } catch (e) {} }
   function checkEyeExpiry() { if (EYE.last && !isUnlocked()) { var s = document.getElementById('rep-surg-source'), el = document.getElementById('rep-surgery-result'); EYE.last = null; if (s && s.value === 'eye-total' && el) el.innerHTML = ''; } }
