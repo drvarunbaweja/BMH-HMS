@@ -35731,7 +35731,8 @@ function appointmentListRow(a, opts) {
     + '<span class="badge bd-blue" style="font-size:9px;text-align:center;justify-self:start;white-space:nowrap">' + centre + '</span>'
     + '<div style="' + cellStyle + ';font-size:10px;font-weight:800;color:var(--tx3)" title="' + source + '">' + source + '</div>'
     + '<div style="' + cellStyle + ';font-size:10px;color:var(--tx3)" title="' + mode + '">' + mode + '</div>'
-    + '<div style="display:flex;align-items:center;gap:3px;min-width:0;white-space:nowrap"><button class="btn btn-xs btn-outline" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();sendAppointmentReminderByKey(\'' + key + '\')">WhatsApp</button><button class="btn btn-xs btn-outline" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
+    + '<div style="display:flex;align-items:center;gap:3px;min-width:0;white-space:nowrap">' + (typeof window.bmhAptCallButton === 'function' ? window.bmhAptCallButton(getAppointmentKey(a)) : '') + '<button class="btn btn-xs btn-outline" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();sendAppointmentReminderByKey(\'' + key + '\')">WhatsApp</button><button class="btn btn-xs btn-outline" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:8.5px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
+    + (typeof window.bmhAptCallRemark === 'function' ? window.bmhAptCallRemark(getAppointmentKey(a)) : '')
     + '</div>';
 }
 function findAppointmentByKey(key) {
@@ -50865,6 +50866,13 @@ function formatQueueWaitMinutes(waitMin) {
 function isQueuePreCheckinPatient(p) {
   return !!p?.preRegistered || /need\s*to\s*check\s*in|not\s*checked\s*in/i.test(String(p?.purpose || ''));
 }
+// 📋 next to the BMSH ID in the queue opens the read-only patient file (past visits, medicines,
+// procedures, reports) without opening the patient for examination.
+function bmhQueueHistoryIcon(bmhId) {
+  const id = String(bmhId || '').replace(/[^A-Za-z0-9-]/g, '');
+  if (!id || typeof window.bmhShowPatientVisitHistory !== 'function') return '';
+  return ' <span role="button" title="Patient history (view only)" style="cursor:pointer;font-size:12px" onclick="event.stopPropagation();bmhShowPatientVisitHistory(\'' + id + '\')">📋</span>';
+}
 function buildQCard(p, sno) {
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
@@ -50930,7 +50938,7 @@ function buildQCard(p, sno) {
         ${chargeHtml}
       </div>
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">
-        <span style="font-size:11px;color:var(--g1);font-family:var(--mono)">${p.bmhId}</span>
+        <span style="font-size:11px;color:var(--g1);font-family:var(--mono)">${p.bmhId}${bmhQueueHistoryIcon(p.bmhId)}</span>
         <span style="font-size:11px;color:var(--g1)">${p.age||'?'}Y/${(p.sex||'?')[0]}</span>
         ${(p.assignedDoctor || p.doctor)?`<span style="font-size:11px;color:var(--teal);font-weight:700">🩺${(p.assignedDoctor || p.doctor).replace('Dr. ','Dr.')}</span>`:''}
         ${p.purpose?`<span style="font-size:11px;color:${isSurgeryToday?'#8a4200':'var(--g1)'};font-weight:${isSurgeryToday?'900':'400'}">${p.purpose}</span>`:''}
@@ -51073,7 +51081,7 @@ function buildQTableRow(p, sno, opts) {
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||(p.name||p.patient||'?')[0]}</span>
       <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${surgeryTodayBadge}${labReadyBadge}${xrefOutBadge}${xrefInBadge}${deptQueueBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
-    <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
+    <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}${bmhQueueHistoryIcon(p.bmhId)}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800;cursor:pointer" title="Click to change department" onclick="event.stopPropagation();reassignReceptionPatientDept('${String(p.bmhId).replace(/'/g, "\\'")}','${String(p.dept || '').replace(/'/g, "\\'")}')">${deptLabel}</span></td>
     <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
     <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${purposeCell}</td>
