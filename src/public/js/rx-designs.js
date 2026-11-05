@@ -119,6 +119,22 @@
   }
   function localFont(lang) { return lang === 'hi' ? "'Noto Sans Devanagari',sans-serif" : lang === 'pa' ? "'Noto Sans Gurmukhi',sans-serif" : 'inherit'; }
   var GREY = '';
+  // Keep these layouts' styles to the prescription itself, so pages printed after it (brochures,
+  // instruction sheets) are not affected by class names such as .grid / .card / main.
+  function scopeCss(css) {
+    return String(css).split('}').map(function (rule) {
+      var i = rule.indexOf('{');
+      if (i < 0) return rule;
+      var sel = rule.slice(0, i).trim(), body = rule.slice(i);
+      if (!sel || /^@/.test(sel)) return rule;
+      sel = sel.split(',').map(function (x) {
+        x = x.trim();
+        if (!x || x === '*' || x === 'body' || x === 'html' || x === ':root' || /^@/.test(x)) return x;
+        return '.rxd ' + x;
+      }).join(',');
+      return sel + body;
+    }).join('}');
+  }
   // Procedures advised: one per line, bold and larger so they stand out.
   function procBlock(c) {
     return '<div style="border-left:3px solid #222;padding:2px 0 2px 8px;margin:2px 0 3px">' + c.procedures.map(function (x) {
@@ -232,7 +248,7 @@
     if (adv.length) main += '<h3>Advice</h3><ul class="adv">' + adv.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
     if (c.warning) main += '<div class="warn">' + c.warning + '</div>';
     var foot = '<div>' + (c.followUp ? '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>' : '') + '</div>' + signature(c, 'right');
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + GREY + '</style></head><body><div class="page"><div class="top">' + header(c) + '</div><aside>' + aside + '</aside><main>' + main + '</main><div class="foot">' + foot + '</div></div></body></html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + scopeCss(css + GREY) + '</style></head><body><div class="rxd"><div class="page"><div class="top">' + header(c) + '</div><aside>' + aside + '</aside><main>' + main + '</main><div class="foot">' + foot + '</div></div></div></body></html>';
   }
 
   // ═════════════════════ Design B — Card ═════════════════════
@@ -327,7 +343,7 @@
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ') + '<br>';
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
     h += '<div class="bottom"><div class="adv">' + left + '</div>' + signature(c, 'center') + '</div>';
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + GREY + '</style></head><body><div class="page">' + h + '</div></body></html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + scopeCss(css + GREY) + '</style></head><body><div class="rxd"><div class="page">' + h + '</div></div></body></html>';
   }
 
   // ═════════════════════ Design D — Clear Table ═════════════════════
@@ -399,7 +415,7 @@
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ');
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
     h += '<div class="bottom"><div class="adv">' + left + '</div>' + signature(c, 'center') + '</div>';
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + GREY + '</style></head><body><div class="page">' + h + '</div></body></html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + scopeCss(css + GREY) + '</style></head><body><div class="rxd"><div class="page">' + h + '</div></div></body></html>';
   }
 
   // Sample (for the Settings → Doctors preview only)

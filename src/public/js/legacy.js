@@ -3241,7 +3241,7 @@ function nav(id, el, opts) {
     discharge:'Discharge Card',lab:'Lab Module',reception:'Reception',billing:'Billing',
     payments:'Payments',obg:'OBG Clinic',psych:'Neuropsychiatry',skin:'Skin & Cosmetology',
     inventory:'Inventory',tpa:'TPA / Cashless',centres:'Two-Centre View',settings:'Settings',attendance:'Attendance',
-    ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports',audits:'Audits'};
+    ipd:'IPD Ward',brochures:'Brochures',ot:'OT Module',reports:'Reports',audits:'Audits'};
   const ptEl = document.getElementById('ptitle');
   if(ptEl) ptEl.textContent = titles[pageKey] || pageKey;
   // Highlight nav item
@@ -7025,7 +7025,7 @@ function buildSidebarForRole(role, dept, name) {
     'print-templates': `<div class="ni" onclick="nav('print-templates',this)"><div class="ni-ic">🖨️</div>Print Instructions</div>`,
     consents: `<div class="ni" onclick="nav('consents',this)"><div class="ni-ic">📋</div>Consents</div>`,
     discharge: `<div class="ni" onclick="nav('discharge',this)"><div class="ni-ic">🏠</div>Discharge Card</div>`,
-    brochures: `<div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Surgery Brochures</div>`,
+    brochures: `<div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Brochures</div>`,
     billing: `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing<span class="nbadge pulse" id="nb-pay"></span></div>`,
     payments: `<div class="ni" onclick="nav('payments',this)"><div class="ni-ic">💰</div>Payments</div>`,
     tpa: `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`,

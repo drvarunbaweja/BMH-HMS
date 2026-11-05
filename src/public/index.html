@@ -561,7 +561,7 @@
     <div class="ni" onclick="nav('print-templates',this)"><div class="ni-ic">🖨️</div>Print Instructions</div>
     <div class="ni" onclick="nav('consents',this)"><div class="ni-ic">📋</div>Consents (Bilingual)</div>
     <div class="ni" onclick="nav('discharge',this)"><div class="ni-ic">🏠</div>Discharge Card</div>
-    <div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Surgery Brochures</div>
+    <div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Brochures</div>
     <div class="ngrp">Analytics</div>
     <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
     <div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>
@@ -5458,7 +5458,7 @@
 <!-- ════════════════════ BROCHURES ════════════════════ -->
 </div><!-- /pg-ot -->
 <div class="page" id="pg-brochures">
-<div class="card-hd" style="margin-bottom:14px"><div class="card-title">📄 Surgery Brochures — Personalised with BMH Logo</div><div class="card-sub">Auto-personalised for current patient · Print or WhatsApp</div></div>
+<div class="card-hd" style="margin-bottom:14px"><div class="card-title">📄 Brochures — Personalised with BMH Logo</div><div class="card-sub">Auto-personalised for current patient · Print or WhatsApp</div></div>
 <div id="pe-brochures"></div>
 <details class="pe-old"><summary>Earlier brochures and text procedure cards</summary>
 
@@ -6594,7 +6594,7 @@
       <label><input type="checkbox" value="print-templates"> Print Templates</label>
       <label><input type="checkbox" value="consents"> Consents</label>
       <label><input type="checkbox" value="discharge"> Discharge Card</label>
-      <label><input type="checkbox" value="brochures"> Surgery Brochures</label>
+      <label><input type="checkbox" value="brochures"> Brochures</label>
       <label><input type="checkbox" value="billing"> Billing</label>
       <label><input type="checkbox" value="payments"> Payments</label>
       <label><input type="checkbox" value="tpa"> TPA</label>
@@ -6681,7 +6681,7 @@
       <label><input type="checkbox" value="print-templates"> Print Templates</label>
       <label><input type="checkbox" value="consents"> Consents</label>
       <label><input type="checkbox" value="discharge"> Discharge Card</label>
-      <label><input type="checkbox" value="brochures"> Surgery Brochures</label>
+      <label><input type="checkbox" value="brochures"> Brochures</label>
       <label><input type="checkbox" value="billing"> Billing</label>
       <label><input type="checkbox" value="payments"> Payments</label>
       <label><input type="checkbox" value="tpa"> TPA</label>
@@ -6795,14 +6795,17 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js?v=20261105-rx-fix-v40"></script>
-<script defer src="%BASE_URL%js/patient-education-brochures.js?v=20261105-rx-fix-v40"></script>
-<script defer src="%BASE_URL%js/patient-education-sheets.js?v=20261105-rx-fix-v40"></script>
-<script defer src="%BASE_URL%js/patient-education.js?v=20261105-rx-fix-v40"></script>
-<script defer src="%BASE_URL%js/bills-history.js?v=20261105-rx-fix-v40"></script>
-<script defer src="%BASE_URL%js/appointment-calls.js?v=20261105-rx-fix-v40"></script>
-<script defer src="%BASE_URL%js/rx-designs.js?v=20261105-rx-fix-v40"></script>
-<script defer src="%BASE_URL%js/ipd-nursing.js?v=20261105-rx-fix-v40"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/patient-education-brochures.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/patient-education-brochures-more.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/patient-education-sheets.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/patient-education-sheets-more.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/patient-education.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/bills-history.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/appointment-calls.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/rx-designs.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/ipd-nursing.js?v=20261105-brochures-v41"></script>
+<script defer src="%BASE_URL%js/rx-extras.js?v=20261105-brochures-v41"></script>
 <script defer src="%BASE_URL%js/practice-growth.js?v=20261103-eyetotal-v33"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
