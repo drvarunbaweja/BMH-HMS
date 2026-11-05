@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // BMH HMS — PATIENT EDUCATION: magazine brochures + print instructions
-// • Surgery Brochures page: colourful one-page A4 brochures (English / ਪੰਜਾਬੀ),
+// • Brochures page: colourful one-page A4 brochures (English / ਪੰਜਾਬੀ),
 //   editable text, replaceable photos, "+ New brochure", print.
 // • Print Instructions (Print Templates page): black-and-white English + Punjabi
 //   sheets with the patient's details from today's queue of a department,
@@ -16,7 +16,7 @@
 
   var C = window.BMH_PE_COMMON || { hosp: { en: 'Baweja Multispeciality Hospital', pa: 'ਬਵੇਜਾ ਮਲਟੀਸਪੈਸ਼ਲਿਟੀ ਹਸਪਤਾਲ' }, guide: { en: 'Patient guide', pa: 'ਮਰੀਜ਼ ਲਈ ਜਾਣਕਾਰੀ' }, centres: { en: 'Rupnagar & Chandigarh', pa: 'ਰੂਪਨਗਰ ਅਤੇ ਚੰਡੀਗੜ੍ਹ' }, phones: '+91-8146622802 · +91-6280048805' };
   var DEPTS = [['ophtho', 'Eye', 'ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ', 'Eye Department'], ['obg', 'OBG', 'ਇਸਤਰੀ ਰੋਗ ਅਤੇ ਜਣੇਪਾ ਵਿਭਾਗ', 'Obstetrics & Gynaecology'], ['psych', 'Neuropsychiatry', 'ਮਾਨਸਿਕ ਅਤੇ ਨਸਾਂ ਦੇ ਰੋਗ ਵਿਭਾਗ', 'Neuropsychiatry'], ['skin', 'Skin & Cosmetology', 'ਚਮੜੀ ਰੋਗ ਵਿਭਾਗ', 'Skin & Cosmetology']];
-  var THEMES = { teal: ['#1A3C6E', '#0B7B8C', '#E6F5F3', '#0B7B8C'], blue: ['#153A73', '#2E6FD8', '#E8F0FD', '#2E6FD8'], violet: ['#3B2A78', '#7B4FC9', '#F0EAFB', '#7B4FC9'], sky: ['#0E4C7A', '#1E9BD7', '#E5F5FD', '#1E9BD7'], indigo: ['#25306E', '#4E5BD0', '#ECEEFC', '#4E5BD0'], rose: ['#7A1F45', '#D64B7F', '#FDEBF2', '#D64B7F'], plum: ['#4A1D5E', '#A0458F', '#F7EAF5', '#A0458F'] };
+  var THEMES = { teal: ['#1A3C6E', '#0B7B8C', '#E6F5F3', '#0B7B8C'], blue: ['#153A73', '#2E6FD8', '#E8F0FD', '#2E6FD8'], violet: ['#3B2A78', '#7B4FC9', '#F0EAFB', '#7B4FC9'], sky: ['#0E4C7A', '#1E9BD7', '#E5F5FD', '#1E9BD7'], indigo: ['#25306E', '#4E5BD0', '#ECEEFC', '#4E5BD0'], green: ['#1F4D33', '#2F9E55', '#E9F7EC', '#2F9E55'], amber: ['#6B3A0A', '#D0841B', '#FDF1E1', '#D0841B'], rose: ['#7A1F45', '#D64B7F', '#FDEBF2', '#D64B7F'], plum: ['#4A1D5E', '#A0458F', '#F7EAF5', '#A0458F'] };
 
   function assetUrl(path) { try { return new URL(path, document.baseURI).href; } catch (e) { return path; } }
   var LOGO_FLAME = assetUrl('websites/ropar/images/baweja-logo.png');
@@ -90,6 +90,7 @@
     '.peb figcaption b{font-size:7.6pt;display:block;margin-bottom:.4mm}',
     '.peb .big{height:52mm}.peb .stack{display:grid;grid-template-rows:1fr 1fr;gap:3mm;height:52mm}',
     '.peb figure.noimg{background:linear-gradient(135deg,var(--c3),#eef1f6)}',
+    '.peb .hero.allempty{display:none}.pe-editing .peb .hero.allempty{display:grid}',
     '.peb figure.noimg img{visibility:hidden}',
     '.peb .grid{display:grid;grid-template-columns:1fr 1fr;gap:4mm;padding:4mm 9mm 3mm;flex:1;align-content:start;overflow:hidden}',
     '.peb h2{font-family:Fraunces,Georgia,serif;font-size:13pt;margin:0 0 1.5mm;color:var(--c1);display:flex;align-items:center;gap:2mm}',
@@ -202,7 +203,7 @@
       + '<header class="mast"><div class="hosp">' + esc(C.hosp[lang] || C.hosp.en) + ' · ' + esc(unit) + '</div>'
       + k(lang + '.title', d.title, 'h1') + k(lang + '.kicker', d.kicker, 'div', 'kicker')
       + '<div class="issue">' + esc(C.guide[lang] || C.guide.en) + '</div></header>'
-      + '<section class="hero">' + fig(0, 'big') + '<div class="stack">' + fig(1, '') + fig(2, '') + '</div></section>'
+      + '<section class="hero' + (photos.some(function (p) { return p && p.src; }) ? '' : ' allempty') + '">' + fig(0, 'big') + '<div class="stack">' + fig(1, '') + fig(2, '') + '</div></section>'
       + '<main class="grid">'
       + '<div class="card intro"><h2><span class="n">1</span>' + k(lang + '.introTitle', d.introTitle) + '</h2>' + (d.intro || []).map(function (x, i) { return k(lang + '.intro.' + i, x, 'p'); }).join('') + '<button type="button" class="pe-add" data-add="intro">+ ' + (lang === 'pa' ? 'ਲਾਈਨ ਜੋੜੋ' : 'Add line') + '</button></div>'
       + '<div class="opts"><h2><span class="n">2</span>' + k(lang + '.optTitle', d.optTitle) + '</h2>' + (d.opts || []).map(function (o, i) { return '<div class="opt">' + k(lang + '.opts.' + i + '.0', o[0], 'span', 'tag') + k(lang + '.opts.' + i + '.1', o[1], 'p') + '</div>'; }).join('') + '<button type="button" class="pe-add" data-add="opts">+ ' + (lang === 'pa' ? 'ਲਾਈਨ ਜੋੜੋ' : 'Add line') + '</button></div>'
@@ -440,20 +441,31 @@
     getUploadPages(meta.id).then(function (pages) { printHtml(pages.map(function (src) { return framedPageHtml(meta, src, pt); }).join(''), meta.title); });
   }
 
-  // ═══ SURGERY BROCHURES PAGE ═══════════════════════════════════════════════
+  // ═══ BROCHURES PAGE ═══════════════════════════════════════════════
   var bro = { id: null, lang: 'en', editing: false, draft: null };
   function broRoot() { return document.getElementById('pe-brochures'); }
   function renderBrochureList() {
     var root = broRoot(); if (!root) return;
     var list = allBrochures();
+    var cardHtml = function (b) {
+      var t = THEMES[b.theme] || THEMES.teal; var title = (b.en && plain(b.en.title)) || b.id;
+      return '<div class="pe-card" style="background:linear-gradient(120deg,' + t[0] + ',' + t[1] + ')" onclick="bmhPeOpenBrochure(\'' + esc(b.id) + '\')"><div class="t">' + esc(title) + '</div><div class="s">' + esc(deptName(b.dept, 'en')) + (b.custom ? ' · added' : '') + (b._edited ? ' · edited' : '') + '</div></div>';
+    };
+    var upCardHtml = function (u) {
+      return '<div class="pe-card" style="background:linear-gradient(120deg,#3d4b63,#6b7a93)" onclick="bmhPeOpenUpload(\'' + esc(u.id) + '\')"><div class="t">📎 ' + esc(u.title) + '</div><div class="s">' + esc(deptName(u.dept, 'en')) + ' · uploaded · ' + (u.pageCount || 1) + ' page' + ((u.pageCount || 1) > 1 ? 's' : '') + '</div></div>';
+    };
+    var known = DEPTS.map(function (d) { return d[0]; });
+    var others = list.filter(function (b) { return known.indexOf(b.dept) < 0; });
     root.innerHTML = '<div class="pe-wrap"><div class="pe-bar"><div class="grow" style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:var(--g1)">📰 Patient brochures — one-page A4, English &amp; ਪੰਜਾਬੀ, editable</div></div>'
-      + '<div class="pe-cards">' + list.map(function (b) {
-        var t = THEMES[b.theme] || THEMES.teal; var title = (b.en && plain(b.en.title)) || b.id;
-        return '<div class="pe-card" style="background:linear-gradient(120deg,' + t[0] + ',' + t[1] + ')" onclick="bmhPeOpenBrochure(\'' + esc(b.id) + '\')"><div class="t">' + esc(title) + '</div><div class="s">' + esc(deptName(b.dept, 'en')) + (b.custom ? ' · added' : '') + (b._edited ? ' · edited' : '') + '</div></div>';
-      }).join('') + uploadList('brochure').map(function (u) {
-        return '<div class="pe-card" style="background:linear-gradient(120deg,#3d4b63,#6b7a93)" onclick="bmhPeOpenUpload(\'' + esc(u.id) + '\')"><div class="t">📎 ' + esc(u.title) + '</div><div class="s">' + esc(deptName(u.dept, 'en')) + ' · uploaded · ' + (u.pageCount || 1) + ' page' + ((u.pageCount || 1) > 1 ? 's' : '') + '</div></div>';
-      }).join('') + '<div class="pe-card new" onclick="bmhPeNewBrochure()">+ New brochure</div><div class="pe-card new" onclick="bmhPeUploadBrochure()">⬆ Upload PDF / photo</div></div>'
-      + '<div class="pe-note">Click a brochure to view, edit or print it. Photos are courtesy of their credited sources; in edit mode you can replace any photo with your own.</div></div>';
+      + DEPTS.map(function (dd) {
+        var inDept = list.filter(function (b) { return b.dept === dd[0]; });
+        var ups = uploadList('brochure', dd[0]);
+        if (!inDept.length && !ups.length) return '';
+        return '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue,#1A3C6E);margin:12px 0 6px;text-transform:uppercase;letter-spacing:.4px">' + esc(dd[3]) + '</div><div class="pe-cards">' + inDept.map(cardHtml).join('') + ups.map(upCardHtml).join('') + '</div>';
+      }).join('')
+      + '<div class="pe-cards" style="margin-top:14px">' + others.map(cardHtml).join('')
+      + '<div class="pe-card new" onclick="bmhPeNewBrochure()">+ New brochure</div><div class="pe-card new" onclick="bmhPeUploadBrochure()">⬆ Upload PDF / photo</div></div>'
+      + '<div class="pe-note">Click a brochure to view, edit or print it. Photos are courtesy of their credited sources; in edit mode you can add or replace any photo with your own.</div></div>';
   }
   function renderBrochureView() {
     var root = broRoot(); if (!root) return;
@@ -735,5 +747,6 @@
   // If either page is already open when this loads, paint it.
   if (document.getElementById('pg-brochures') && document.getElementById('pg-brochures').classList.contains('active')) renderBrochuresPage();
   if (document.getElementById('pg-print-templates') && document.getElementById('pg-print-templates').classList.contains('active')) renderInstructionsPage();
-  window.bmhPatientEducation = { brochureHtml: brochureHtml, sheetHtml: sheetHtml, allBrochures: allBrochures, allSheets: allSheets, todayPatientsForDept: todayPatientsForDept, store: store, fileToPages: fileToPages, framedPageHtml: framedPageHtml };
+  window.bmhPatientEducation = { brochureHtml: brochureHtml, sheetHtml: sheetHtml, allBrochures: allBrochures, allSheets: allSheets, todayPatientsForDept: todayPatientsForDept, store: store, fileToPages: fileToPages, framedPageHtml: framedPageHtml,
+    printParts: function () { return { fonts: FONTS, css: BRO_CSS + SHEET_CSS + UP_CSS }; }, getUploadPages: getUploadPages, uploadList: uploadList, loadStore: loadStore, plain: plain };
 })();
