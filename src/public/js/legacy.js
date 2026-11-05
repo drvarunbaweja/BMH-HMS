@@ -41122,8 +41122,12 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
         headerSrc: lhImgSrc,
         patient: { name: ptName, id: ptId, ageSex: ptAge, date: today, centre: '' },
         doctor: { name: doctorName, degrees: doctorDegrees, spec: doctorSpec, reg: doctorReg },
-        complaint: (deptId === 'oe' && incCC && cc) ? cc : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint : (deptId === 'skin' && skinChief) ? skinChief : '',
-        findings: deptId === 'oe' && incPos && typeof buildOphthoPositiveFindingsList === 'function' ? (buildOphthoPositiveFindingsList() || []) : [],
+        complaint: (deptId === 'oe' && incCC && cc) ? cc : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint : (deptId === 'skin' && skinChief) ? skinChief : (deptId === 'psych' && psychChief) ? psychChief : '',
+        findings: deptId === 'oe' && incPos && typeof buildOphthoPositiveFindingsList === 'function' ? (buildOphthoPositiveFindingsList() || [])
+          : deptId === 'psych' ? psychMseRows.map(function (r) { return r.key + ': ' + r.value; })
+          : deptId === 'skin' && String(skinDermoscopy || '').trim() ? ['Dermoscopy: ' + String(skinDermoscopy).trim()]
+          : [],
+        findingsTitle: deptId === 'psych' ? 'Mental status' : deptId === 'skin' ? 'Examination' : 'Positive findings',
         eye: deptId === 'oe' ? {
           showVA: showVA, showIOP: !!showIOP && !!(iopGatOD || iopGatOS), showGL: showGL, showCorrectedIOP: !!showCorrectedIOP && !!(pachyOD || pachyOS),
           vaOD: vaOD, vaOS: vaOS, subjODva: subjODva, subjOSva: subjOSva, nvOD: nvOD, nvOS: nvOS,
@@ -41137,12 +41141,12 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
           hb: obgIncAnc && obgAncOn && obgAncSummary ? obgAncSummary.hb : '',
           bloodGroup: obgIncAnc && obgAncOn && obgAncSummary ? obgAncSummary.bloodGroup : ''
         } : null,
-        dx: deptId === 'psych' || deptId === 'skin' ? [] : dxList.slice(),
+        dx: (function () { const list = dxList.slice(); const sp = String(skinPrimaryDx || '').trim(); if (deptId === 'skin' && sp && !list.some(function (x) { return String(x).toLowerCase().indexOf(sp.toLowerCase()) >= 0; })) list.unshift(sp); return list; })(),
         drugs: incRxFinal ? drugs.map(function (d) { const c = JSON.parse(JSON.stringify(d)); try { ensureRxDrugPrintDates(c); } catch (e) {} return c; }) : [],
         rxEmpty: forceDeptRxSections && (!drugs || !drugs.length) ? 'No medications on this prescription.' : '',
-        procedures: !psychPrescriptionPrintOnly && incPrcFinal ? procs.slice() : [],
+        procedures: incPrcFinal ? procs.slice() : [],
         procDone: procDonePrintLine || '',
-        investigations: !psychPrescriptionPrintOnly && incInvFinal ? patientInvestigationPrintRows.map(function (o) { return String(o.name || 'Investigation') + (o.notes ? ' — ' + o.notes : ''); }) : [],
+        investigations: incInvFinal ? patientInvestigationPrintRows.map(function (o) { return String(o.name || 'Investigation') + (o.notes ? ' — ' + o.notes : ''); }) : [],
         advice: incAdvFinal ? String(advice || '').trim() : '',
         postSurgeryAdvice: postSurgeryAdviceLine || '',
         warning: deptId === 'obg' && obgIncAnc && obgAncOn ? '<b>Come at once if:</b> bleeding or leaking of water · fewer baby movements · severe headache or blurred vision · swelling of face or hands · fits' : '',
