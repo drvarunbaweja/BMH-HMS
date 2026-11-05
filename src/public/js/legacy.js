@@ -1792,12 +1792,26 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
   return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;border:1px solid #222;border-radius:8px;padding:6px 8px;margin-bottom:6px">'
     + '<div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1.2">'
     + '<img src="' + esc(logoSrc) + '" style="height:24px;width:auto;object-fit:contain" alt="BMH">'
-    + '<div style="min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;font-size:9.5px;line-height:1.25">'
-    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Patient</span><div style="font-size:10.5px;font-weight:900;color:#111">' + esc(ctx?.ptNm || '—') + '</div></div>'
-    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Procedure</span><div style="font-size:10px;font-weight:800;color:#111">' + esc(ctx?.procedure || '—') + '</div></div>'
-    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Date</span><div style="font-size:10px;font-weight:800;color:#111">' + esc(ctx?.today || '—') + '</div></div>'
-    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Eye</span><div style="font-size:10px;font-weight:800;color:#111">' + esc(ctx?.eye || '—') + '</div></div>'
-    + '</div></div>'
+    + (function () {
+      // One line per item: "Patient: name" with "Procedure / surgery" below; department shown correctly, eye only for eye cases.
+      const procText = String(ctx?.procedure || '').trim();
+      let deptKey = String(ctx?.dept || '').trim();
+      if (!deptKey) {
+        try { deptKey = otCaseNeedsObgFlow(procText, ctx?.ptId || '') ? 'obg' : ''; } catch (e) { deptKey = ''; }
+      }
+      const eyeText = String(ctx?.eye || '').trim();
+      const eyeUseful = eyeText && !/^(n\/?a|—|-|eye)$/i.test(eyeText);
+      if (!deptKey) deptKey = eyeUseful ? 'ophtho' : '';
+      const deptName = deptKey === 'ophtho' ? 'Ophthalmology' : deptKey === 'obg' ? 'Obstetrics & Gynaecology' : deptKey === 'psych' ? 'Psychiatry' : deptKey === 'skin' ? 'Skin & Cosmetology' : '';
+      const line = function (label, value, big) {
+        return '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-weight:800;color:#666;text-transform:uppercase;font-size:8.6px">' + label + ':</span> <span style="font-size:' + (big ? '11px' : '10px') + ';font-weight:900;color:#111">' + esc(value || '—') + '</span></div>';
+      };
+      return '<div style="min-width:0;flex:1;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:2px 14px;line-height:1.35">'
+        + '<div style="min-width:0">' + line('Patient', ctx?.ptNm, true) + line('Procedure / surgery', procText || '—') + '</div>'
+        + '<div style="min-width:0">' + line('Date', ctx?.today) + (deptName ? line('Department', deptName + (deptKey === 'ophtho' && eyeUseful ? ' · Eye: ' + eyeText : '')) : (eyeUseful ? line('Eye', eyeText) : '')) + '</div>'
+        + '</div>';
+    })()
+    + '</div>'
     + '<div style="flex:0 0 108px;border-left:1px solid #d7dce5;padding-left:8px;display:grid;gap:2px;font-size:9.5px;line-height:1.25">'
     + '<span style="font-weight:800;color:#666;text-transform:uppercase">BMSH ID</span><span style="font-size:10.5px;font-weight:900;font-family:ui-monospace,monospace;color:#1A3C6E">' + esc(ctx?.ptId || '—') + '</span>'
     + '</div></div>'
@@ -2355,10 +2369,12 @@ function collectConsentPrintContext(deptOverride) {
   const procedure = ot ? String(ot.procedure || 'Procedure').trim() : '';
   const eye = ot ? String(ot.site || ot.eye || 'Eye').trim() : '';
   const procLine = ot ? [procedure, eye, 'OT ' + String(ot.scheduledTime || ot.date || '')].filter(Boolean).join(' · ') : '';
+  let ctxDept = '';
+  try { ctxDept = ot ? (ot.caseKind === 'obg' || otCaseNeedsObgFlow(procedure, ptId) ? 'obg' : (normalizeDeptKeyForQueue(pt.dept || '') || 'ophtho')) : (activeDept || ''); } catch (e) { ctxDept = ''; }
   const doctorName = treatingDoctorWithCredentialsForPrint(ot?.caseKind === 'obg' ? 'obg' : activeDept, [ot?.surgeon, ot?.doctor, pt.assignedDoctor, pt.doctor]);
   return {
     ptId: ptId, ptNm: ptNm, ptAge: pt.age || '', ptSex: pt.sex || '', ptMob: pt.mob || pt.phone || '',
-    today: today, procLine: procLine, doctorName: doctorName, procedure: procedure, eye: eye,
+    today: today, procLine: procLine, doctorName: doctorName, procedure: procedure, eye: eye, dept: ctxDept,
     stripHtml: buildConsentPatientStripHtml(ptNm, ptId, pt.age || '', pt.sex || '', pt.mob || pt.phone || '', today, procLine, doctorName),
   };
 }
