@@ -261,12 +261,22 @@
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,40,.5);z-index:5000;display:flex;align-items:center;justify-content:center;padding:16px';
     ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:16px 18px">'
       + '<div style="font-size:15px;font-weight:900;color:#1A3C6E;margin-bottom:10px">🖨️ Print IPD file — ' + esc(p.name || '') + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
+      + '<button type="button" class="btn btn-xs btn-blue ipdc-q" data-f="' + from + '" data-t="' + to + '">📚 All sheets (whole stay)</button>'
+      + '<button type="button" class="btn btn-xs btn-outline ipdc-q" data-f="' + dayKey(new Date(Date.now() - 864e5)) + '" data-t="' + dayKey(new Date(Date.now() - 864e5)) + '">📄 Yesterday’s sheets</button>'
+      + '<button type="button" class="btn btn-xs btn-outline ipdc-q" data-f="' + to + '" data-t="' + to + '">Today so far</button></div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div class="form-group" style="margin:0"><label class="fl">From</label><input type="date" id="ipdc-pf" value="' + from + '"></div><div class="form-group" style="margin:0"><label class="fl">To</label><input type="date" id="ipdc-pt" value="' + to + '"></div></div>'
       + [['notes', 'Progress notes (staff left · doctor right)', true], ['chart', 'Treatment chart (medicines given, ticked)', !!(p.ipdRx && p.ipdRx.length)], ['por', 'Post-operative record (vitals table)', true], ['baby', 'Baby chart & phototherapy', !!hasBaby], ['labs', 'Lab results during the stay', true]].map(function (x) {
         return '<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin:5px 0"><input type="checkbox" class="ipdc-pp" value="' + x[0] + '"' + (x[2] ? ' checked' : '') + '> ' + x[1] + '</label>';
       }).join('')
       + '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-gray" style="flex:1" onclick="document.getElementById(\'ipdc-print-ov\').remove()">Cancel</button><button class="btn btn-gold" style="flex:1" id="ipdc-print-go">Print</button></div></div>';
     document.body.appendChild(ov);
+    ov.querySelectorAll('.ipdc-q').forEach(function (b) {
+      b.onclick = function () {
+        ov.querySelector('#ipdc-pf').value = b.getAttribute('data-f'); ov.querySelector('#ipdc-pt').value = b.getAttribute('data-t');
+        ov.querySelectorAll('.ipdc-q').forEach(function (x) { x.className = 'btn btn-xs ' + (x === b ? 'btn-blue' : 'btn-outline') + ' ipdc-q'; });
+      };
+    });
     ov.querySelector('#ipdc-print-go').onclick = function () {
       var opts = { from: ov.querySelector('#ipdc-pf').value || from, to: ov.querySelector('#ipdc-pt').value || to, pages: [].filter.call(ov.querySelectorAll('.ipdc-pp'), function (c) { return c.checked; }).map(function (c) { return c.value; }) };
       ov.remove();
