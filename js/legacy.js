@@ -7190,9 +7190,9 @@ const BMH_RX_LAYOUT_OPTIONS = [
   { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
   { key: 'compact_bilingual', label: 'Compact Bilingual' },
   { key: 'editorial_columns', label: 'Editorial Columns' },
-  { key: 'split_chart', label: 'Split Chart (Eye / OBG)' },
-  { key: 'eye_card', label: 'Card Chart (Eye / OBG)' },
-  { key: 'clear_table', label: 'Bilingual Table (Eye / OBG)' }
+  { key: 'split_chart', label: 'Split Chart' },
+  { key: 'eye_card', label: 'Card Chart' },
+  { key: 'clear_table', label: 'Bilingual Table' }
 ];
 const BMH_RX_LAYOUT_KEYS = ['old_software', 'tabular_1', 'tabular_2', 'old_software_compact'];
 const BMH_RX_SELECTABLE_LAYOUT_KEYS = BMH_RX_LAYOUT_OPTIONS.map(function (option) { return option.key; });
@@ -40257,7 +40257,7 @@ window.printUnifiedRx = function(deptId) {
   const doctorDefaultRxDesign = getDoctorPrescriptionDesign(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD');
   const rxDesignChosen = getPrescriptionLayoutOverride(saveDept) || doctorDefaultRxDesign;
   const BMH_NEW_RX_KEYS = ['split_chart', 'eye_card', 'clear_table'];
-  const rxNewDesign = BMH_NEW_RX_KEYS.includes(rxDesignChosen) && (deptId === 'oe' || deptId === 'obg') ? rxDesignChosen : '';
+  const rxNewDesign = BMH_NEW_RX_KEYS.includes(rxDesignChosen) && ['oe', 'obg', 'psych', 'skin'].includes(deptId) ? rxDesignChosen : '';
   const rxDesign = BMH_NEW_RX_KEYS.includes(rxDesignChosen) ? 'current' : rxDesignChosen;
   const doctorSpec    = String(doctorProfile.dept || '').trim() || ({oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Skin & Cosmetology'}[deptId]||'Specialist');
   const doctorReg     = String(doctorProfile.reg || '').trim();
@@ -41112,7 +41112,7 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
 
 </body></html>`;
 
-  // New Eye / OBG layouts (Split Chart, Card Chart, Bilingual Table) — print-only; falls back to the standard layout on any problem.
+  // New layouts (Split Chart, Card Chart, Bilingual Table) — print-only; falls back to the standard layout on any problem.
   if (rxNewDesign && typeof window.bmhBuildNewRxDesign === 'function') {
     try {
       const newHtml = window.bmhBuildNewRxDesign({
@@ -41122,7 +41122,7 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
         headerSrc: lhImgSrc,
         patient: { name: ptName, id: ptId, ageSex: ptAge, date: today, centre: '' },
         doctor: { name: doctorName, degrees: doctorDegrees, spec: doctorSpec, reg: doctorReg },
-        complaint: (deptId === 'oe' && incCC && cc) ? cc : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint : '',
+        complaint: (deptId === 'oe' && incCC && cc) ? cc : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint : (deptId === 'skin' && skinChief) ? skinChief : '',
         findings: deptId === 'oe' && incPos && typeof buildOphthoPositiveFindingsList === 'function' ? (buildOphthoPositiveFindingsList() || []) : [],
         eye: deptId === 'oe' ? {
           showVA: showVA, showIOP: !!showIOP && !!(iopGatOD || iopGatOS), showGL: showGL, showCorrectedIOP: !!showCorrectedIOP && !!(pachyOD || pachyOS),
@@ -41137,12 +41137,12 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
           hb: obgIncAnc && obgAncOn && obgAncSummary ? obgAncSummary.hb : '',
           bloodGroup: obgIncAnc && obgAncOn && obgAncSummary ? obgAncSummary.bloodGroup : ''
         } : null,
-        dx: dxList.slice(),
+        dx: deptId === 'psych' || deptId === 'skin' ? [] : dxList.slice(),
         drugs: incRxFinal ? drugs.map(function (d) { const c = JSON.parse(JSON.stringify(d)); try { ensureRxDrugPrintDates(c); } catch (e) {} return c; }) : [],
         rxEmpty: forceDeptRxSections && (!drugs || !drugs.length) ? 'No medications on this prescription.' : '',
-        procedures: incPrcFinal ? procs.slice() : [],
+        procedures: !psychPrescriptionPrintOnly && incPrcFinal ? procs.slice() : [],
         procDone: procDonePrintLine || '',
-        investigations: incInvFinal ? patientInvestigationPrintRows.map(function (o) { return String(o.name || 'Investigation') + (o.notes ? ' — ' + o.notes : ''); }) : [],
+        investigations: !psychPrescriptionPrintOnly && incInvFinal ? patientInvestigationPrintRows.map(function (o) { return String(o.name || 'Investigation') + (o.notes ? ' — ' + o.notes : ''); }) : [],
         advice: incAdvFinal ? String(advice || '').trim() : '',
         postSurgeryAdvice: postSurgeryAdviceLine || '',
         warning: deptId === 'obg' && obgIncAnc && obgAncOn ? '<b>Come at once if:</b> bleeding or leaking of water · fewer baby movements · severe headache or blurred vision · swelling of face or hands · fits' : '',
@@ -45203,7 +45203,8 @@ function collectDischargeCardSnapshotFromDom() {
       fromDate: fromEl ? fromEl.value : '',
       toDate: toEl ? toEl.value : '',
       activeTimes: activeTimes,
-      isTaper: /taper/i.test(noteText)
+      isTaper: /taper/i.test(noteText),
+      form: row.getAttribute('data-form') || ''
     });
   });
   return { capturedAt: new Date().toISOString(), instructions: instr, followups: fus, medicines: medicines };
@@ -45253,11 +45254,47 @@ function timeSlotMatchesActive(row, t) {
     return String(a || '').toLowerCase().replace(/\s+/g, '') === want;
   });
 }
+// Medicine form for the discharge-card time grid: saved form → drug library type → words in the name.
+function bmhDischargeMedForm(row) {
+  const classify = function (txt) {
+    const t = String(txt || '').toLowerCase();
+    if (!t) return '';
+    if (/eye\s*drop|eyedrop|\bdrops?\b|ear drop|nasal drop/.test(t)) return 'drop';
+    if (/capsule|\bcaps?\b|\bcap\./.test(t)) return 'capsule';
+    if (/syrup|suspension|elixir|\bsyp\b|syp\.|liquid|\bsol\b/.test(t)) return 'syrup';
+    if (/injection|\binj\b|inj\.|\biv\b|\bim\b|vial|ampoule/.test(t)) return 'injection';
+    if (/ointment|\boint\b|oint\.|cream|gel|lotion|paste/.test(t)) return 'ointment';
+    if (/tablet|\btabs?\b|tab\.|oral|mg tab|mcg tab|sachet|powder/.test(t)) return 'tablet';
+    return '';
+  };
+  const saved = classify(row && row.form);
+  if (saved) return saved;
+  const name = String(row && row.name || '').trim();
+  try {
+    const trade = name.split('(')[0].trim().toLowerCase();
+    if (trade && typeof DRUG_LIBRARY !== 'undefined' && Array.isArray(DRUG_LIBRARY)) {
+      const hit = DRUG_LIBRARY.find(function (d) { return d && String(d.trade || '').trim().toLowerCase() === trade; });
+      const fromLib = hit ? classify(hit.type || hit.drugType) : '';
+      if (fromLib) return fromLib;
+    }
+  } catch (e) {}
+  const fromName = classify(name);
+  if (fromName) return fromName;
+  if (/tears|lubricant|latanoprost|timolol|brimo|moxiflox|moxi|pred|dorzol|nepafenac|ketorolac|tobra|carboxymethyl|hypromellose/.test(name.toLowerCase())) return 'drop';
+  return 'drop';
+}
+function bmhDischargeMedIconSvg(form) {
+  const s = 'width="13" height="13" viewBox="0 0 16 16" style="vertical-align:middle" aria-hidden="true"';
+  if (form === 'tablet') return '<svg ' + s + '><circle cx="8" cy="8" r="6.2" fill="#fff" stroke="#222" stroke-width="1.6"/><line x1="3.6" y1="12.4" x2="12.4" y2="3.6" stroke="#222" stroke-width="1.5"/></svg>';
+  if (form === 'capsule') return '<svg ' + s + '><g transform="rotate(-40 8 8)"><rect x="1.5" y="5" width="13" height="6" rx="3" fill="#fff" stroke="#222" stroke-width="1.5"/><path d="M8 5h3.5a3 3 0 0 1 0 6H8z" fill="#444"/></g></svg>';
+  if (form === 'syrup') return '<svg ' + s + '><rect x="6" y="1.2" width="4" height="2.6" fill="#444"/><path d="M5.2 4.2h5.6l1.2 2.2v8.1H4V6.4z" fill="#fff" stroke="#222" stroke-width="1.4"/><rect x="5.2" y="8.6" width="5.6" height="4.4" fill="#888"/></svg>';
+  if (form === 'injection') return '<svg ' + s + '><g transform="rotate(-45 8 8)"><rect x="4" y="5.6" width="7.5" height="4.8" fill="#fff" stroke="#222" stroke-width="1.4"/><line x1="11.5" y1="8" x2="15.5" y2="8" stroke="#222" stroke-width="1.3"/><line x1="1" y1="8" x2="4" y2="8" stroke="#222" stroke-width="1.6"/><line x1="1" y1="5.6" x2="1" y2="10.4" stroke="#222" stroke-width="1.6"/></g></svg>';
+  if (form === 'ointment') return '<svg ' + s + '><path d="M2 5.5h9l2 1.2v2.6l-2 1.2H2z" fill="#fff" stroke="#222" stroke-width="1.4"/><rect x="13" y="6.9" width="2.2" height="2.2" fill="#444"/><line x1="4.5" y1="5.5" x2="4.5" y2="10.5" stroke="#888" stroke-width="1.2"/></svg>';
+  return '<svg ' + s + '><path d="M8 1.5C8 1.5 3.2 7.4 3.2 10.3a4.8 4.8 0 0 0 9.6 0C12.8 7.4 8 1.5 8 1.5z" fill="#fff" stroke="#222" stroke-width="1.5"/><path d="M5.6 10.6a2.4 2.4 0 0 0 2.4 2.3" fill="none" stroke="#888" stroke-width="1.2"/></svg>';
+}
 function medTimeSlotIcon(row, t) {
   if (!timeSlotMatchesActive(row, t)) return '';
-  const n = String(row.name || '').toLowerCase();
-  const isTab = (/tablet|tablet\.|capsule|cap\.|syrup|suspension|oral|\.syp|syp\.|mouth|mg tab|mcg tab/.test(n) || /\btab\b/.test(n)) && !/drop|eye drop|eyedrop|tears|lubricant|latanoprost|timolol|brimo|moxiflox|moxi|pred|prednisolone drop|ns drop/.test(n);
-  return isTab ? '💊' : '💧';
+  return bmhDischargeMedIconSvg(bmhDischargeMedForm(row));
 }
 function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const esc = escapeHtmlConsent;
@@ -45317,7 +45354,8 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '<div style="line-height:1.4;color:#5a3000;font-size:10.5px">' + (instr.length ? instr.map(function (x) { return '<div style="margin-bottom:4px">• ' + esc(x) + '</div>'; }).join('') : '<div style="color:#888">—</div>') + '</div>'
     + '</div></div>'
     + '<div style="padding:6px 10px 8px;border-top:1px solid #eee">'
-    + gridHtml(meds, 'Medicines and timings (💧 drop · 💊 tablet in time slot)')
+    + gridHtml(meds, 'Medicines and timings')
+    + '<div style="font-size:7.6px;color:#444;margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">' + [['drop', 'Drops'], ['tablet', 'Tablet'], ['capsule', 'Capsule'], ['syrup', 'Syrup'], ['injection', 'Injection'], ['ointment', 'Ointment / gel']].map(function (x) { return '<span>' + bmhDischargeMedIconSvg(x[0]) + ' ' + x[1] + '</span>'; }).join('') + '</div>'
     + '</div>'
     + '<div style="display:flex;justify-content:space-between;padding:6px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient / attendant signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
     + '</div></body></html>';
@@ -45701,7 +45739,8 @@ function renderDischargeBuilder() {
         name: (rxDrugTradeName(d) || d.name || d.brand || '') + ((rxDrugGenericName(d) && rxDrugGenericName(d)!==rxDrugTradeName(d)) ? ' ('+rxDrugGenericName(d)+')' : ''),
         note: d._taperStep ? ('Taper step ' + d._taperStep) : '',
         local: (d.lang&&d.lang.pa) ? d.lang.pa : (d.lang&&d.lang.hi ? d.lang.hi : ''),
-        freq: d.freq, duration: d.dur, isTaper: !!d._taperStep
+        freq: d.freq, duration: d.dur, isTaper: !!d._taperStep,
+        form: d.drugType || d.type || ''
       }, i, tmpl.color, data.dischargeDate));
     } else {
       meds = tmpl.medicines.map((m,i)=>renderDcMedRow(m,i,tmpl.color, data.dischargeDate));
@@ -45806,7 +45845,8 @@ function renderDcMedRow(m,i,color,defaultFromDate) {
   const fromDate = formatDischargeDateInput(m.fromDate || defaultFromDate || new Date());
   const toDate = formatDischargeDateInput(m.toDate || deriveDischargeToDate(fromDate, m.duration));
   const taperOnly = !!m.isTaper;
-  return `<div class="drop-item dc-med-row" style="border-left-color:${color};background:${color}11;margin-bottom:8px;position:relative">
+  const formAttr = String(m.form || '').replace(/[^a-z0-9 \-\/]/gi, '');
+  return `<div class="drop-item dc-med-row" data-form="${formAttr}" style="border-left-color:${color};background:${color}11;margin-bottom:8px;position:relative">
     <button onclick="this.closest('.dc-med-row').remove()" style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:var(--red);font-size:12px">✕</button>
     <div contenteditable="true" spellcheck="false" style="font-weight:900;font-size:13px;outline:none;padding-right:20px;${taperOnly?'display:none;':''}">${m.name}</div>
     <div contenteditable="true" spellcheck="false" style="font-size:11px;color:var(--g1);outline:none;margin:${taperOnly?'0 0 3px 0':'3px 0'}">${m.note}</div>
@@ -47110,9 +47150,9 @@ const RX_DESIGN_OPTIONS = [
   { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
   { key: 'compact_bilingual', label: 'Compact Bilingual' },
   { key: 'editorial_columns', label: 'Editorial Columns' },
-  { key: 'split_chart', label: 'Split Chart (Eye / OBG)' },
-  { key: 'eye_card', label: 'Card Chart (Eye / OBG)' },
-  { key: 'clear_table', label: 'Bilingual Table (Eye / OBG)' }
+  { key: 'split_chart', label: 'Split Chart' },
+  { key: 'eye_card', label: 'Card Chart' },
+  { key: 'clear_table', label: 'Bilingual Table' }
 ];
 const RX_TYPOGRAPHY_FONT_OPTIONS = [
   { key: 'classic', label: 'Classic Serif', heading: "'Playfair Display','Georgia',serif", body: "'Lato',sans-serif" },

@@ -118,6 +118,7 @@
     return '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?' + fam.map(function (f) { return 'family=' + f; }).join('&') + '&display=swap">';
   }
   function localFont(lang) { return lang === 'hi' ? "'Noto Sans Devanagari',sans-serif" : lang === 'pa' ? "'Noto Sans Gurmukhi',sans-serif" : 'inherit'; }
+  var GREY = '';
   function header(c) { return c.headerSrc ? '<div class="lh"><img src="' + esc(c.headerSrc) + '" alt=""></div>' : '<div class="lh-text">Baweja Multispeciality Hospital</div>'; }
   function signature(c, align) {
     var dr = c.doctor || {};
@@ -142,7 +143,7 @@
   // ═════════════════════ Design A — Split Chart ═════════════════════
   function designA(c) {
     var lang = c.lang, L = langLabel(lang), loc = localFont(lang);
-    var css = ':root{--ink:#16302f;--teal:#0f5c5a;--tint:#eef5f4;--line:#cfe0de;--muted:#5f7472;--rose:#b0325a}*{box-sizing:border-box}'
+    var css = ':root{--ink:#111;--teal:#222;--tint:#f2f2f2;--line:#d2d2d2;--muted:#555;--rose:#111}*{box-sizing:border-box}'
       + 'body{margin:0;background:#fff;font-family:"DM Sans",Arial,sans-serif;color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4;margin:0}'
       + '.loc{font-family:' + loc + '}.page{width:210mm;min-height:297mm;display:grid;grid-template-columns:66mm 1fr;grid-template-rows:auto 1fr auto}'
       + '.top{grid-column:1/-1;padding:6mm 10mm 1.5mm;border-bottom:2px solid var(--teal)}.lh img{width:100%;display:block}.lh-text{font-family:"DM Serif Display",serif;font-size:22pt;color:var(--teal)}'
@@ -150,11 +151,11 @@
       + '.tag{font-size:7pt;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}.nm{font-family:"DM Serif Display",serif;font-size:16pt;line-height:1.1}.meta{font-size:8.4pt;color:var(--muted);line-height:1.5;margin-top:2px}'
       + 'h3{font-size:7.4pt;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin:3.6mm 0 1.4mm;font-weight:700}main>h3:first-child{margin-top:0}'
       + 'table.t{width:100%;border-collapse:collapse;font-size:8.5pt;background:#fff;border-radius:6px;overflow:hidden}table.t th,table.t td{padding:3.5px 5px;border-bottom:1px solid var(--line);text-align:center}'
-      + 'table.t th{background:var(--teal);color:#fff;font-weight:500;font-size:7.4pt}table.t td:first-child,table.t th:first-child{text-align:left;color:var(--muted)}'
+      + 'table.t th{background:#e4e4e4;color:#111;font-weight:500;font-size:7.4pt}table.t td:first-child,table.t th:first-child{text-align:left;color:var(--muted)}'
       + '.note{font-size:7.4pt;color:var(--muted);margin-top:2px}.iop{display:flex;gap:6px}.iop div{flex:1;background:#fff;border-radius:6px;text-align:center;padding:5px 0;border:1px solid var(--line)}'
       + '.iop b{display:block;font-size:15pt;font-family:"DM Serif Display",serif;font-weight:400}.iop span{font-size:7.4pt;color:var(--muted)}'
       + '.cor{margin-top:5px;background:#fff;border:1px dashed var(--teal);border-radius:6px;padding:5px 8px;font-size:8.2pt;line-height:1.45}.cor b{color:var(--teal)}'
-      + '.ga{background:var(--teal);color:#fff;border-radius:10px;padding:7px 10px}.ga b{font-family:"DM Serif Display",serif;font-weight:400;font-size:19pt;display:block;line-height:1}.ga span{font-size:8pt;opacity:.9}'
+      + '.ga{background:#fff;color:#111;border:2px solid #222;border-radius:10px;padding:7px 10px}.ga b{font-family:"DM Serif Display",serif;font-weight:400;font-size:19pt;display:block;line-height:1}.ga span{font-size:8pt;opacity:.9}'
       + '.gpal{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:5px}.gpal div{background:#fff;border:1px solid var(--line);border-radius:6px;text-align:center;padding:3px 0;font-size:7pt;color:var(--muted)}.gpal b{display:block;font-size:12pt;color:var(--ink)}'
       + '.kv{width:100%;border-collapse:collapse;font-size:8.4pt;background:#fff;border-radius:6px;overflow:hidden}.kv td{padding:3.5px 6px;border-bottom:1px solid var(--line)}.kv td:first-child{color:var(--muted)}.kv td:last-child{text-align:right;font-weight:700}'
       + '.vit{display:grid;grid-template-columns:1fr 1fr;gap:4px}.vit div{background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px 7px;font-size:7.2pt;color:var(--muted)}.vit b{display:block;font-size:10.5pt;color:var(--ink)}'
@@ -168,7 +169,7 @@
       + '.taper b{display:block;color:var(--teal);font-size:8.4pt}.taper span{display:block;color:var(--muted)}.taper em{font-style:normal;display:block;color:var(--teal)}'
       + '.adv{margin:0;padding-left:14px;font-size:9.2pt;line-height:1.45}.warn{margin-top:2mm;border:1.5px solid var(--rose);border-radius:8px;padding:5px 9px;font-size:8.6pt;line-height:1.45}.warn b{color:var(--rose)}'
       + '.foot{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-end;gap:6mm;padding:2mm 10mm 6mm;border-top:1px solid var(--line)}'
-      + '.fu{background:var(--teal);color:#fff;padding:6px 12px;border-radius:20px;font-weight:700;font-size:9.5pt;display:inline-block}'
+      + '.fu{background:#fff;color:#111;border:2px solid #222;padding:5px 12px;border-radius:20px;font-weight:700;font-size:10.5pt;display:inline-block}'
       + '.sig-line{border-top:1px solid var(--ink);padding-top:3px;margin-top:9mm;min-width:58mm;display:inline-block}.sig-deg,.sig-sub{font-size:7.6pt;color:var(--muted);max-width:80mm;margin-left:auto}';
     var p = c.patient, aside = '', main = '';
     aside += '<div class="tag">Patient</div><div class="nm">' + esc(p.name) + '</div><div class="meta">' + esc(p.ageSex) + ' · ' + esc(p.id) + '<br>' + esc(p.date) + (p.centre ? ' · ' + esc(p.centre) : '') + '</div>';
@@ -186,7 +187,7 @@
         + '<tr><td>RE</td><td>' + val(e.od.sph) + '</td><td>' + val(e.od.cyl) + '</td><td>' + val(e.od.ax) + '</td><td>' + val(e.od.add) + '</td></tr>'
         + '<tr><td>LE</td><td>' + val(e.os.sph) + '</td><td>' + val(e.os.cyl) + '</td><td>' + val(e.os.ax) + '</td><td>' + val(e.os.add) + '</td></tr></table>'
         + (has(e.ipd) ? '<div class="note">PD ' + esc(e.ipd) + ' mm</div>' : '');
-    } else {
+    } else if (c.dept === 'obg') {
       var pr = obgPresent(c);
       if (pr) {
         aside += '<h3>Present pregnancy</h3>';
@@ -225,19 +226,19 @@
     if (adv.length) main += '<h3>Advice</h3><ul class="adv">' + adv.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
     if (c.warning) main += '<div class="warn">' + c.warning + '</div>';
     var foot = '<div>' + (c.followUp ? '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>' : '') + '</div>' + signature(c, 'right');
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + '</style></head><body><div class="page"><div class="top">' + header(c) + '</div><aside>' + aside + '</aside><main>' + main + '</main><div class="foot">' + foot + '</div></div></body></html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + GREY + '</style></head><body><div class="page"><div class="top">' + header(c) + '</div><aside>' + aside + '</aside><main>' + main + '</main><div class="foot">' + foot + '</div></div></body></html>';
   }
 
   // ═════════════════════ Design B — Card ═════════════════════
   function designB(c) {
     var lang = c.lang, L = langLabel(lang), loc = localFont(lang);
-    var css = ':root{--ink:#1b1f3b;--indigo:#3d3fa8;--soft:#f2f2fb;--line:#dcdcef;--muted:#6a6c8a;--amber:#c47a00;--rose:#b0325a}*{box-sizing:border-box}'
+    var css = ':root{--ink:#111;--indigo:#222;--soft:#f2f2f2;--line:#d4d4d4;--muted:#555;--amber:#888;--rose:#111}*{box-sizing:border-box}'
       + 'body{margin:0;background:#fff;font-family:Manrope,Arial,sans-serif;color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4;margin:0}'
       + '.loc{font-family:' + loc + '}.page{width:210mm;min-height:297mm;padding:6mm 10mm 7mm;display:flex;flex-direction:column}.lh img{width:100%;display:block}.lh-text{font-size:18pt;font-weight:800;color:var(--indigo)}'
-      + '.pt{margin-top:2mm;background:var(--indigo);color:#fff;border-radius:10px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center}.pt .nm{font-size:14pt;font-weight:800}.pt .mt{font-size:8.6pt;opacity:.92;text-align:right;line-height:1.5}'
+      + '.pt{margin-top:2mm;background:#ececec;color:#111;border:1.5px solid #bbb;border-radius:10px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center}.pt .nm{font-size:14pt;font-weight:800}.pt .mt{font-size:8.6pt;opacity:.92;text-align:right;line-height:1.5}'
       + '.eyes{margin-top:3mm;display:grid;grid-template-columns:1fr 1fr;gap:3mm}.eye{border:1.5px solid var(--line);border-radius:10px;overflow:hidden}.eye h4{margin:0;background:var(--soft);padding:5px 10px;font-size:8.8pt;font-weight:800;display:flex;justify-content:space-between}.eye h4 em{font-style:normal;color:var(--indigo)}'
       + '.grid{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}.grid div{padding:5px 4px;text-align:center;border-right:1px solid var(--line)}.grid div:last-child{border-right:0}.grid small{display:block;font-size:6.8pt;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}.grid b{font-size:11.5pt;font-weight:800}'
-      + '.spec{border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);background:#fcfcff}.spec div{padding:4px;text-align:center;font-size:9.6pt;font-weight:600}.spec small{display:block;font-size:6.8pt;color:var(--muted)}'
+      + '.spec{border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);background:#fafafa}.spec div{padding:4px;text-align:center;font-size:9.6pt;font-weight:600}.spec small{display:block;font-size:6.8pt;color:var(--muted)}'
       + '.legend{font-size:7.6pt;color:var(--muted);margin-top:2px}.legend b{color:var(--indigo)}'
       + '.dash{margin-top:3mm;display:grid;grid-template-columns:1.2fr 1.2fr 1fr 1fr;gap:3mm}.card{border:1.5px solid var(--line);border-radius:10px;padding:6px 10px}.card small{display:block;font-size:6.8pt;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600}'
       + '.card b{font-size:13pt;font-weight:800;display:block;line-height:1.2}.card span{font-size:7.8pt;color:var(--muted)}.card.hl{background:var(--soft);border-color:var(--indigo)}.card.hl b{color:var(--indigo)}'
@@ -248,7 +249,7 @@
       + 'table.rx{width:100%;border-collapse:collapse;margin-top:2.5mm;font-size:9.2pt}table.rx th{font-size:7.2pt;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left;padding:4px 6px;border-bottom:2px solid var(--indigo)}'
       + 'table.rx td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}table.rx tr{break-inside:avoid}table.rx .b{font-weight:800;font-size:10.2pt}table.rx .g{font-size:8.2pt;color:var(--muted)}table.rx .l{font-size:9pt;color:var(--indigo)}'
       + '.dot{display:inline-block;width:14px;height:14px;border-radius:50%;border:1.6px solid var(--indigo);margin-right:3px;vertical-align:middle}.dot.on{background:var(--indigo)}.dot.night.on{background:var(--amber);border-color:var(--amber)}'
-      + '.dates{font-size:7.8pt;color:var(--muted)}.sos{font-size:8.4pt;font-weight:800;color:var(--indigo)}.eyetag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:8pt;font-weight:800;background:#e8e8fb;color:var(--indigo)}'
+      + '.dates{font-size:7.8pt;color:var(--muted)}.sos{font-size:8.4pt;font-weight:800;color:var(--indigo)}.eyetag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:8pt;font-weight:800;background:#e6e6e6;color:var(--indigo)}'
       + '.tst{display:inline-block;background:var(--soft);border-radius:6px;padding:2px 7px;font-size:8.2pt;margin:2px 0;white-space:nowrap}.tst b{color:var(--indigo)}'
       + '.warn{margin-top:2.5mm;border:1.5px solid var(--rose);border-radius:8px;padding:5px 9px;font-size:8.6pt;line-height:1.45}.warn b{color:var(--rose)}'
       + '.bottom{margin-top:auto;padding-top:3mm;display:grid;grid-template-columns:1.4fr 1fr;gap:5mm;align-items:end}.adv{font-size:8.8pt;line-height:1.5}.adv b{color:var(--indigo)}'
@@ -275,7 +276,7 @@
         if (e.showGL && has(e.ipd)) notes.push('PD ' + esc(e.ipd) + ' mm');
         if (notes.length) h += '<div class="legend">' + notes.join(' · ') + '</div>';
       }
-    } else {
+    } else if (c.dept === 'obg') {
       var pr = obgPresent(c);
       if (pr) {
         var cards = [];
@@ -320,13 +321,13 @@
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ') + '<br>';
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
     h += '<div class="bottom"><div class="adv">' + left + '</div>' + signature(c, 'center') + '</div>';
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + '</style></head><body><div class="page">' + h + '</div></body></html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + GREY + '</style></head><body><div class="page">' + h + '</div></body></html>';
   }
 
   // ═════════════════════ Design D — Clear Table ═════════════════════
   function designD(c) {
     var lang = c.lang, L = langLabel(lang), loc = localFont(lang);
-    var css = ':root{--ink:#111;--green:#1e6b3a;--pale:#f1f7f2;--line:#cfdcd2;--muted:#5d6b61;--rose:#b0325a}*{box-sizing:border-box}'
+    var css = ':root{--ink:#111;--green:#222;--pale:#f1f1f1;--line:#d2d2d2;--muted:#555;--rose:#111}*{box-sizing:border-box}'
       + 'body{margin:0;background:#fff;font-family:"IBM Plex Sans",Arial,sans-serif;color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4;margin:0}'
       + '.loc{font-family:' + loc + '}.mono{font-family:"IBM Plex Mono",monospace}.page{width:210mm;min-height:297mm;padding:6mm 10mm 7mm;display:flex;flex-direction:column}.lh img{width:100%;display:block;margin-bottom:2mm}.lh-text{font-size:17pt;font-weight:700;margin-bottom:2mm}'
       + '.pt{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;border:2px solid var(--ink)}.pt div{padding:5px 10px;border-right:1px solid var(--line);font-size:10pt}.pt div:last-child{border-right:0}.pt small{display:block;font-size:7pt;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}'
@@ -360,7 +361,7 @@
         if (e.showGL && has(e.ipd)) notes.push('PD ' + esc(e.ipd) + ' mm');
         h += (notes.length ? '<div class="note">' + notes.join(' · ') + '</div>' : '') + '</div>';
       }
-    } else {
+    } else if (c.dept === 'obg') {
       var pr = obgPresent(c);
       if (pr) {
         var pc = [['G P A L', 'G' + (pr.g || 0) + ' P' + (pr.p || 0) + ' A' + (pr.a || 0) + ' L' + (pr.l || 0)], ['LMP', pr.lmp], ['EDD (dates)', pr.eddDates], ['GA (dates)', pr.gaDates], ['EDD (USG)', pr.eddUsg], ['GA (USG)', pr.gaUsg], ['Blood group', c.obg.bloodGroup], ['Hb', c.obg.hb]].filter(function (x) { return has(x[1]); });
@@ -370,6 +371,8 @@
       if (vit.length) h += '<div class="sec"><h4>Vitals</h4><table class="d"><tr>' + vit.map(function (r) { return '<th>' + esc(r[0]) + '</th>'; }).join('') + '</tr><tr>' + vit.map(function (r) { return '<td>' + esc(r[1]) + '</td>'; }).join('') + '</tr></table></div>';
       if (c.obg && c.obg.history.length) h += '<div class="sec"><h4>Obstetric history</h4><table class="d l">' + c.obg.history.map(function (x) { return '<tr><td class="k" style="width:28mm">' + esc(x.label) + '</td><td>' + esc(x.text) + '</td></tr>'; }).join('') + '</table></div>';
       if (cc.length) h += '<div class="sec"><h4>Complaints</h4><div style="font-size:9.4pt">' + cc.map(esc).join(' · ') + '</div></div>';
+    } else if (cc.length || c.findings.length) {
+      h += '<div class="sec"><h4>Complaints' + (c.findings.length ? ' &amp; findings' : '') + '</h4><div class="cols">' + (cc.length ? '<p><b>Complaints:</b> ' + cc.map(esc).join(' · ') + '</p>' : '<p></p>') + (c.findings.length ? '<p><b>Findings:</b> ' + c.findings.map(esc).join(' · ') + '</p>' : '') + '</div></div>';
     }
     if (c.procDone) h += '<div class="sec"><h4>Procedure done</h4><div style="font-size:9.4pt">' + esc(c.procDone) + '</div></div>';
     if (c.dx.length) h += '<div class="sec"><h4>Diagnosis</h4><div class="dx">' + c.dx.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div></div>';
@@ -390,7 +393,7 @@
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ');
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
     h += '<div class="bottom"><div class="adv">' + left + '</div>' + signature(c, 'center') + '</div>';
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + '</style></head><body><div class="page">' + h + '</div></body></html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prescription</title>' + fontLinks(lang) + '<style>' + css + GREY + '</style></head><body><div class="page">' + h + '</div></body></html>';
   }
 
   // Sample (for the Settings → Doctors preview only)
@@ -415,7 +418,7 @@
 
   window.BMH_RX_NEW_DESIGN_KEYS = KEYS;
   window.bmhBuildNewRxDesign = function (c) {
-    if (!c || KEYS.indexOf(c.design) < 0 || (c.dept !== 'oe' && c.dept !== 'obg')) return '';
+    if (!c || KEYS.indexOf(c.design) < 0 || ['oe', 'obg', 'psych', 'skin'].indexOf(c.dept) < 0) return '';
     c.lang = c.lang === 'hi' || c.lang === 'pa' ? c.lang : 'en';
     c.findings = c.findings || []; c.dx = c.dx || []; c.drugs = c.drugs || []; c.procedures = c.procedures || []; c.investigations = c.investigations || [];
     if (c.obg) c.obg.history = c.obg.history || [];
