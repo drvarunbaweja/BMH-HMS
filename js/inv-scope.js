@@ -38,6 +38,14 @@
     var d = deptKey(u.dept), c = centreKey(u.centre);
     return d && c ? { dept: d, centre: c } : null;
   }
+  // Doctors (not admin): their own department, both centres — on screen only; their clinic work is untouched.
+  function docScope() {
+    var u = user();
+    if (!u || isAdmin() || String(u.role || '') !== 'Doctor') return null;
+    var d = deptKey(u.dept);
+    return d ? { dept: d, centre: 'ALL', doctor: true } : null;
+  }
+  function anyScope() { return scope() || docScope(); }
   function storeCentre(name) { var s = String(name || ''); return /\bCHD\b/i.test(s) ? 'CHD' : /\bRPR\b/i.test(s) ? 'RPR' : (s ? 'RPR' : ''); }
   function storeDept(name) {
     var s = String(name || '').toLowerCase();
@@ -52,13 +60,13 @@
     sc = sc || scope(); if (!sc) return true; if (!item) return false;
     var st = item.store || item.toStore || item.fromStore || '';
     var c = st ? storeCentre(st) : (centreKey(item.centre) || 'RPR');
-    if (c !== sc.centre) return false;
+    if (sc.centre !== 'ALL' && c !== sc.centre) return false;
     var d = storeDept(st) || itemDept(item);
     return d === sc.dept;
   }
   function storeInScope(name, sc) {
-    sc = sc || scope(); if (!sc) return true;
-    if (storeCentre(name) !== sc.centre) return false;
+    sc = sc || anyScope(); if (!sc) return true;
+    if (sc.centre !== 'ALL' && storeCentre(name) !== sc.centre) return false;
     var d = storeDept(name);
     return !d || d === sc.dept;
   }
@@ -100,28 +108,34 @@
     if (row.fromStore || row.toStore) return (!!row.fromStore && storeInScope(row.fromStore, sc) && (storeDept(row.fromStore) || itemDept(row)) === sc.dept) || (!!row.toStore && storeInScope(row.toStore, sc) && (storeDept(row.toStore) || itemDept(row)) === sc.dept);
     if (row.store) return inScope({ store: row.store, dept: row.dept }, sc);
     var d = itemDept(row);
-    return d === sc.dept && (!row.centre || centreKey(row.centre) === sc.centre);
+    return d === sc.dept && (sc.centre === 'ALL' || !row.centre || centreKey(row.centre) === sc.centre);
   }
   function withScopedLists(fn, self, args) {
-    var sc = scope();
+    var sc = anyScope();
     if (!sc) return fn.apply(self, args);
-    prune();
-    var saved = {}, guards = {};
+    if (!sc.doctor) prune();
+    var saved = {}, guards = {}, invSaved = null, arr = inv();
+    if (sc.doctor && arr) {
+      invSaved = arr.slice();
+      var keepI = arr.filter(function (r) { return inScope(r, sc); });
+      arr.length = 0; keepI.forEach(function (r) { arr.push(r); });
+    }
     SWAP.forEach(function (k) {
       var a = window[k]; if (!Array.isArray(a)) return;
       saved[k] = a.slice();
       var keep = a.filter(function (r) { return rowInScope(r, sc); });
       a.length = 0; keep.forEach(function (r) { a.push(r); });
     });
-    ['saveBmhFinancials', 'queueBmhFinancialsRemoteSync'].forEach(function (f) { guards[f] = window[f]; window[f] = function () {}; });
+    ['saveBmhFinancials', 'queueBmhFinancialsRemoteSync', 'saveInventoryStockToStorage'].forEach(function (f) { guards[f] = window[f]; window[f] = function () {}; });
     try { return fn.apply(self, args); }
     finally {
+      if (invSaved) { arr.length = 0; invSaved.forEach(function (r) { arr.push(r); }); }
       Object.keys(guards).forEach(function (f) { window[f] = guards[f]; });
       Object.keys(saved).forEach(function (k) { var a = window[k]; a.length = 0; saved[k].forEach(function (r) { a.push(r); }); });
     }
   }
   ['renderInventoryPurchaseLog', 'renderInventoryUsageLog', 'renderInventoryTodayEntries', 'renderInventoryIndents', 'renderInventoryTransfers',
-    'renderInventoryStoreStock', 'renderInventoryPoAlerts', 'renderStockList', 'renderInventoryExpiryCheck'].forEach(function (name) {
+    'renderInventoryStoreStock', 'renderInventoryPoAlerts', 'renderStockList', '_renderStockListNow', 'renderInventoryExpiryCheck'].forEach(function (name) {
     var orig = window[name];
     if (typeof orig !== 'function') return;
     var w = function () { return withScopedLists(orig, this, arguments); };
@@ -132,7 +146,7 @@
   if (typeof origStores === 'function') {
     window.bmhInventoryStoreOptions = function () {
       var list = origStores.apply(this, arguments) || [];
-      var sc = scope();
+      var sc = anyScope();
       return sc ? list.filter(function (s) { return storeInScope(s, sc); }) : list;
     };
   }
@@ -188,7 +202,7 @@
   var validUntil = 0;
   window.bmhRequireInventoryDeletePin = function () {
     if (isAdmin() || !window.__bmhScopedDeleteOK) return origRequire.apply(this, arguments);
-    var sc = scope();
+    var sc = anyScope();
     if (!sc) return origRequire.apply(this, arguments);
     if (Date.now() < validUntil) return true;
     var rec = PINS[sc.dept];
@@ -203,11 +217,11 @@
   ['deleteInventoryItemsPrompt', 'deleteInventoryStockRow', 'deleteInventoryIolGroup'].forEach(function (name) {
     var orig = window[name]; if (typeof orig !== 'function') return;
     window[name] = function () {
-      window.__bmhScopedDeleteOK = !!scope();
+      window.__bmhScopedDeleteOK = !!anyScope();
       try { return orig.apply(this, arguments); } finally { window.__bmhScopedDeleteOK = false; }
     };
   });
-  window.bmhInvScopedDeleteAllowed = function () { return !!window.__bmhScopedDeleteOK && !!scope(); };
+  window.bmhInvScopedDeleteAllowed = function () { return !!window.__bmhScopedDeleteOK && !!anyScope(); };
 
   // Admin: set the department delete PINs
   window.bmhOpenDeletePins = function () {
@@ -235,6 +249,91 @@
     };
   };
 
+  // ── recently added stock (inventory page) and login notice ──
+  function esc(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function tsOf(r) { return Date.parse(r.ts || r.date || r.createdAt || '') || 0; }
+  function fmt(ms) { try { return new Date(ms).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+  function recentPurchases(sc, sinceMs) {
+    return (window.BMH_PURCHASES || []).filter(function (r) { return r && tsOf(r) > sinceMs && rowInScope(r, sc); }).sort(function (a, b) { return tsOf(b) - tsOf(a); });
+  }
+  function purchaseRowsHtml(rows) {
+    return rows.slice(0, 40).map(function (r) {
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--g5,#eee);font-size:12px;display:flex;gap:8px;justify-content:space-between"><div><b>' + esc(r.itemName || '') + '</b><div style="font-size:10.5px;color:#666">' + esc([r.store, r.vendor, r.batchNo ? 'Batch ' + r.batchNo : '', r.exp ? 'Exp ' + r.exp : ''].filter(Boolean).join(' · ')) + '</div></div><div style="text-align:right;white-space:nowrap"><b>+' + esc(r.qty || '') + '</b><div style="font-size:10.5px;color:#666">' + esc(fmt(tsOf(r))) + '</div></div></div>';
+    }).join('');
+  }
+  function addRecentCard(page, sc) {
+    var old = page.querySelector('#bmh-inv-recent'); if (old) old.remove();
+    var rows = recentPurchases(sc, Date.now() - 14 * 864e5);
+    var col = page.querySelector('.g32 > .col'); if (!col) return;
+    col.insertAdjacentHTML('afterbegin', '<div class="card" id="bmh-inv-recent"><div class="card-hd"><div><div class="card-title">🆕 Recently added stock — ' + DEPTS[sc.dept] + '</div><div class="card-sub">Last 14 days' + (sc.centre !== 'ALL' ? ' · ' + sc.centre : ' · both centres') + '</div></div></div>'
+      + (rows.length ? '<div style="max-height:260px;overflow:auto">' + purchaseRowsHtml(rows) + '</div>' : '<div style="font-size:12px;color:var(--g1);padding:6px 0">No stock added in the last 14 days.</div>') + '</div>');
+  }
+  function userSlug() { var u = user() || {}; return String(u.username || u.name || 'user').toLowerCase().replace(/[^a-z0-9]+/g, '_'); }
+  function seenKey() { return 'bmh_inv_seen_' + userSlug(); }
+  function getSeen() {
+    var local = 0; try { local = Number(localStorage.getItem(seenKey()) || 0); } catch (e) {}
+    if (!window.FBDB) return Promise.resolve(local);
+    return window.FBDB.ref('inventorySeen/' + userSlug()).once('value').then(function (s) { return Math.max(local, Number(s.val() || 0)); }).catch(function () { return local; });
+  }
+  function setSeen(ms) {
+    try { localStorage.setItem(seenKey(), String(ms)); } catch (e) {}
+    if (window.FBDB) window.FBDB.ref('inventorySeen/' + userSlug()).set(ms).catch(function () {});
+  }
+  var noticeFor = '';
+  function loginNotice() {
+    var sc = docScope(); var u = user();
+    if (!sc || !u || !u.name) return;
+    if (noticeFor === u.name) return;
+    if (!(window.BMH_PURCHASES || []).length) return;   // wait until stock records have loaded
+    noticeFor = u.name;
+    getSeen().then(function (seen) {
+      var since = seen || (Date.now() - 3 * 864e5);
+      var rows = recentPurchases(sc, since);
+      if (!rows.length) { if (!seen) setSeen(Date.now()); return; }
+      var ov = document.createElement('div'); ov.id = 'bmh-inv-notice';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,40,.45);z-index:4200;display:flex;align-items:center;justify-content:center;padding:16px';
+      ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:16px 18px;max-height:80vh;display:flex;flex-direction:column">'
+        + '<div style="font-size:15px;font-weight:900;color:#1A3C6E">📦 New stock added — ' + DEPTS[sc.dept] + '</div><div style="font-size:11.5px;color:#666;margin:2px 0 8px">' + rows.length + ' item' + (rows.length > 1 ? 's' : '') + ' since ' + esc(fmt(since)) + '</div>'
+        + '<div style="overflow:auto;flex:1">' + purchaseRowsHtml(rows) + '</div>'
+        + '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-gray" style="flex:1" id="bmh-inv-dismiss">Dismiss</button>'
+        + (document.querySelector('.ni[onclick*="nav(\'inventory\'"]') ? '<button class="btn btn-gold" style="flex:1" id="bmh-inv-view">View in inventory</button>' : '') + '</div></div>';
+      document.body.appendChild(ov);
+      var close = function () { setSeen(Date.now()); ov.remove(); };
+      ov.querySelector('#bmh-inv-dismiss').onclick = close;
+      var v = ov.querySelector('#bmh-inv-view');
+      if (v) v.onclick = function () { close(); try { nav('inventory', document.querySelector('.ni[onclick*="nav(\'inventory\'"]')); } catch (e) {} };
+    });
+  }
+  // ── tracking: medicine-wise and patient-wise movement (doctor / admin only) ──
+  function addTrackCard(page, ds) {
+    if (page.querySelector('#bmh-inv-track')) return;
+    var col = page.querySelector('.g32 > .col'); if (!col) return;
+    col.insertAdjacentHTML('beforeend', '<div class="card" id="bmh-inv-track"><div class="card-hd"><div><div class="card-title">🔎 Track stock movement</div><div class="card-sub">' + (ds ? DEPTS[ds.dept] + ' · ' : '') + 'Search a medicine / item, or a patient (BMSH ID or name)</div></div></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="bmh-track-q" placeholder="e.g. Ceftriaxone or BMSH-123456 or Mandeep" style="flex:1;min-width:200px" oninput="bmhInvTrack()"><select id="bmh-track-days" onchange="bmhInvTrack()"><option value="30">Last 30 days</option><option value="90">Last 3 months</option><option value="365">Last 12 months</option><option value="0">All time</option></select></div>'
+      + '<div id="bmh-track-out" style="margin-top:8px;font-size:12px;color:var(--g1)">Type at least 3 letters.</div></div>');
+  }
+  window.bmhInvTrack = function () {
+    var q = String((document.getElementById('bmh-track-q') || {}).value || '').trim().toLowerCase();
+    var days = Number((document.getElementById('bmh-track-days') || {}).value || 0);
+    var out = document.getElementById('bmh-track-out'); if (!out) return;
+    if (q.length < 3) { out.innerHTML = 'Type at least 3 letters.'; return; }
+    var ds = docScope(); var since = days ? Date.now() - days * 864e5 : 0;
+    var rows = (window.BMH_INVENTORY_USAGE || []).filter(function (r) {
+      if (!r || (since && tsOf(r) < since)) return false;
+      if (ds && !rowInScope(r, ds)) return false;
+      return [r.itemName, r.barcode, r.bmhId, r.patientName, r.procedure].some(function (x) { return String(x || '').toLowerCase().indexOf(q) >= 0; });
+    }).sort(function (a, b) { return tsOf(b) - tsOf(a); });
+    if (!rows.length) { out.innerHTML = 'No usage found.'; return; }
+    var byItem = {}, byPt = {};
+    rows.forEach(function (r) {
+      var ik = r.itemName || r.barcode; byItem[ik] = byItem[ik] || { qty: 0, pts: {} }; byItem[ik].qty += Number(r.qty || 1); byItem[ik].pts[r.bmhId || r.patientName] = 1;
+      var pk = (r.bmhId || '') + '|' + (r.patientName || ''); byPt[pk] = (byPt[pk] || 0) + Number(r.qty || 1);
+    });
+    var sum = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + Object.keys(byItem).slice(0, 8).map(function (k) { return '<span style="background:#eef3fb;border-radius:8px;padding:3px 8px;color:#1A3C6E"><b>' + esc(k) + '</b>: ' + byItem[k].qty + ' to ' + Object.keys(byItem[k].pts).length + ' patient' + (Object.keys(byItem[k].pts).length > 1 ? 's' : '') + '</span>'; }).join('') + '</div>';
+    out.innerHTML = sum + '<div style="max-height:320px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;color:#111"><thead><tr style="background:var(--g6,#f3f4f6)"><th style="text-align:left;padding:4px">Date</th><th style="text-align:left;padding:4px">Patient</th><th style="text-align:left;padding:4px">Item</th><th style="padding:4px">Qty</th><th style="text-align:left;padding:4px">Where / why</th></tr></thead><tbody>'
+      + rows.slice(0, 300).map(function (r) { return '<tr style="border-bottom:1px solid #eee"><td style="padding:4px;white-space:nowrap">' + esc(fmt(tsOf(r))) + '</td><td style="padding:4px">' + esc(r.patientName || '') + '<div style="font-size:10px;color:#666">' + esc(r.bmhId || '') + '</div></td><td style="padding:4px">' + esc(r.itemName || '') + '</td><td style="padding:4px;text-align:center">' + esc(r.qty || 1) + '</td><td style="padding:4px">' + esc([r.store, r.procedure, r.source].filter(Boolean).join(' · ')) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  };
+
   // ── page adjustments when the inventory page opens ──
   function adjustPage() {
     var page = document.getElementById('pg-inventory'); if (!page) return;
@@ -244,6 +343,14 @@
       var hd = page.querySelector('.card .card-hd');
       if (hd) hd.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-outline btn-xs bmh-delpin-btn" style="margin-left:auto" onclick="bmhOpenDeletePins()">🔐 Delete PINs</button>');
     }
+    var ds = docScope();
+    if (ds && !page.querySelector('.bmh-scope-tag')) {
+      var t2 = page.querySelector('.card .card-title');
+      if (t2) t2.insertAdjacentHTML('beforeend', ' <span class="bmh-scope-tag" style="font-size:11px;font-weight:800;background:#eef3fb;color:#1A3C6E;border-radius:10px;padding:2px 9px;margin-left:6px">' + DEPTS[ds.dept] + ' stock — both centres</span>');
+      page.querySelectorAll('.ptab').forEach(function (t) { if (/inv-ocr/.test(t.getAttribute('onclick') || '')) t.style.display = 'none'; });
+    }
+    if (sc || ds) addRecentCard(page, sc || ds);
+    if (ds || isAdmin()) addTrackCard(page, ds);
     // department login: own banner, own department preselected, no hospital ledger tab
     if (sc) {
       var title = page.querySelector('.card .card-title');
@@ -260,7 +367,7 @@
   }
   function start() {
     loadPins();
-    setInterval(function () { try { if (scope()) prune(); } catch (e) {} }, 4000);
+    setInterval(function () { try { if (scope()) prune(); } catch (e) {} try { loginNotice(); } catch (e) {} }, 4000);
     setTimeout(function () { try { ensureChdStores(); } catch (e) {} }, 15000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
