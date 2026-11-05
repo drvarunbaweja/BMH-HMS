@@ -320,28 +320,157 @@
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;flex:1">💊 Medicines due today</div><button class="btn btn-outline btn-xs" onclick="bmhIpdRxOpen(\'' + esc(p.id) + '\')">Medicine chart</button></div>'
       + dueHtml(p) + '</div>';
   }
+  // ── where the dose came from: hospital stock (deducted from the inventory) or the patient's own medicine ──
+  function invList() { try { return INVENTORY || window.INVENTORY || []; } catch (e) { return window.INVENTORY || []; } }
+  function centreOf(p) {
+    var c = String((p && p.centre) || '').toUpperCase();
+    if (!c) { try { c = String(getEffectiveCentre() || '').toUpperCase(); } catch (e) { c = ''; } }
+    return /CHD|CHANDIGARH/.test(c) ? 'CHD' : /RPR|RAJPURA/.test(c) ? 'RPR' : c;
+  }
+  function storeCentreOf(store) {
+    try { if (window.bmhInvScope) return bmhInvScope.storeCentre(store); } catch (e) {}
+    var x = String(store || ''); return /\bCHD\b/i.test(x) ? 'CHD' : /\bRPR\b/i.test(x) ? 'RPR' : (x ? 'RPR' : '');
+  }
+  function deptOf(p) { try { return window.bmhInvScope ? bmhInvScope.deptKey(p.dept || '') : ''; } catch (e) { return ''; } }
+  function storeDeptOf(store) { try { return window.bmhInvScope ? bmhInvScope.storeDept(store) : ''; } catch (e) { return ''; } }
+  function nameTokens(name) {
+    return String(name || '').toLowerCase().replace(/^(inj\.?|injection|tab\.?|tablet|cap\.?|capsule|syp\.?|syrup|susp\.?|oint\.?|e\/d|eye drops?|drops?|iv)\s+/i, '')
+      .split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 3; }).slice(0, 1);
+  }
+  function stockMatches(p, query) {
+    var c = centreOf(p), d = deptOf(p);
+    var toks = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+    var hay = function (it) { try { return bmhInventoryItemSearchHaystack(it); } catch (e) { return [it.name, it.genericName, it.company, it.store, it.barcode, it.batchNo].join(' ').toLowerCase(); } };
+    return invList().filter(function (it) {
+      if (!it || !(Number(it.stock) > 0)) return false;
+      var sc = storeCentreOf(it.store); if (c && sc && sc !== c) return false;
+      var h = hay(it); return toks.every(function (t) { return h.indexOf(t) >= 0; });
+    }).sort(function (a, b) {
+      var da = storeDeptOf(a.store) === d ? 0 : 1, db = storeDeptOf(b.store) === d ? 0 : 1;
+      if (da !== db) return da - db;
+      return String(a.exp || '9999').localeCompare(String(b.exp || '9999'));
+    }).slice(0, 25);
+  }
+  function ensureInventory() {
+    if (invList().length) return Promise.resolve();
+    try { loadInventoryStockFromStorage(); } catch (e) {}
+    if (invList().length) return Promise.resolve();
+    try { return Promise.resolve(loadInventoryFromFirebase()).catch(function () {}); } catch (e) { return Promise.resolve(); }
+  }
+  // The inventory usage log is saved as one shared record: make sure this device has the latest copy before adding to it.
+  function ensureFinancials() {
+    if (!window.FBDB) return Promise.resolve(true);
+    return window.FBDB.ref('financials').once('value').then(function (snap) {
+      var remote = snap.val();
+      var localTs = Number(localStorage.getItem('bmh_financials_updated_at') || 0);
+      if (remote && Number(remote.updatedAt || 0) >= localTs) {
+        window._bmhFinancialsHydrating = true;
+        try { applyBmhFinancialsSnapshot(remote, { persistLocal: true }); } finally { window._bmhFinancialsHydrating = false; }
+      }
+      try { if (!window._bmhFinancialsSyncStarted) startBmhFinancialsFirebaseSync(); } catch (e) {}
+      return true;
+    }).catch(function () { return false; });
+  }
+  function freshStock(item) {
+    if (!window.FBDB || !item || !item.barcode) return Promise.resolve(true);
+    return window.FBDB.ref('inventory/' + item.barcode).once('value').then(function (snap) {
+      var v = snap.val(); if (v && v.stock != null) item.stock = Number(v.stock) || 0; return true;
+    }).catch(function () { return true; });
+  }
+  function chooseSource(p, r) {
+    return ensureInventory().then(function () {
+      return new Promise(function (resolve) {
+        var old = document.getElementById('ipdm-src'); if (old) old.remove();
+        var c = centreOf(p);
+        var ov = document.createElement('div'); ov.id = 'ipdm-src';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(10,20,40,.45);display:flex;align-items:center;justify-content:center;padding:14px';
+        ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.3)">'
+          + '<div style="font-size:15px;font-weight:900;margin-bottom:2px">Give: ' + esc(rxLine(r)) + '</div>'
+          + '<div style="font-size:12px;color:#666;margin-bottom:12px">' + esc(p.name || '') + ' — where is this dose coming from?</div>'
+          + '<div style="display:flex;gap:8px;margin-bottom:12px"><button type="button" class="btn btn-gold" data-k="stock" style="flex:1">🏥 From hospital stock</button><button type="button" class="btn btn-outline" data-k="own" style="flex:1">👜 Patient\'s own medicine</button></div>'
+          + '<div id="ipdm-src-stock" style="display:none"><div style="font-size:11.5px;color:#555;margin-bottom:6px">Pick the item used (' + esc(c || 'this centre') + ' stock). It will be deducted from that store.</div>'
+          + '<input id="ipdm-src-q" type="text" placeholder="Search stock…" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:13px;margin-bottom:6px">'
+          + '<div id="ipdm-src-list" style="max-height:38vh;overflow:auto;border:1px solid #eee;border-radius:8px"></div>'
+          + '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px">Quantity used <input id="ipdm-src-qty" type="number" min="1" step="1" value="1" style="width:70px;padding:5px 8px;border:1px solid #ccc;border-radius:6px"></div></div>'
+          + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button type="button" class="btn btn-gray" data-k="cancel">Cancel</button><button type="button" class="btn btn-gold" data-k="ok" id="ipdm-src-ok" style="display:none" disabled>Give &amp; deduct</button></div></div>';
+        document.body.appendChild(ov);
+        var picked = null, q = ov.querySelector('#ipdm-src-q');
+        var done = function (v) { ov.remove(); resolve(v); };
+        var draw = function () {
+          var rows = stockMatches(p, q.value);
+          ov.querySelector('#ipdm-src-list').innerHTML = rows.length ? rows.map(function (it, i) {
+            var sel = picked === it;
+            return '<div data-i="' + i + '" style="padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;gap:8px;align-items:center;background:' + (sel ? '#fff8e1' : '#fff') + '"><div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:800">' + (sel ? '✔ ' : '') + esc(it.name) + '</div><div style="font-size:10.5px;color:#666">' + esc([it.store, it.exp ? 'Exp ' + it.exp : '', it.batchNo ? 'Batch ' + it.batchNo : ''].filter(Boolean).join(' · ')) + '</div></div><div style="font-size:11px;font-weight:900;color:' + (Number(it.stock) <= 2 ? '#c0392b' : '#27ae60') + '">' + esc(it.stock) + ' left</div></div>';
+          }).join('') : '<div style="padding:10px;font-size:12px;color:#888">No matching stock found at ' + esc(c || 'this centre') + '. Try another search word.</div>';
+          Array.prototype.forEach.call(ov.querySelectorAll('#ipdm-src-list [data-i]'), function (el) {
+            el.onclick = function () { picked = rows[Number(el.getAttribute('data-i'))]; ov.querySelector('#ipdm-src-ok').disabled = false; draw(); };
+          });
+        };
+        q.oninput = function () { picked = null; ov.querySelector('#ipdm-src-ok').disabled = true; draw(); };
+        ov.addEventListener('click', function (e) {
+          var k = e.target && e.target.getAttribute && e.target.getAttribute('data-k');
+          if (k === 'cancel') return done(null);
+          if (k === 'own') return done({ src: 'own' });
+          if (k === 'stock') {
+            ov.querySelector('#ipdm-src-stock').style.display = ''; ov.querySelector('#ipdm-src-ok').style.display = '';
+            if (!q.value) q.value = nameTokens(r.name).join(' ');
+            draw(); try { q.focus(); } catch (er) {}
+          }
+          if (k === 'ok' && picked) return done({ src: 'stock', item: picked, qty: Math.max(1, parseInt(ov.querySelector('#ipdm-src-qty').value, 10) || 1) });
+        });
+      });
+    });
+  }
+
   var busy = false;
   window.bmhIpdGive = function (id, rxId, slot) {
     var p = findPt(id); if (!p || busy) return;
     var r = (p.ipdRx || []).find(function (x) { return x.id === rxId; }); if (!r) return;
+    var t0 = today();
+    if (slot && given(p, r.id, t0, slot)) { toast('Already given', 'i'); return; }
     var g = window.bmhIpdNursing && window.bmhIpdNursing.gate;
     busy = true;
-    (g ? g('ipdm-nurse-select') : Promise.resolve(String((document.getElementById('ipdm-nurse-select') || {}).value || ''))).then(function (nurse) {
+    var choice = null;
+    chooseSource(p, r).then(function (ch) {
+      if (!ch) return null;
+      choice = ch;
+      return g ? g('ipdm-nurse-select') : String((document.getElementById('ipdm-nurse-select') || {}).value || '');
+    }).then(function (nurse) {
+      if (!choice) return;
       if (!nurse) { if (!g) toast('Select nursing staff first', 'w'); return; }
-      var at = new Date().toISOString(), t = today();
+      var t = today();
       if (slot && given(p, r.id, t, slot)) { toast('Already given', 'i'); return; }
-      if (!Array.isArray(p.medAdmin)) p.medAdmin = [];
-      p.medAdmin.push({ rxId: r.id, name: r.name, dose: r.dose, route: r.route, date: t, slot: slot || '', at: at, by: nurse });
-      if (!Array.isArray(p.notes)) p.notes = [];
-      var d = new Date(at);
-      p.notes.unshift({ date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }), time: hhmm(at), note: 'Given: ' + rxLine(r) + (slot ? ' (' + slot + ' dose)' : ''), nurse: nurse, doctor: '', recordedAt: at, kind: 'med', rxId: r.id });
-      return save(p, { medAdmin: p.medAdmin, notes: p.notes }).then(function () {
-        toast(r.name + ' given by ' + nurse + ' ✓', 's');
-        if (window.bmhIpdNursing && window.bmhIpdNursing.deviceNurse() !== nurse) window._ipdAuthenticatedNurse = '';
-        var box = document.getElementById('ipdm-due'); if (box) box.outerHTML = cardHtml(p);
-        try { openIPDPatient(p.id); } catch (e) {}
+      var pre = choice.src === 'stock' ? ensureFinancials().then(function (ok) {
+        if (!ok) throw new Error('offline');
+        return freshStock(choice.item);
+      }) : Promise.resolve();
+      return pre.then(function () {
+        var at = new Date().toISOString();
+        var entry = { rxId: r.id, name: r.name, dose: r.dose, route: r.route, date: t, slot: slot || '', at: at, by: nurse, src: choice.src };
+        var srcText = ' — patient\'s own medicine';
+        if (choice.src === 'stock') {
+          var it = choice.item;
+          var row = bmhUseInventoryItemForPatient(p.bmhId || p.id, it, { qty: choice.qty, mode: 'consume', dept: p.dept || deptOf(p) || '', source: 'ipd', procedure: 'IPD dose: ' + r.name, procedureRef: p.id });
+          if (row && p.name && (!row.patientName || row.patientName === row.bmhId)) row.patientName = p.name;
+          entry.store = it.store || ''; entry.barcode = it.barcode || ''; entry.qty = choice.qty; entry.item = it.name || '';
+          srcText = ' — from hospital stock (' + (it.store || 'store') + (choice.qty > 1 ? ', qty ' + choice.qty : '') + ')';
+        }
+        if (!Array.isArray(p.medAdmin)) p.medAdmin = [];
+        p.medAdmin.push(entry);
+        if (!Array.isArray(p.notes)) p.notes = [];
+        var d = new Date(at);
+        p.notes.unshift({ date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }), time: hhmm(at), note: 'Given: ' + rxLine(r) + (slot ? ' (' + slot + ' dose)' : '') + srcText, nurse: nurse, doctor: '', recordedAt: at, kind: 'med', rxId: r.id });
+        return save(p, { medAdmin: p.medAdmin, notes: p.notes }).then(function () {
+          toast(r.name + ' given by ' + nurse + (choice.src === 'stock' ? ' — deducted from ' + (entry.store || 'stock') : ' (patient\'s own)') + ' ✓', 's');
+          if (window.bmhIpdNursing && window.bmhIpdNursing.deviceNurse() !== nurse) window._ipdAuthenticatedNurse = '';
+          var box = document.getElementById('ipdm-due'); if (box) box.outerHTML = cardHtml(p);
+          try { openIPDPatient(p.id); } catch (e) {}
+        });
       });
-    }).catch(function (e) { console.warn('[ipd-meds]', e); toast('Could not save — try again', 'w'); }).then(function () { busy = false; });
+    }).catch(function (e) {
+      console.warn('[ipd-meds]', e);
+      toast(e && e.message === 'offline' ? 'Could not reach the server to update stock — check internet and try again' : 'Could not save — try again', 'w');
+    }).then(function () { busy = false; });
   };
 
   // hooks: monitoring sheet card, buttons on patient + doctor screens
@@ -421,7 +550,7 @@
             var planned = [false, false, false, false];
             (r.times || []).forEach(function (t) { if (slotApplies(r, d, t)) planned[slotOf({ slot: t })] = true; });
             adm.filter(function (a) { return a.rxId === r.id && a.date === d; }).forEach(function (a) {
-              var i = slotOf(a); cells[i] += (cells[i] ? '<br>' : '') + '✓ ' + esc(hhmm(a.at)) + '<br><span class="in">' + esc(initials(a.by)) + '</span>';
+              var i = slotOf(a); cells[i] += (cells[i] ? '<br>' : '') + '✓ ' + esc(hhmm(a.at)) + '<br><span class="in">' + esc(initials(a.by)) + (a.src === 'own' ? ' (P)' : '') + '</span>';
             });
             return cells.map(function (c, i) { return '<td class="c' + (on && (planned[i] || c || !(r.times || []).length) ? (planned[i] && !c ? ' due' : '') : ' off') + '">' + c + '</td>'; }).join('');
           }).join('') + '</tr>';
@@ -432,7 +561,7 @@
       return '<section class="pg">' + headerFn(p, 'Treatment Chart for Indoor Patients')
         + '<style>table.tc th,table.tc td{text-align:center;font-size:8.6px;padding:2px}table.tc td.nm,table.tc th.nm{text-align:left;width:46mm;font-size:9.5px}table.tc td.nm div{font-size:8.4px;color:#333}table.tc td.c{height:9mm;width:8mm}table.tc td.off{background:#eee}table.tc td.due{background:#fff}table.tc tr.grp td{background:#ddd;font-weight:900;text-align:left;font-size:9.5px}table.tc .in{font-size:7.5px;color:#333}table.tc th.sl{font-size:7.5px}</style>'
         + '<table class="tc">' + head1 + head2 + body + blank + '</table>'
-        + '<div style="font-size:9px;color:#444;margin-top:2mm">✓ = given, with time and the initials of the nurse who gave it (recorded with her PIN). Grey = not prescribed that day. Empty white box = dose due.</div>'
+        + '<div style="font-size:9px;color:#444;margin-top:2mm">✓ = given, with time and the initials of the nurse who gave it (recorded with her PIN). (P) = patient\'s own medicine. Grey = not prescribed that day. Empty white box = dose due.</div>'
         + (sigFn ? sigFn() : '') + '</section>';
     }).join('');
   }
