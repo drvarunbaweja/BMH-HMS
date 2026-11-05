@@ -19663,7 +19663,7 @@ function deleteInventoryVendorPrompt() {
 window.deleteInventoryVendorPrompt = deleteInventoryVendorPrompt;
 function deleteInventoryStockRow(barcode) {
   if (!CURRENT_USER) { showToast('Sign in to delete stock', 'w'); return; }
-  if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can delete stock rows', 'w'); return; }
+  if ((typeof isAdminUser !== 'function' || !isAdminUser()) && !(window.bmhInvScopedDeleteAllowed && window.bmhInvScopedDeleteAllowed())) { showToast('Only admin can delete stock rows', 'w'); return; }
   if (!bmhRequireInventoryDeletePin()) return;
   const idx = INVENTORY.findIndex(function (i) { return String(i.barcode || '') === String(barcode || ''); });
   if (idx < 0) return;
@@ -19678,7 +19678,7 @@ function deleteInventoryStockRow(barcode) {
 }
 window.deleteInventoryStockRow = deleteInventoryStockRow;
 function deleteInventoryIolGroup(company, brand, power, store) {
-  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete stock', 'w'); return; }
+  if (!CURRENT_USER?.isAdmin && !(window.bmhInvScopedDeleteAllowed && window.bmhInvScopedDeleteAllowed())) { showToast('Only admin can delete stock', 'w'); return; }
   if (!bmhRequireInventoryDeletePin()) return;
   const matches = INVENTORY.filter(function (i) {
     return String(i.cat || '').toLowerCase() === 'iol'
