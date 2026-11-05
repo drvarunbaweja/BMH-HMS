@@ -5765,8 +5765,32 @@ function buildOphthoPositiveFindingsList() {
     addLine(label, val?.odText || '', 'Right Eye');
     addLine(label, val?.osText || '', 'Left Eye');
   });
-  addLine('Fundus', document.getElementById('fundus-od')?.value || '', 'Right Eye');
-  addLine('Fundus', document.getElementById('fundus-os')?.value || '', 'Left Eye');
+  // Fundus: abnormal structured selections (disc, C/D, macula, vessels, periphery) + free text, per eye.
+  const fundusSide = function (side) {
+    const g = function (id) { return String(document.getElementById(id)?.value || '').trim(); };
+    const parts = [];
+    const disc = g('fund-' + side + '-disc');
+    if (disc && !/^pink\s*&?\s*healthy$/i.test(disc)) parts.push('Disc ' + disc.toLowerCase());
+    const cd = g('fund-' + side + '-cd');
+    const cdNum = parseFloat(cd);
+    if (cd && ((!isNaN(cdNum) && cdNum >= 0.5) || isNaN(cdNum))) parts.push('C/D ' + cd);
+    const mac = g('fund-' + side + '-mac');
+    if (mac && !/^normal$/i.test(mac)) parts.push('Macula ' + mac);
+    const ves = g('fund-' + side + '-ves');
+    if (ves && !/^normal calibre$/i.test(ves)) parts.push('Vessels ' + ves);
+    const per = g('fund-' + side + '-per');
+    if (per && !/^normal$/i.test(per)) parts.push('Periphery ' + per.toLowerCase());
+    const txt = g('fundus-' + side);
+    if (txt) parts.push(txt);
+    return parts.join(', ');
+  };
+  const fundOd = fundusSide('od');
+  const fundOs = fundusSide('os');
+  if (fundOd && fundOs && fundOd === fundOs) addLine('Fundus', fundOd, 'Both Eyes');
+  else {
+    addLine('Fundus', fundOd, 'Right Eye');
+    addLine('Fundus', fundOs, 'Left Eye');
+  }
   const slNotes = (document.getElementById('sl-notes-text')?.value || '').trim();
   if (slNotes) lines.push('Slit Lamp Notes - ' + slNotes);
   return [...new Set(lines.filter(Boolean))];
@@ -41162,7 +41186,36 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
         rxEmpty: forceDeptRxSections && (!drugs || !drugs.length) ? 'No medications on this prescription.' : '',
         procedures: incPrcFinal ? procs.slice() : [],
         procDone: procDonePrintLine || '',
-        investigations: incInvFinal ? patientInvestigationPrintRows.map(function (o) { return String(o.name || 'Investigation') + (o.notes ? ' — ' + o.notes : ''); }) : [],
+        investigations: (function () {
+          // Everything advised / ordered for this patient on this visit date prints, whether or not the "Lab Investigations" box is ticked.
+          const visitDay = String(printDateValue || todayKey());
+          const dayOf = function (o) {
+            const iso = String(o.orderedAt || '');
+            if (/^\d{4}-\d{2}-\d{2}T/.test(iso)) { try { return localDateKey(iso); } catch (e) { return iso.slice(0, 10); } }
+            const d = String(o.date || '');
+            const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (m) return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+            return d.slice(0, 10);
+          };
+          const pool = [].concat(Array.isArray(cpt.investigationOrders) ? cpt.investigationOrders : [], typeof INVESTIGATION_ORDERS !== 'undefined' ? INVESTIGATION_ORDERS : []);
+          const seen = new Set();
+          const names = [];
+          pool.forEach(function (o) {
+            if (!o || (o.bmhId && o.bmhId !== ptIdRaw)) return;
+            const isToday = dayOf(o) === visitDay;
+            if (!isToday && !(incInvFinal && !o.done)) return;
+            const tpl = String(o.templateName || '').trim();
+            let label = tpl && (String(o.mode || 'advise') === 'advise' || String(o.templateKey || '').indexOf('panel-') === 0)
+              ? (tpl.replace(/\s*[\(\[]\s*(from\s+)?(template|panel)\s*[\)\]]\s*$/i, '').replace(/\s*[-–—:]\s*(template|panel)\s*$/i, '').replace(/\s+(template|panel)\s*$/i, '').trim() || tpl)
+              : String(o.name || '').trim();
+            if (!label) return;
+            const key = label.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            names.push(label + (o.notes && !tpl ? ' — ' + o.notes : ''));
+          });
+          return names;
+        })(),
         advice: incAdvFinal ? String(advice || '').trim() : '',
         postSurgeryAdvice: postSurgeryAdviceLine || '',
         warning: deptId === 'obg' && obgIncAnc && obgAncOn ? '<b>Come at once if:</b> bleeding or leaking of water · fewer baby movements · severe headache or blurred vision · swelling of face or hands · fits' : '',

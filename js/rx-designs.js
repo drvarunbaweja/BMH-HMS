@@ -119,6 +119,12 @@
   }
   function localFont(lang) { return lang === 'hi' ? "'Noto Sans Devanagari',sans-serif" : lang === 'pa' ? "'Noto Sans Gurmukhi',sans-serif" : 'inherit'; }
   var GREY = '';
+  // Procedures advised: one per line, bold and larger so they stand out.
+  function procBlock(c) {
+    return '<div style="border-left:3px solid #222;padding:2px 0 2px 8px;margin:2px 0 3px">' + c.procedures.map(function (x) {
+      return '<div style="font-size:11.5pt;font-weight:800;line-height:1.35;color:#111">' + esc(x) + '</div>';
+    }).join('') + '</div>';
+  }
   function header(c) { return c.headerSrc ? '<div class="lh"><img src="' + esc(c.headerSrc) + '" alt=""></div>' : '<div class="lh-text">Baweja Multispeciality Hospital</div>'; }
   function signature(c, align) {
     var dr = c.doctor || {};
@@ -220,7 +226,7 @@
         return html + '</div>';
       }).join('');
     } else if (c.rxEmpty) main += '<div style="margin-top:3mm;font-size:9.4pt;color:var(--muted)">' + c.rxEmpty + '</div>';
-    if (c.procedures.length) main += '<h3>Procedures advised</h3><div style="font-size:9.3pt">' + c.procedures.map(esc).join(' · ') + '</div>';
+    if (c.procedures.length) main += '<h3>Procedures advised</h3>' + procBlock(c);
     if (c.investigations.length) main += '<h3>Investigations advised</h3><div style="font-size:9.3pt">' + c.investigations.map(esc).join(' · ') + '</div>';
     var adv = adviceLines(c);
     if (adv.length) main += '<h3>Advice</h3><ul class="adv">' + adv.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
@@ -316,7 +322,7 @@
     } else if (c.rxEmpty) h += '<div style="margin-top:3mm;font-size:9.4pt;color:var(--muted)">' + c.rxEmpty + '</div>';
     if (c.warning) h += '<div class="warn">' + c.warning + '</div>';
     var adv = adviceLines(c), left = '';
-    if (c.procedures.length) left += '<b>Procedures advised:</b> ' + c.procedures.map(esc).join(' · ') + '<br>';
+    if (c.procedures.length) left += '<div style="margin-bottom:4px"><b>Procedures advised:</b>' + procBlock(c) + '</div>';
     if (c.investigations.length) left += '<b>Investigations:</b> ' + c.investigations.map(esc).join(' · ') + '<br>';
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ') + '<br>';
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
@@ -388,7 +394,7 @@
     } else if (c.rxEmpty) h += '<div class="sec" style="font-size:9.4pt;color:var(--muted)">' + c.rxEmpty + '</div>';
     if (c.warning) h += '<div class="warn">' + c.warning + '</div>';
     var adv = adviceLines(c), left = '';
-    if (c.procedures.length) left += '<b>Procedures advised:</b> ' + c.procedures.map(esc).join(' · ') + '<br>';
+    if (c.procedures.length) left += '<div style="margin-bottom:4px"><b>Procedures advised:</b>' + procBlock(c) + '</div>';
     if (c.investigations.length) left += '<b>Investigations:</b> ' + c.investigations.map(esc).join(' · ') + '<br>';
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ');
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
