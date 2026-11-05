@@ -101,39 +101,6 @@
           + '<td style="padding:5px;text-align:right">' + (stopped ? '<span style="font-size:10.5px">stopped</span>' : '<button class="btn btn-xs btn-gray" onclick="bmhIpdRxStop(\'' + esc(p.id) + '\',\'' + esc(r.id) + '\')">Stop</button>') + '</td></tr>';
       }).join('') + '</tbody></table>';
   }
-  window.bmhIpdRxOpen = function (id) {
-    var p = findPt(id); if (!p) return;
-    var old = document.getElementById('ipdm-rx-ov'); if (old) old.remove();
-    var ov = document.createElement('div'); ov.id = 'ipdm-rx-ov';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,40,.5);z-index:4500;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
-    var freqOpts = Object.keys(FREQ).map(function (f) { return '<option>' + esc(f) + '</option>'; }).join('');
-    ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:760px;width:100%;padding:16px 18px">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="font-size:15px;font-weight:900;color:#1A3C6E;flex:1">💊 IPD medicines — ' + esc(p.name || '') + '</div><button class="btn btn-gray btn-sm" onclick="document.getElementById(\'ipdm-rx-ov\').remove()">Close</button></div>'
-      + '<div id="ipdm-rx-list">' + listHtml(p) + '</div>'
-      + '<div style="margin-top:14px;background:var(--g6);border-radius:10px;padding:10px">'
-      + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:8px">Add medicine</div>'
-      + '<datalist id="ipdm-rx-drugs">' + drugOptions() + '</datalist>'
-      + '<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px">'
-      + '<div class="form-group" style="margin:0"><label class="fl">Medicine</label><input type="text" id="ipdm-rx-name" list="ipdm-rx-drugs" placeholder="e.g. Inj Ceftriaxone"></div>'
-      + '<div class="form-group" style="margin:0"><label class="fl">Dose</label><input type="text" id="ipdm-rx-dose" placeholder="1 g"></div>'
-      + '<div class="form-group" style="margin:0"><label class="fl">Route</label><select id="ipdm-rx-route">' + ROUTES.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></div>'
-      + '<div class="form-group" style="margin:0"><label class="fl">Frequency</label><select id="ipdm-rx-freq" onchange="document.getElementById(\'ipdm-rx-times\').value=(window.bmhIpdMeds.FREQ[this.value]||[]).join(\', \')">' + freqOpts + '</select></div>'
-      + '<div class="form-group" style="margin:0"><label class="fl">Times (edit if needed)</label><input type="text" id="ipdm-rx-times" value="08:00"></div>'
-      + '<div class="form-group" style="margin:0"><label class="fl">Days</label><input type="number" id="ipdm-rx-days" value="3" min="1"></div>'
-      + '<div class="form-group" style="margin:0"><label class="fl">Start date</label><input type="date" id="ipdm-rx-start" value="' + today() + '"></div>'
-      + '<div class="form-group" style="margin:0;grid-column:span 2"><label class="fl">Note (optional)</label><input type="text" id="ipdm-rx-note" placeholder="e.g. after test dose, slow IV"></div>'
-      + '</div><div style="margin-top:8px"><button class="btn btn-gold btn-sm" onclick="bmhIpdRxAdd(\'' + esc(p.id) + '\')">+ Add to chart</button></div></div>'
-      + '<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="ipdm-rx-tpl" style="flex:1;min-width:200px"><option value="">— Apply a template —</option></select>'
-      + '<button class="btn btn-outline btn-sm" onclick="bmhIpdRxApplyTpl(\'' + esc(p.id) + '\')">Apply</button>'
-      + '<button class="btn btn-outline btn-sm" onclick="bmhIpdRxSaveTpl(\'' + esc(p.id) + '\')">💾 Save current list as template</button></div>'
-      + '</div>';
-    document.body.appendChild(ov);
-    var fillTpl = function () {
-      var sel = document.getElementById('ipdm-rx-tpl'); if (!sel) return;
-      sel.innerHTML = '<option value="">— Apply a template —</option>' + allTemplates().map(function (t, i) { return '<option value="' + i + '">' + esc(t.name) + ' (' + (t.items || []).length + ')</option>'; }).join('');
-    };
-    fillTpl(); loadCloudTpl().then(fillTpl);
-  };
   function refreshModal(p) { var l = document.getElementById('ipdm-rx-list'); if (l) l.innerHTML = listHtml(p); }
   function afterChange(p) {
     refreshModal(p);
@@ -144,21 +111,6 @@
     var stop = /stat/i.test(freq) ? start : addDays(start, Math.max(1, Number(days) || 1) - 1);
     return { id: uid(), name: name, dose: dose, route: route, freq: freq, times: times, start: start, stop: stop, note: note || '', group: group || groupFor(route, name), addedBy: userName(), addedAt: new Date().toISOString() };
   }
-  window.bmhIpdRxAdd = function (id) {
-    var p = findPt(id); if (!p) return;
-    var g = function (x) { return String((document.getElementById('ipdm-rx-' + x) || {}).value || '').trim(); };
-    var name = g('name'); if (!name) { toast('Enter the medicine name', 'w'); return; }
-    var freq = g('freq');
-    var times = g('times').split(/[,\s]+/).map(function (t) { var m = t.match(/^(\d{1,2})(?::?(\d{2}))?$/); return m ? String(Math.min(23, +m[1])).padStart(2, '0') + ':' + (m[2] || '00') : ''; }).filter(Boolean);
-    if (/sos|stat|continuous/i.test(freq)) times = [];
-    var r = makeRx(name, g('dose'), g('route'), freq, times, g('start') || today(), g('days'), g('note'));
-    if (!Array.isArray(p.ipdRx)) p.ipdRx = [];
-    p.ipdRx.push(r);
-    docNote(p, 'Rx started: ' + rxLine(r) + (r.times.length ? ' at ' + r.times.join(', ') : '') + ' — ' + fmtDay(r.start) + ' to ' + fmtDay(r.stop) + (r.note ? ' (' + r.note + ')' : ''));
-    save(p, { ipdRx: p.ipdRx, doctorNotes: p.doctorNotes }).then(function () { toast(name + ' added to the IPD chart ✓', 's'); }).catch(function () { toast('Saved here; could not reach the server — check connection', 'w'); });
-    ['name', 'dose', 'note'].forEach(function (x) { var el = document.getElementById('ipdm-rx-' + x); if (el) el.value = ''; });
-    afterChange(p);
-  };
   window.bmhIpdRxStop = function (id, rxId) {
     var p = findPt(id); if (!p) return;
     var r = (p.ipdRx || []).find(function (x) { return x.id === rxId; }); if (!r) return;
@@ -170,33 +122,174 @@
     save(p, { ipdRx: p.ipdRx, doctorNotes: p.doctorNotes }).catch(function () {});
     afterChange(p);
   };
-  window.bmhIpdRxApplyTpl = function (id) {
+  // ── OPD-style prescription editor for the IPD chart ──
+  var EXTRA_FREQ = ['6-hourly', '8-hourly', '12-hourly', 'Stat (once now)', 'Continuous / drip'];
+  function freqList() { var f = []; try { f = RX_FREQ_OPTIONS.slice(); } catch (e) { f = ['Once daily (OD)', 'Twice daily (BD)', 'Three times daily (TDS)', 'Four times daily (QID)', 'At bedtime (HS)', 'As needed (PRN)']; } return f.concat(EXTRA_FREQ); }
+  function durList() { try { return RX_DURATION_OPTIONS.slice(); } catch (e) { return ['1 day', '2 days', '3 days', '5 days', '7 days', '10 days', '2 weeks', '1 month', 'Ongoing']; } }
+  function typeList() { var t = []; try { t = RX_TYPE_OPTIONS.slice(); } catch (e) { t = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Other']; } if (t.indexOf('IV Fluid') < 0) t.splice(t.indexOf('Injection') + 1, 0, 'IV Fluid'); return t; }
+  var OLDFREQ = { 'OD (once daily)': 'Once daily (OD)', 'BD (twice daily)': 'Twice daily (BD)', 'TDS (three times)': 'Three times daily (TDS)', 'QID (four times)': 'Four times daily (QID)', 'HS (bedtime)': 'At bedtime (HS)', 'SOS (when needed)': 'As needed (PRN)' };
+  function normFreq(f) { return OLDFREQ[f] || f || 'Once daily (OD)'; }
+  function timesFor(freq) {
+    var f = String(freq || '').toLowerCase();
+    if (/prn|as needed|sos|stat|continuous|drip/.test(f)) return [];
+    if (/half-hourly|every 30/.test(f)) return [];
+    if (/^hourly/.test(f)) return ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
+    if (/every 2 hours/.test(f)) return ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+    if (/every 3 hours/.test(f)) return ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00'];
+    if (/every 4 hours|six times|6x/.test(f)) return ['06:00', '10:00', '14:00', '18:00', '22:00', '02:00'];
+    if (/6-hourly/.test(f)) return ['06:00', '12:00', '18:00', '00:00'];
+    if (/8-hourly/.test(f)) return ['06:00', '14:00', '22:00'];
+    if (/12-hourly/.test(f)) return ['08:00', '20:00'];
+    if (/qid|four times/.test(f)) return ['06:00', '12:00', '18:00', '22:00'];
+    if (/tds|three times/.test(f)) return ['08:00', '14:00', '20:00'];
+    if (/bd|twice/.test(f)) return ['08:00', '20:00'];
+    if (/hs|bedtime/.test(f)) return ['21:00'];
+    return ['08:00'];
+  }
+  function routeFromType(type, name) {
+    var t = String(type || '').toLowerCase();
+    if (/iv fluid/.test(t)) return 'IV infusion';
+    if (/injection/.test(t) || /^inj/i.test(name)) return 'IV';
+    if (/tablet|capsule|syrup/.test(t)) return 'Oral';
+    if (/eye/.test(t)) return 'Eye drop';
+    if (/pessary/.test(t)) return 'PV';
+    if (/ointment|cream|gel|lotion/.test(t)) return 'Topical';
+    return 'Oral';
+  }
+  function typeFromName(name) { var n = String(name || ''); return /^inj/i.test(n) ? 'Injection' : /^(rl|ns|dns|d5|d10|ringer)/i.test(n) ? 'IV Fluid' : /^cap/i.test(n) ? 'Capsule' : /^syp/i.test(n) ? 'Syrup' : 'Tablet'; }
+  function daysToDur(d) { d = Number(d) || 1; return d === 1 ? '1 day' : d < 7 ? d + ' days' : d === 7 ? '7 days' : d === 10 ? '10 days' : d === 14 ? '2 weeks' : d === 30 ? '1 month' : d + ' days'; }
+  function durToDays(dur) { if (/ongoing/i.test(dur || '')) return 0; try { return Math.max(1, Math.round(durationLabelToDays(dur))); } catch (e) { var m = String(dur || '').match(/(\d+)/); return m ? +m[1] : 1; } }
+  function libHit(name) {
+    try {
+      var n = String(name || '').replace(/^(tab|cap|inj|syp)\.?\s+/i, '').trim().toLowerCase();
+      return (typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : []).find(function (d) { return String(d.trade || '').toLowerCase() === n; }) || null;
+    } catch (e) { return null; }
+  }
+  var draft = [];  // rows being prepared in the editor
+  function draftRow(o) {
+    var name = o.name || '', type = o.type || typeFromName(name), hit = libHit(name);
+    if (hit && !o.type) type = hit.type || type;
+    return { name: name, generic: o.generic || (hit && hit.generic) || '', type: type, route: o.route || routeFromType(type, name), dose: o.dose || '', freq: normFreq(o.freq), dur: o.dur || '3 days', start: o.start || today(), note: o.note || '' };
+  }
+  function opts(list, sel) { return list.map(function (x) { return '<option' + (x === sel ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join(''); }
+  function draftHtml() {
+    if (!draft.length) return '<div style="font-size:12px;color:var(--g1);padding:8px 2px">Search a medicine above and press Enter, or pick a template. Rows appear here — check them, then add to the chart.</div>';
+    var routes = ROUTES.slice();
+    return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:820px"><thead><tr style="background:var(--g6)">'
+      + ['#', 'Medicine', 'Type', 'Route', 'Dose', 'Frequency', 'Duration', 'From', ''].map(function (h) { return '<th style="text-align:left;padding:5px">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+      + draft.map(function (r, i) {
+        var st = 'style="width:100%;font-size:11.5px;padding:3px 4px"';
+        return '<tr style="border-bottom:1px solid var(--g5)"><td style="padding:4px">' + (i + 1) + '</td>'
+          + '<td style="padding:4px;min-width:170px"><input ' + st + ' value="' + esc(r.name) + '" onchange="bmhIpdDraftSet(' + i + ',\'name\',this.value)"><div style="font-size:10px;color:var(--g1)">' + esc(r.generic) + '</div></td>'
+          + '<td style="padding:4px"><select ' + st + ' onchange="bmhIpdDraftSet(' + i + ',\'type\',this.value)">' + opts(typeList(), r.type) + '</select></td>'
+          + '<td style="padding:4px"><select ' + st + ' onchange="bmhIpdDraftSet(' + i + ',\'route\',this.value)">' + opts(routes.indexOf(r.route) < 0 ? routes.concat([r.route]) : routes, r.route) + '</select></td>'
+          + '<td style="padding:4px;width:80px"><input ' + st + ' value="' + esc(r.dose) + '" placeholder="1 g" onchange="bmhIpdDraftSet(' + i + ',\'dose\',this.value)"></td>'
+          + '<td style="padding:4px"><select ' + st + ' onchange="bmhIpdDraftSet(' + i + ',\'freq\',this.value)">' + opts(freqList().indexOf(r.freq) < 0 ? freqList().concat([r.freq]) : freqList(), r.freq) + '</select></td>'
+          + '<td style="padding:4px"><select ' + st + ' onchange="bmhIpdDraftSet(' + i + ',\'dur\',this.value)">' + opts(durList().indexOf(r.dur) < 0 ? durList().concat([r.dur]) : durList(), r.dur) + '</select></td>'
+          + '<td style="padding:4px;width:120px"><input type="date" ' + st + ' value="' + esc(r.start) + '" onchange="bmhIpdDraftSet(' + i + ',\'start\',this.value)"></td>'
+          + '<td style="padding:4px"><button class="btn btn-xs btn-gray" onclick="bmhIpdDraftDel(' + i + ')">✕</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function renderDraft() { var el = document.getElementById('ipdm-rx-draft'); if (el) el.innerHTML = draftHtml(); var b = document.getElementById('ipdm-rx-commit'); if (b) { b.textContent = '✅ Add ' + draft.length + ' medicine' + (draft.length === 1 ? '' : 's') + ' to the chart'; b.disabled = !draft.length; } }
+  window.bmhIpdDraftSet = function (i, k, v) {
+    var r = draft[i]; if (!r) return; r[k] = v;
+    if (k === 'type') r.route = routeFromType(v, r.name);
+    if (k === 'name') { var h = libHit(v); if (h) { r.generic = h.generic || ''; r.type = h.type || r.type; r.route = routeFromType(r.type, v); renderDraft(); } }
+  };
+  window.bmhIpdDraftDel = function (i) { draft.splice(i, 1); renderDraft(); };
+  function addFromSearch() {
+    var inp = document.getElementById('ipdm-rx-search'); if (!inp) return;
+    var v = String(inp.value || '').trim(); if (!v) return;
+    draft.push(draftRow({ name: v })); inp.value = ''; renderDraft();
+  }
+  window.bmhIpdRxOpen = function (id) {
     var p = findPt(id); if (!p) return;
-    var i = (document.getElementById('ipdm-rx-tpl') || {}).value; if (i === '') { toast('Choose a template', 'w'); return; }
-    var tpl = allTemplates()[+i]; if (!tpl) return;
-    var start = (document.getElementById('ipdm-rx-start') || {}).value || today();
+    draft = [];
+    var old = document.getElementById('ipdm-rx-ov'); if (old) old.remove();
+    var ov = document.createElement('div'); ov.id = 'ipdm-rx-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,40,.5);z-index:4500;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:980px;width:100%;padding:16px 18px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="font-size:15px;font-weight:900;color:#1A3C6E;flex:1">💊 IPD medicines — ' + esc(p.name || '') + '</div><button class="btn btn-gray btn-sm" onclick="document.getElementById(\'ipdm-rx-ov\').remove()">Close</button></div>'
+      + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:4px">On the chart now</div>'
+      + '<div id="ipdm-rx-list">' + listHtml(p) + '</div>'
+      + '<div style="margin-top:14px;background:var(--g6);border-radius:10px;padding:10px">'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+      + '<datalist id="ipdm-rx-drugs">' + drugOptions() + '</datalist>'
+      + '<input type="text" id="ipdm-rx-search" list="ipdm-rx-drugs" placeholder="🔍 Type medicine (e.g. Inj Ceftriaxone) and press Enter" style="flex:1;min-width:220px">'
+      + '<button class="btn btn-xs btn-blue" onclick="bmhIpdRxSearchAdd()">+ Add</button>'
+      + '<button class="btn btn-xs btn-outline" onclick="bmhIpdRxTplPicker(\'' + esc(p.id) + '\')">📋 Templates</button>'
+      + '<button class="btn btn-xs btn-gold" onclick="bmhIpdRxSaveTpl(\'' + esc(p.id) + '\')">📋 Save as Template</button></div>'
+      + '<div id="ipdm-rx-tplbox"></div>'
+      + '<div id="ipdm-rx-draft">' + draftHtml() + '</div>'
+      + '<div style="margin-top:8px"><button class="btn btn-gold btn-sm" id="ipdm-rx-commit" onclick="bmhIpdRxCommit(\'' + esc(p.id) + '\')" disabled>✅ Add 0 medicines to the chart</button></div>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    var inp = ov.querySelector('#ipdm-rx-search');
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addFromSearch(); } });
+    loadCloudTpl();
+  };
+  window.bmhIpdRxSearchAdd = addFromSearch;
+  window.bmhIpdRxCommit = function (id) {
+    var p = findPt(id); if (!p || !draft.length) return;
+    var bad = draft.filter(function (r) { return !String(r.name || '').trim(); });
+    if (bad.length) { toast('Every row needs a medicine name', 'w'); return; }
     if (!Array.isArray(p.ipdRx)) p.ipdRx = [];
-    var added = [];
-    (tpl.items || []).forEach(function (it) {
-      var name = it[0], freq = it[3];
-      if (active(p, start).some(function (r) { return r.name.toLowerCase() === String(name).toLowerCase(); })) return;
-      var times = /sos|stat|continuous/i.test(freq) ? [] : (it[6] || FREQ[freq] || []).slice();
-      var r = makeRx(name, it[1], it[2], freq, times, start, it[4], '', it[5]);
-      p.ipdRx.push(r); added.push(rxLine(r));
+    var lines = [];
+    draft.forEach(function (r) {
+      var days = durToDays(r.dur);
+      var x = makeRx(r.name.trim(), r.dose, r.route, r.freq, timesFor(r.freq), r.start || today(), days || 1, r.note, /iv fluid/i.test(r.type) ? 'IV fluids' : groupFor(r.route, r.name));
+      if (!days) x.stop = '';
+      x.type = r.type; x.generic = r.generic; x.dur = r.dur;
+      p.ipdRx.push(x);
+      lines.push(rxLine(x) + (x.times.length ? ' at ' + x.times.join(', ') : '') + ' — ' + r.dur);
     });
-    if (!added.length) { toast('All medicines in this template are already on the chart', 'i'); return; }
-    docNote(p, 'Rx started (' + tpl.name + '): ' + added.join('; '));
-    save(p, { ipdRx: p.ipdRx, doctorNotes: p.doctorNotes }).then(function () { toast(added.length + ' medicines added ✓', 's'); }).catch(function () {});
+    docNote(p, 'Rx started: ' + lines.join('; '));
+    var n = draft.length; draft = []; renderDraft();
+    save(p, { ipdRx: p.ipdRx, doctorNotes: p.doctorNotes }).then(function () { toast(n + ' medicine' + (n === 1 ? '' : 's') + ' added to the IPD chart ✓', 's'); }).catch(function () { toast('Saved here; could not reach the server — check connection', 'w'); });
     afterChange(p);
+  };
+  function tplItems(t) {
+    return (t.items || []).map(function (it) {
+      if (Array.isArray(it)) return draftRow({ name: it[0], dose: it[1], route: it[2], freq: it[3], dur: daysToDur(it[4]), type: /iv fluids/i.test(it[5] || '') ? 'IV Fluid' : '' });
+      return draftRow(it);
+    });
+  }
+  window.bmhIpdRxTplPicker = function (id) {
+    var box = document.getElementById('ipdm-rx-tplbox'); if (!box) return;
+    if (box.innerHTML) { box.innerHTML = ''; return; }
+    var render = function () {
+      var list = allTemplates();
+      box.innerHTML = '<div style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px;margin-bottom:8px">'
+        + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin-bottom:6px">Templates — tap one to see its medicines</div>'
+        + list.map(function (t, i) { return '<button class="btn btn-xs btn-outline" style="margin:2px" onclick="bmhIpdRxTplShow(' + i + ')">' + esc(t.name) + ' (' + (t.items || []).length + ')</button>'; }).join('')
+        + '<div id="ipdm-rx-tplview"></div></div>';
+    };
+    render(); loadCloudTpl().then(render);
+  };
+  window.bmhIpdRxTplShow = function (i) {
+    var t = allTemplates()[i]; var v = document.getElementById('ipdm-rx-tplview'); if (!t || !v) return;
+    var items = tplItems(t);
+    v.innerHTML = '<div style="margin-top:8px;border-top:1px solid var(--g5);padding-top:6px"><div style="font-size:12px;font-weight:900;margin-bottom:4px">' + esc(t.name) + '</div>'
+      + items.map(function (r, k) { return '<label style="display:flex;gap:8px;align-items:center;font-size:12px;padding:3px 0"><input type="checkbox" class="ipdm-tpl-pick" data-k="' + k + '" checked><span><b>' + esc(r.name) + '</b> ' + esc([r.dose, r.route, r.freq, r.dur].filter(Boolean).join(' · ')) + '</span></label>'; }).join('')
+      + '<button class="btn btn-xs btn-gold" style="margin-top:6px" id="ipdm-tpl-addsel">Add ticked medicines to the list</button></div>';
+    v.querySelector('#ipdm-tpl-addsel').onclick = function () {
+      var start = today();
+      v.querySelectorAll('.ipdm-tpl-pick').forEach(function (c) { if (c.checked) { var r = Object.assign({}, items[+c.getAttribute('data-k')]); r.start = start; draft.push(r); } });
+      document.getElementById('ipdm-rx-tplbox').innerHTML = '';
+      renderDraft();
+    };
   };
   window.bmhIpdRxSaveTpl = function (id) {
     var p = findPt(id); if (!p) return;
-    var list = active(p); if (!list.length) { toast('No active medicines to save', 'w'); return; }
+    var rows = draft.length ? draft.map(function (r) { return { name: r.name, generic: r.generic, type: r.type, route: r.route, dose: r.dose, freq: r.freq, dur: r.dur }; })
+      : active(p).map(function (r) { return { name: r.name, generic: r.generic || '', type: r.type || typeFromName(r.name), route: r.route, dose: r.dose, freq: normFreq(r.freq), dur: r.dur || daysToDur(Math.max(1, Math.round((Date.parse(r.stop || r.start) - Date.parse(r.start)) / 864e5) + 1)) }; });
+    if (!rows.length) { toast('Add medicines first, then save them as a template', 'w'); return; }
     var name = window.prompt('Template name', 'My template'); if (!name) return;
-    var t = { name: name, by: userName(), at: new Date().toISOString(), items: list.map(function (r) { return [r.name, r.dose, r.route, r.freq, Math.max(1, Math.round((Date.parse(r.stop || r.start) - Date.parse(r.start)) / 864e5) + 1), r.group, r.times]; }) };
-    var done = function () { cloudTpl = (cloudTpl || []).concat([t]); toast('Template saved ✓', 's'); window.bmhIpdRxOpen(id); };
+    var t = { name: name, by: userName(), at: new Date().toISOString(), items: rows };
+    var done = function () { cloudTpl = (cloudTpl || []).concat([t]); toast('Template "' + name + '" saved ✓', 's'); };
     if (window.FBDB) window.FBDB.ref('ipdRxTemplates').push(t).then(done, function () { toast('Could not save template — check connection', 'w'); }); else done();
   };
+
 
   // ── nurse: medicines due today ──
   function dueHtml(p) {
