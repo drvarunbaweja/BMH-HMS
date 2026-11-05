@@ -7190,9 +7190,9 @@ const BMH_RX_LAYOUT_OPTIONS = [
   { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
   { key: 'compact_bilingual', label: 'Compact Bilingual' },
   { key: 'editorial_columns', label: 'Editorial Columns' },
-  { key: 'left_label_ledger', label: 'Left Label Ledger' },
-  { key: 'vertical_dx_column', label: 'Vertical Diagnosis Rail' },
-  { key: 'mono_chart', label: 'Mono Chart' }
+  { key: 'split_chart', label: 'Split Chart (Eye / OBG)' },
+  { key: 'eye_card', label: 'Card Chart (Eye / OBG)' },
+  { key: 'clear_table', label: 'Bilingual Table (Eye / OBG)' }
 ];
 const BMH_RX_LAYOUT_KEYS = ['old_software', 'tabular_1', 'tabular_2', 'old_software_compact'];
 const BMH_RX_SELECTABLE_LAYOUT_KEYS = BMH_RX_LAYOUT_OPTIONS.map(function (option) { return option.key; });
@@ -39766,9 +39766,9 @@ function getDoctorPrescriptionPrintMode(profile) {
 function getDoctorPrescriptionDesign(profile, centre) {
   const ctr = normalizeAppointmentCentreValue(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || profile?.centre || 'CHD');
   const centreMode = String(ctr === 'RPR' ? (profile?.rxDesignRPR || '') : (profile?.rxDesignCHD || '')).trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart','old_software','tabular_1','tabular_2','old_software_compact'].includes(centreMode)) return centreMode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart','split_chart','eye_card','clear_table','old_software','tabular_1','tabular_2','old_software_compact'].includes(centreMode)) return centreMode;
   const mode = String(profile?.rxDesign || '').trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart','old_software','tabular_1','tabular_2','old_software_compact'].includes(mode)) return mode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart','split_chart','eye_card','clear_table','old_software','tabular_1','tabular_2','old_software_compact'].includes(mode)) return mode;
   return 'current';
 }
 
@@ -40171,7 +40171,7 @@ window.printUnifiedRx = function(deptId) {
         gaUsg ? ('GA (by USG): ' + gaUsg) : ''
       ])
     ].filter(Boolean);
-    return { historyLines: historyLines, presentLines: presentLines };
+    return { historyLines: historyLines, presentLines: presentLines, g: g, p: p, a: a, l: l, lmp: lmp, eddDates: eddDates, gaDates: gaDates, eddUsg: eddUsg, gaUsg: gaUsg };
   })() : { historyLines: [], presentLines: [] };
 
   // ── Follow-up (per-dept date field; duplicate id=rx-fu-date would otherwise read Ophtho only) ──
@@ -40255,7 +40255,10 @@ window.printUnifiedRx = function(deptId) {
   const cpt = window.CURRENT_PATIENT || {};
   const rxPrintMode = getDoctorPrescriptionPrintMode(doctorProfile);
   const doctorDefaultRxDesign = getDoctorPrescriptionDesign(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD');
-  const rxDesign = getPrescriptionLayoutOverride(saveDept) || doctorDefaultRxDesign;
+  const rxDesignChosen = getPrescriptionLayoutOverride(saveDept) || doctorDefaultRxDesign;
+  const BMH_NEW_RX_KEYS = ['split_chart', 'eye_card', 'clear_table'];
+  const rxNewDesign = BMH_NEW_RX_KEYS.includes(rxDesignChosen) && (deptId === 'oe' || deptId === 'obg') ? rxDesignChosen : '';
+  const rxDesign = BMH_NEW_RX_KEYS.includes(rxDesignChosen) ? 'current' : rxDesignChosen;
   const doctorSpec    = String(doctorProfile.dept || '').trim() || ({oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Skin & Cosmetology'}[deptId]||'Specialist');
   const doctorReg     = String(doctorProfile.reg || '').trim();
   const doctorPhone   = '6280048805';
@@ -40277,7 +40280,8 @@ window.printUnifiedRx = function(deptId) {
         const key = String(o.templateKey || tplName).toLowerCase();
         if (!seenTemplates.has(key)) {
           seenTemplates.add(key);
-          rows.push({ name: tplName, notes: 'Template' });
+          const panelName = tplName.replace(/\s*[\(\[]\s*(from\s+)?(template|panel)\s*[\)\]]\s*$/i, '').replace(/\s*[-–—:]\s*(template|panel)\s*$/i, '').replace(/\s+(template|panel)\s*$/i, '').trim() || tplName;
+          rows.push({ name: panelName, notes: '' });
         }
         return;
       }
@@ -41107,6 +41111,52 @@ ${!isListDesign ? designedAdviceFollow.follow : ''}
 ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #ddd;text-align:center"><img src="${footerSrc}" style="max-width:100%;height:auto;display:block;margin:0 auto" alt="Footer"></div>` : ''}
 
 </body></html>`;
+
+  // New Eye / OBG layouts (Split Chart, Card Chart, Bilingual Table) — print-only; falls back to the standard layout on any problem.
+  if (rxNewDesign && typeof window.bmhBuildNewRxDesign === 'function') {
+    try {
+      const newHtml = window.bmhBuildNewRxDesign({
+        design: rxNewDesign,
+        dept: deptId,
+        lang: rxPlainLang,
+        headerSrc: lhImgSrc,
+        patient: { name: ptName, id: ptId, ageSex: ptAge, date: today, centre: '' },
+        doctor: { name: doctorName, degrees: doctorDegrees, spec: doctorSpec, reg: doctorReg },
+        complaint: (deptId === 'oe' && incCC && cc) ? cc : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint : '',
+        findings: deptId === 'oe' && incPos && typeof buildOphthoPositiveFindingsList === 'function' ? (buildOphthoPositiveFindingsList() || []) : [],
+        eye: deptId === 'oe' ? {
+          showVA: showVA, showIOP: !!showIOP && !!(iopGatOD || iopGatOS), showGL: showGL, showCorrectedIOP: !!showCorrectedIOP && !!(pachyOD || pachyOS),
+          vaOD: vaOD, vaOS: vaOS, subjODva: subjODva, subjOSva: subjOSva, nvOD: nvOD, nvOS: nvOS,
+          iopGatOD: iopGatOD, iopGatOS: iopGatOS, iopNctOD: iopNctOD, iopNctOS: iopNctOS, iopCorrOD: iopCorrOD, iopCorrOS: iopCorrOS, pachyOD: pachyOD, pachyOS: pachyOS,
+          rfODSph: rfODSph, rfODCyl: rfODCyl, rfODAx: rfODAx, rfOSSph: rfOSSph, rfOSCyl: rfOSCyl, rfOSAx: rfOSAx, addOD: addOD, addOS: addOS, ipdVal: showIpdLine ? ipdVal : ''
+        } : null,
+        obg: deptId === 'obg' ? {
+          present: obgIncAnc && obgAncOn ? obgPrescriptionPregnancySummary : null,
+          vitals: obgIncVitals ? obgVitalsSummary.filter(function (r) { const v = String(r[1] == null ? '' : r[1]).trim(); return v && v !== '—' && v !== '/'; }) : [],
+          history: obgIncObsHistory ? (obgPrescriptionPregnancySummary.historyLines.length ? obgPrescriptionPregnancySummary.historyLines : (obgObsHistoryFindings.length ? [{ label: 'History', text: obgObsHistoryFindings.join(' | ') }] : [])) : [],
+          hb: obgIncAnc && obgAncOn && obgAncSummary ? obgAncSummary.hb : '',
+          bloodGroup: obgIncAnc && obgAncOn && obgAncSummary ? obgAncSummary.bloodGroup : ''
+        } : null,
+        dx: dxList.slice(),
+        drugs: incRxFinal ? drugs.map(function (d) { const c = JSON.parse(JSON.stringify(d)); try { ensureRxDrugPrintDates(c); } catch (e) {} return c; }) : [],
+        rxEmpty: forceDeptRxSections && (!drugs || !drugs.length) ? 'No medications on this prescription.' : '',
+        procedures: incPrcFinal ? procs.slice() : [],
+        procDone: procDonePrintLine || '',
+        investigations: incInvFinal ? patientInvestigationPrintRows.map(function (o) { return String(o.name || 'Investigation') + (o.notes ? ' — ' + o.notes : ''); }) : [],
+        advice: incAdvFinal ? String(advice || '').trim() : '',
+        postSurgeryAdvice: postSurgeryAdviceLine || '',
+        warning: deptId === 'obg' && obgIncAnc && obgAncOn ? '<b>Come at once if:</b> bleeding or leaking of water · fewer baby movements · severe headache or blurred vision · swelling of face or hands · fits' : '',
+        followUp: fuFormatted || ''
+      });
+      if (newHtml) {
+        safePrint(newHtml);
+        showToast('Prescription sent to print preview ✓','s');
+        return;
+      }
+    } catch (e) {
+      console.warn('[rx-designs] new layout failed, using standard layout', e);
+    }
+  }
 
   safePrint(html);
   showToast('Prescription sent to print preview ✓','s');
@@ -47060,9 +47110,9 @@ const RX_DESIGN_OPTIONS = [
   { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
   { key: 'compact_bilingual', label: 'Compact Bilingual' },
   { key: 'editorial_columns', label: 'Editorial Columns' },
-  { key: 'left_label_ledger', label: 'Left Label Ledger' },
-  { key: 'vertical_dx_column', label: 'Vertical Diagnosis Rail' },
-  { key: 'mono_chart', label: 'Mono Chart' }
+  { key: 'split_chart', label: 'Split Chart (Eye / OBG)' },
+  { key: 'eye_card', label: 'Card Chart (Eye / OBG)' },
+  { key: 'clear_table', label: 'Bilingual Table (Eye / OBG)' }
 ];
 const RX_TYPOGRAPHY_FONT_OPTIONS = [
   { key: 'classic', label: 'Classic Serif', heading: "'Playfair Display','Georgia',serif", body: "'Lato',sans-serif" },
@@ -47438,7 +47488,11 @@ window.selectRxDesign = selectRxDesign;
 
 function updateRxDesignPreview(designKey, doctorName, centre) {
   const profile = (DOCTOR_PROFILES && DOCTOR_PROFILES[doctorName]) || {};
-  const html = generateRxDesignSampleHtml(designKey, profile, doctorName, centre || activeDrDesignCentre || CURRENT_USER?.centre || 'CHD');
+  let html = '';
+  if (['split_chart', 'eye_card', 'clear_table'].includes(designKey) && typeof window.bmhBuildNewRxDesignSample === 'function') {
+    try { html = window.bmhBuildNewRxDesignSample(designKey, { name: doctorName, degrees: profile.degrees || '', spec: profile.dept || '', reg: profile.reg || '' }, typeof resolvePrintHeaderSrc === 'function' ? resolvePrintHeaderSrc() : ''); } catch (e) { html = ''; }
+  }
+  if (!html) html = generateRxDesignSampleHtml(designKey, profile, doctorName, centre || activeDrDesignCentre || CURRENT_USER?.centre || 'CHD');
   const frame = document.getElementById('rx-design-preview-frame');
   if (frame) frame.srcdoc = html;
 }
