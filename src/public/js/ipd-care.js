@@ -82,6 +82,13 @@
     var f = FORMS[kind]; if (!f) return '';
     return f.fields.filter(function (x) { return String(values[x[0]] || '').trim(); }).map(function (x) { return x[1].replace(/\s*\(.*\)$/, '') + ': ' + values[x[0]]; }).join(' · ');
   }
+  function babyJaundiced(p) {
+    var last = lastCheck(p, 'baby');
+    var j = last && last.values && last.values.jaundice;
+    if (j && j !== 'No') return true;
+    if (last && last.values && /jaundic/i.test(String(last.values.colour || ''))) return true;
+    return /jaundice|hyperbilirubin/i.test(String(p.dx || '') + ' ' + String(p.babyDx || ''));
+  }
   function openPhoto(p) { return (Array.isArray(p.phototherapy) ? p.phototherapy : []).find(function (s) { return s && s.start && !s.end; }) || null; }
 
   function formHtml(p, kind) {
@@ -99,7 +106,8 @@
     if (kind === 'baby') {
       var open = openPhoto(p);
       var sessions = Array.isArray(p.phototherapy) ? p.phototherapy : [];
-      extra = '<div id="ipdc-photo" style="margin-top:12px;background:#fffbea;border:1px solid #f0d77a;border-radius:10px;padding:10px;display:' + (open || sessions.length ? 'block' : 'none') + '">'
+      // Phototherapy only appears once jaundice is recorded / diagnosed, or while a session is running.
+      extra = '<div id="ipdc-photo" data-jaundiced="' + (babyJaundiced(p) ? '1' : '') + '" style="margin-top:12px;background:#fffbea;border:1px solid #f0d77a;border-radius:10px;padding:10px;display:' + (open || babyJaundiced(p) ? 'block' : 'none') + '">'
         + '<div style="font-size:11px;font-weight:900;color:#8a6500;text-transform:uppercase;margin-bottom:6px">☀️ Phototherapy monitoring</div>'
         + (open ? '<div style="font-size:12px;margin-bottom:8px"><b>Running since ' + esc(fmtDT(open.start)) + '</b>' + (open.type ? ' · ' + esc(open.type) : '') + (open.tsb ? ' · TSB ' + esc(open.tsb) : '') + ' — started by ' + esc(open.by || '') + '</div>' : '')
         + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">'
@@ -118,7 +126,7 @@
   function cardHtml(p, kind) {
     var obg = deptOf(p) === 'obg';
     var tabs = obg ? ['mother', 'baby', 'postop'] : ['postop'];
-    return '<div id="ipdc-card" style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px;margin-bottom:12px">'
+    return '<div id="ipdc-card" data-id="' + esc(p.id) + '" style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px;margin-bottom:12px">'
       + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;flex:1">Nursing checks</div>'
       + tabs.map(function (k) { return '<button class="btn btn-xs ' + (k === kind ? 'btn-blue' : 'btn-outline') + '" onclick="bmhIpdCheckTab(\'' + esc(p.id) + '\',\'' + k + '\')">' + (k === 'mother' ? '🤱 ' : k === 'baby' ? '👶 ' : '🩺 ') + esc(FORMS[k].label) + '</button>'; }).join('')
       + '</div><div id="ipdc-body">' + formHtml(p, kind) + '</div></div>';
@@ -126,7 +134,12 @@
   function defaultKind(p) { return deptOf(p) === 'obg' && isDelivery(p) ? 'mother' : 'postop'; }
   function wireJaundice() {
     var j = document.getElementById('ipdc-baby-jaundice'), box = document.getElementById('ipdc-photo');
-    if (j && box) j.addEventListener('change', function () { if (j.value && j.value !== 'No') box.style.display = 'block'; });
+    var c = document.getElementById('ipdc-baby-colour');
+    var upd = function () {
+      var yes = (j && j.value && j.value !== 'No') || (c && /jaundic/i.test(c.value)) || box.getAttribute('data-jaundiced') === '1' || !!openPhoto(findPt((document.getElementById('ipdc-card') || {}).getAttribute && document.getElementById('ipdc-card').getAttribute('data-id')) || {});
+      box.style.display = yes ? 'block' : 'none';
+    };
+    if (box) { if (j) j.addEventListener('change', upd); if (c) c.addEventListener('change', upd); }
   }
   window.bmhIpdCheckTab = function (id, kind) {
     var p = findPt(id); var host = document.getElementById('ipdc-card'); if (!p || !host) return;
@@ -249,7 +262,7 @@
     ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:16px 18px">'
       + '<div style="font-size:15px;font-weight:900;color:#1A3C6E;margin-bottom:10px">🖨️ Print IPD file — ' + esc(p.name || '') + '</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div class="form-group" style="margin:0"><label class="fl">From</label><input type="date" id="ipdc-pf" value="' + from + '"></div><div class="form-group" style="margin:0"><label class="fl">To</label><input type="date" id="ipdc-pt" value="' + to + '"></div></div>'
-      + [['notes', 'Progress notes (staff left · doctor right)', true], ['por', 'Post-operative record (vitals table)', true], ['baby', 'Baby chart & phototherapy', !!hasBaby], ['labs', 'Lab results during the stay', true]].map(function (x) {
+      + [['notes', 'Progress notes (staff left · doctor right)', true], ['chart', 'Treatment chart (medicines given, ticked)', !!(p.ipdRx && p.ipdRx.length)], ['por', 'Post-operative record (vitals table)', true], ['baby', 'Baby chart & phototherapy', !!hasBaby], ['labs', 'Lab results during the stay', true]].map(function (x) {
         return '<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin:5px 0"><input type="checkbox" class="ipdc-pp" value="' + x[0] + '"' + (x[2] ? ' checked' : '') + '> ' + x[1] + '</label>';
       }).join('')
       + '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-gray" style="flex:1" onclick="document.getElementById(\'ipdc-print-ov\').remove()">Cancel</button><button class="btn btn-gold" style="flex:1" id="ipdc-print-go">Print</button></div></div>';
@@ -397,13 +410,14 @@
     return labs.then(function (labList) {
       var html = '';
       if (pages.indexOf('notes') >= 0) html += notesPage(p, o);
+      if (pages.indexOf('chart') >= 0 && window.bmhIpdMeds) { try { html += window.bmhIpdMeds.chartPage(p, o, header, sigRow); } catch (e) { console.warn('[ipd-care] chart', e); } }
       if (pages.indexOf('por') >= 0) html += porPage(p, o);
       if (pages.indexOf('baby') >= 0) html += babyPage(p, o);
       if (labList) html += labsPage(p, labList);
       var css = '*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4;margin:8mm}'
         + '.pg{page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}body>*{filter:grayscale(1)}'
         + 'table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 5px;font-size:10px;vertical-align:top;text-align:left}th{background:#e8e8e8;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px}'
-        + 'table.pn td{font-size:10.5px;line-height:1.35}table.pn td.d{font-weight:700;white-space:nowrap}table.pn td.t{white-space:nowrap}table.pn tr.blank td{height:22mm}table.pn .by{font-size:9px;color:#444;margin-top:2px;font-style:italic}.hint{color:#bbb;font-size:9px}'
+        + 'table.pn{table-layout:fixed}table.pn td{font-size:10.5px;line-height:1.35;word-wrap:break-word}table.pn td.d{font-weight:700;white-space:nowrap}table.pn td.t{white-space:nowrap}table.pn tr.blank td{height:22mm}table.pn .by{font-size:9px;color:#444;margin-top:2px;font-style:italic}.hint{color:#bbb;font-size:9px}'
         + 'table.por td{height:7.5mm;font-size:9.5px}.cap{font-size:11px;font-weight:900;text-transform:uppercase;margin:2mm 0 1.5mm}';
       return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>IPD file — ' + esc(p.name || '') + '</title><style>' + css + '</style></head><body>' + html + '</body></html>';
     });
