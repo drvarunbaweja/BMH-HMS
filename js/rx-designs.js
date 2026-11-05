@@ -204,7 +204,7 @@
     var cc = listLines(c.complaint);
     if (cc.length) main += '<h3>Chief complaints</h3><ul class="p">' + cc.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
     if (c.dept === 'obg' && c.obg && c.obg.history.length) main += '<h3>Obstetric history</h3><div class="hx">' + c.obg.history.map(function (h) { return '<div><b>' + esc(h.label) + ':</b> ' + esc(h.text) + '</div>'; }).join('') + '</div>';
-    if (c.findings.length) main += '<h3>Positive findings</h3><ul class="p">' + c.findings.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+    if (c.findings.length) main += '<h3>' + esc(c.findingsTitle || 'Positive findings') + '</h3><ul class="p">' + c.findings.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
     if (c.procDone) main += '<h3>Procedure done</h3><div style="font-size:9.4pt">' + esc(c.procDone) + '</div>';
     if (c.dx.length) main += '<h3>Diagnosis</h3><div class="dx">' + c.dx.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div>';
     if (c.drugs.length) {
@@ -292,7 +292,7 @@
     }
     var cc = listLines(c.complaint), boxes = [];
     if (cc.length) boxes.push('<div class="box"><h5>Chief complaints</h5><p>' + cc.map(esc).join('<br>') + '</p></div>');
-    if (c.findings.length) boxes.push('<div class="box"><h5>Positive findings</h5><p>' + c.findings.map(esc).join('<br>') + '</p></div>');
+    if (c.findings.length) boxes.push('<div class="box"><h5>' + esc(c.findingsTitle || 'Positive findings') + '</h5><p>' + c.findings.map(esc).join('<br>') + '</p></div>');
     if (c.procDone) boxes.push('<div class="box"><h5>Procedure done</h5><p>' + esc(c.procDone) + '</p></div>');
     if (c.dept === 'obg' && c.obg && has(c.obg.bloodGroup)) boxes.push('<div class="box"><h5>ANC record</h5><p>Blood group ' + esc(c.obg.bloodGroup) + (has(c.obg.hb) ? ' · Hb ' + esc(c.obg.hb) : '') + '</p></div>');
     if (boxes.length) h += '<div class="two">' + boxes.join('') + '</div>';
@@ -345,7 +345,7 @@
     h += '<div class="pt"><div><small>Patient</small><b>' + esc(p.name) + '</b></div><div><small>Age / Sex</small>' + esc(p.ageSex) + '</div><div><small>BMSH ID</small><span class="mono">' + esc(p.id) + '</span></div><div><small>Date</small><span class="mono">' + esc(p.date) + '</span></div></div>';
     var cc = listLines(c.complaint);
     if (c.dept === 'oe') {
-      if (cc.length || c.findings.length) h += '<div class="sec"><h4>Complaints &amp; findings</h4><div class="cols">' + (cc.length ? '<p><b>Complaints:</b> ' + cc.map(esc).join(' · ') + '</p>' : '<p></p>') + (c.findings.length ? '<p><b>Findings:</b> ' + c.findings.map(esc).join(' · ') + '</p>' : '') + '</div></div>';
+      if (cc.length || c.findings.length) h += '<div class="sec"><h4>Complaints &amp; findings</h4><div class="cols">' + (cc.length ? '<p><b>Complaints:</b> ' + cc.map(esc).join(' · ') + '</p>' : '<p></p>') + (c.findings.length ? '<p><b>' + esc(c.findingsTitle || 'Findings') + ':</b> ' + c.findings.map(esc).join(' · ') + '</p>' : '') + '</div></div>';
       var e = eyeRows(c), cols = [];
       if (e.showVA) { if (has(e.od.ua) || has(e.os.ua)) cols.push(['Unaided', 'ua']); if (has(e.od.bc) || has(e.os.bc)) cols.push(['Best corr.', 'bc']); if (has(e.od.near) || has(e.os.near)) cols.push(['Near', 'near']); }
       if (e.showIOP && (has(e.od.gat) || has(e.os.gat))) cols.push(['IOP GAT', 'gat']);
@@ -372,7 +372,7 @@
       if (c.obg && c.obg.history.length) h += '<div class="sec"><h4>Obstetric history</h4><table class="d l">' + c.obg.history.map(function (x) { return '<tr><td class="k" style="width:28mm">' + esc(x.label) + '</td><td>' + esc(x.text) + '</td></tr>'; }).join('') + '</table></div>';
       if (cc.length) h += '<div class="sec"><h4>Complaints</h4><div style="font-size:9.4pt">' + cc.map(esc).join(' · ') + '</div></div>';
     } else if (cc.length || c.findings.length) {
-      h += '<div class="sec"><h4>Complaints' + (c.findings.length ? ' &amp; findings' : '') + '</h4><div class="cols">' + (cc.length ? '<p><b>Complaints:</b> ' + cc.map(esc).join(' · ') + '</p>' : '<p></p>') + (c.findings.length ? '<p><b>Findings:</b> ' + c.findings.map(esc).join(' · ') + '</p>' : '') + '</div></div>';
+      h += '<div class="sec"><h4>Complaints' + (c.findings.length ? ' &amp; findings' : '') + '</h4><div class="cols">' + (cc.length ? '<p><b>Complaints:</b> ' + cc.map(esc).join(' · ') + '</p>' : '<p></p>') + (c.findings.length ? '<p><b>' + esc(c.findingsTitle || 'Findings') + ':</b> ' + c.findings.map(esc).join(' · ') + '</p>' : '') + '</div></div>';
     }
     if (c.procDone) h += '<div class="sec"><h4>Procedure done</h4><div style="font-size:9.4pt">' + esc(c.procDone) + '</div></div>';
     if (c.dx.length) h += '<div class="sec"><h4>Diagnosis</h4><div class="dx">' + c.dx.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div></div>';
