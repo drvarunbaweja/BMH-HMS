@@ -101,8 +101,78 @@
       + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue,#1A3C6E);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 4px">3. Payments made in ' + st.fy + '</div>'
       + '<table class="vst"><thead><tr><th>Date</th><th colspan="4">Details</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + payRows + '</tbody></table>'
       + '<div style="margin-top:10px;font-size:13px;font-weight:900;text-align:right;color:' + (totalDue > 0 ? '#b71c1c' : '#1a8c3c') + '">Total due now: ' + inr(totalDue) + (st.credit > 0 ? ' <span style="font-size:11px;color:#1a8c3c">(after credit ' + inr(st.credit) + ')</span>' : '') + '</div>'
-      + '<div style="font-size:10.5px;color:#777;margin-top:4px">Anything still due at 31 March is carried over automatically into the next year\'s statement.</div>';
+      + '<div style="font-size:10.5px;color:#777;margin-top:4px">Anything still due at 31 March is carried over automatically into the next year\'s statement.</div>'
+      + usageHtml(st, forPrint);
   }
+  // ── "bill when used" stock (IOLs / consignment): due as per usage ──
+  function isOnUseMode(m) { return String(m || '').toLowerCase() === 'on-use'; }
+  function usageIndex() {
+    var inv = {}, pur = {};
+    try { (INVENTORY || []).forEach(function (i) { if (i && i.barcode) inv[i.barcode] = i; }); } catch (e) { (window.INVENTORY || []).forEach(function (i) { if (i && i.barcode) inv[i.barcode] = i; }); }
+    (window.BMH_PURCHASES || []).forEach(function (p) { if (p && p.barcode && p.vendor && !/^RET/.test(String(p.id || ''))) pur[p.barcode] = p; });
+    return { inv: inv, pur: pur };
+  }
+  function usageFor(vendor) {
+    var k = norm(vendor), ix = usageIndex();
+    return (window.BMH_INVENTORY_USAGE || []).filter(function (u) { return u && !/return/i.test(String(u.mode || '')) && Number(u.qty) > 0; }).map(function (u) {
+      var it = ix.inv[u.barcode] || {}, p = ix.pur[u.barcode] || {};
+      var onUse = isOnUseMode(u.vendorBillingMode) || isOnUseMode(p.billMode) || isOnUseMode(it.vendorBillingMode);
+      var v = p.vendor || it.vendor || '';
+      if (!onUse || norm(v) !== k) return null;
+      var cost = Number(u.cost) || Number(p.cost) || Number(it.cost) || 0;
+      return { ts: u.ts || '', date: String(u.ts || '').slice(0, 10), patient: u.patientName || u.bmhId || '', bmhId: u.bmhId || '', item: u.itemName || it.name || '', power: it.power || '', serial: u.serialNo || it.serialNo || '', batch: u.batchNo || it.batchNo || '', qty: Number(u.qty) || 1, cost: cost, value: Math.round(cost * (Number(u.qty) || 1) * 100) / 100, noCost: !cost };
+    }).filter(Boolean).sort(function (a, b) { return String(a.ts).localeCompare(String(b.ts)); });
+  }
+  function onUseBills(vendor) { return vendorRows(vendor).filter(function (v) { return isOnUseMode(v.billMode) || v.usageLinked; }); }
+  function usageStats(vendor) {
+    var used = usageFor(vendor), bl = onUseBills(vendor);
+    var usedVal = used.reduce(function (t, u) { return t + u.value; }, 0);
+    var billed = bl.reduce(function (t, v) { return t + (Number(v.amount) || 0); }, 0);
+    var paid = bl.reduce(function (t, v) { return t + (Number(v.paidAmount) || 0); }, 0);
+    return { used: used, bills: bl, usedVal: usedVal, billed: billed, paid: paid, due: Math.max(0, Math.round((usedVal - paid) * 100) / 100), unused: Math.max(0, billed - usedVal), noCost: used.filter(function (u) { return u.noCost; }).length, any: used.length > 0 || bl.length > 0 };
+  }
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function usageHtml(st, forPrint) {
+    var u = usageStats(st.vendor); if (!u.any) return '';
+    var s = fyStart(st.fy), e = fyEnd(st.fy), months = {};
+    u.used.forEach(function (r) { if (r.date >= s && r.date <= e) { var m = r.date.slice(0, 7); (months[m] = months[m] || []).push(r); } });
+    var mrows = Object.keys(months).sort().map(function (m) {
+      var list = months[m], val = list.reduce(function (t, r) { return t + r.value; }, 0);
+      var items = list.map(function (r) { return '<tr><td>' + fmtDate(r.date) + '</td><td>' + esc(r.patient) + (r.bmhId && r.bmhId !== r.patient ? ' <span style="color:#888">' + esc(r.bmhId) + '</span>' : '') + '</td><td>' + esc(r.item) + (r.power ? ' · ' + esc(r.power) + ' D' : '') + (r.serial ? ' · SN ' + esc(r.serial) : '') + '</td><td style="text-align:right">' + r.qty + '</td><td style="text-align:right">' + (r.noCost ? '<span style="color:#c62828">cost not entered</span>' : inr(r.value)) + '</td></tr>'; }).join('');
+      var label = MONTHS[Number(m.slice(5, 7)) - 1] + ' ' + m.slice(0, 4);
+      return forPrint
+        ? '<tr style="background:#f6f7fa"><td colspan="3"><b>' + label + '</b> — ' + list.length + ' used</td><td></td><td style="text-align:right"><b>' + inr(val) + '</b></td></tr>' + items
+        : '<details style="border-top:1px solid #eee;padding:5px 2px"><summary style="cursor:pointer;display:flex;gap:8px;font-size:12px"><b style="flex:1">' + label + '</b><span>' + list.length + ' used</span><b style="min-width:90px;text-align:right">' + inr(val) + '</b></summary><table class="vst" style="margin-top:4px"><thead><tr><th>Date</th><th>Patient</th><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Cost</th></tr></thead><tbody>' + items + '</tbody></table></details>';
+    }).join('');
+    var monthsBlock = forPrint
+      ? '<table class="vst"><thead><tr><th>Date</th><th>Patient</th><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Cost</th></tr></thead><tbody>' + (mrows || '<tr><td colspan="5" style="text-align:center;color:#888">Nothing used in ' + st.fy + '</td></tr>') + '</tbody></table>'
+      : (mrows || '<div style="font-size:12px;color:#888;padding:6px 2px">Nothing used in ' + st.fy + '</div>');
+    return '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue,#1A3C6E);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 4px">4. Bill-when-used stock (IOLs / consignment) — due as per usage</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">'
+      + box('Billed (bill when used)', inr(u.billed), '#1A3C6E') + box('Used so far', inr(u.usedVal) + '<div style="font-size:10.5px;font-weight:600;color:#555">' + u.used.length + ' item' + (u.used.length === 1 ? '' : 's') + '</div>', '#6a1b9a')
+      + box('Paid', inr(u.paid), '#1a8c3c') + box('Due as per usage', inr(u.due), u.due > 0 ? '#b71c1c' : '#1a8c3c') + box('Stock not yet used', inr(u.unused), '#555') + '</div>'
+      + (u.noCost ? '<div style="font-size:11px;color:#c62828;margin-top:5px">⚠ ' + u.noCost + ' used item' + (u.noCost === 1 ? ' has' : 's have') + ' no cost entered in the stock, so ' + (u.noCost === 1 ? 'it is' : 'they are') + ' counted as ₹0. Enter the cost in Inventory to include ' + (u.noCost === 1 ? 'it' : 'them') + '.</div>' : '')
+      + (!forPrint && u.due > 0 ? '<div style="margin-top:8px"><button type="button" class="btn btn-gold btn-sm" onclick="bmhVendorStmtPayUsage()">💳 Pay as per usage (' + inr(u.due) + ')</button></div>' : '')
+      + '<div style="font-size:11px;font-weight:800;color:#555;margin:10px 0 2px">Used in ' + st.fy + ', month by month' + (forPrint ? '' : ' (tap a month for the list)') + '</div>' + monthsBlock
+      + '<div style="font-size:10.5px;color:#777;margin-top:4px">Due as per usage = cost of everything used so far − amount already paid on the bill-when-used bills. The full bill above still shows the total supplied.</div>';
+  }
+  window.bmhVendorStmtPayUsage = function () {
+    var u = usageStats(state.vendor); if (!(u.due > 0)) return;
+    var amtStr = prompt('Amount being paid to ' + state.vendor + ' as per usage', String(u.due)); if (amtStr === null) return;
+    var amt = Math.max(0, Number(amtStr || 0)); if (!(amt > 0)) { showToast('Enter payment amount', 'w'); return; }
+    var mode = prompt('Payment mode (Cheque / Bank Transfer / NEFT):', 'Bank Transfer') || 'Bank Transfer';
+    var ref = prompt('Cheque no. / UTR / reference:') || '';
+    var rows = u.bills.filter(function (v) { return due(v) > 0; }).sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')); });
+    var left = amt;
+    try { left = bmhApplyVendorPaymentToBills(rows, amt, mode, ref); } catch (e) { console.warn(e); return; }
+    var paid = amt - left;
+    if (paid > 0) { try { bmhAppendLedger({ date: new Date().toISOString(), type: 'Payment', narration: 'Vendor ' + state.vendor + ' — payment as per usage (' + u.used.length + ' items used)', dr: paid, cr: 0, party: state.vendor, ref: (mode ? mode + ' · ' : '') + ref }); } catch (e) {} }
+    try { saveBmhFinancials(); } catch (e) {}
+    try { bmhRenderVendorTables(); } catch (e) {}
+    try { if (typeof renderBillingPageIfActive === 'function') renderBillingPageIfActive(); } catch (e) {}
+    showToast('Payment of ' + inr(paid) + ' recorded ✓' + (left > 0 ? ' — ' + inr(left) + ' was more than the bills due and was not applied' : ''), left > 0 ? 'w' : 's');
+    render();
+  };
   function box(label, val, color) { return '<div style="border:1px solid #e3e6ee;border-radius:10px;padding:8px 10px;background:#fff"><div style="font-size:10px;font-weight:800;color:#666;text-transform:uppercase">' + label + '</div><div style="font-size:15px;font-weight:900;color:' + color + ';margin-top:2px">' + val + '</div></div>'; }
   function fyList(vendor) {
     var set = {}; var cur = fyOf(todayKey()); set[cur] = 1;
@@ -278,9 +348,17 @@
       + '<div class="g">' + cell('Total billed', inr(t.billed)) + cell('Returns', inr(t.ret)) + cell('Net payable', inr(t.net)) + cell('Paid', inr(t.paid)) + cell('Due on these bills', inr(t.due)) + '</div>'
       + (from ? '<div style="margin-top:8px;font-size:11px">Due on bills from before ' + fmtDate(from) + ': <b>' + inr(beforeDue) + '</b>' + (credit > 0 ? ' · Credit with vendor: <b>' + inr(credit) + '</b>' : '') + ' · <b>Total due now: ' + inr(Math.max(0, beforeDue + t.due - credit)) + '</b></div>' : (credit > 0 ? '<div style="margin-top:8px;font-size:11px">Credit with vendor: <b>' + inr(credit) + '</b> · <b>Total due now: ' + inr(Math.max(0, t.due - credit)) + '</b></div>' : ''))
       + '<h3>Bills</h3><table><thead><tr><th>Bill date</th><th>Invoice</th><th class="r">Billed</th><th class="r">Returned</th><th class="r">Net</th><th class="r">Paid</th><th>Paid on</th><th>Mode / Ref no.</th><th class="r">Due</th></tr></thead><tbody>' + body + '</tbody><tfoot><tr><td colspan="2">Total (' + rows.length + ' bills)</td><td class="r">' + inr(t.billed) + '</td><td class="r">' + inr(t.ret) + '</td><td class="r">' + inr(t.net) + '</td><td class="r">' + inr(t.paid) + '</td><td></td><td></td><td class="r">' + inr(t.due) + '</td></tr></tfoot></table>'
+      + usagePrint(from, to)
       + '<h3>Payments made</h3><table><thead><tr><th>Date</th><th class="r">Amount</th><th>Mode / Ref no.</th><th>Details</th></tr></thead><tbody>' + payBody + '</tbody><tfoot><tr><td>Total</td><td class="r">' + inr(payTotal) + '</td><td colspan="2"></td></tr></tfoot></table>'
       + '</body></html>';
   };
+  function usagePrint(from, to) {
+    var u = usageStats(state.vendor); if (!u.any) return '';
+    var list = u.used.filter(function (r) { return (!from || r.date >= from) && (!to || r.date <= to); });
+    var val = list.reduce(function (t, r) { return t + r.value; }, 0);
+    return '<h3>Bill-when-used stock (IOLs / consignment)</h3><div style="font-size:11px;margin-bottom:4px">Used in this period: <b>' + list.length + ' items, ' + inr(val) + '</b> · Running totals now — billed ' + inr(u.billed) + ', used ' + inr(u.usedVal) + ', paid ' + inr(u.paid) + ', <b>due as per usage ' + inr(u.due) + '</b>, stock not yet used ' + inr(u.unused) + '</div>'
+      + '<table><thead><tr><th>Date</th><th>Patient</th><th>Item</th><th>Serial / batch</th><th class="r">Qty</th><th class="r">Cost</th></tr></thead><tbody>' + (list.map(function (r) { return '<tr><td>' + fmtDate(r.date) + '</td><td>' + esc(r.patient) + '</td><td>' + esc(r.item) + (r.power ? ' · ' + esc(r.power) + ' D' : '') + '</td><td>' + esc([r.serial, r.batch].filter(Boolean).join(' / ') || '—') + '</td><td class="r">' + r.qty + '</td><td class="r">' + (r.noCost ? 'not entered' : inr(r.value)) + '</td></tr>'; }).join('') || '<tr><td colspan="6" style="text-align:center;color:#888">Nothing used in this period</td></tr>') + '</tbody><tfoot><tr><td colspan="5">Total used</td><td class="r">' + inr(val) + '</td></tr></tfoot></table>';
+  }
   window.bmhVendorStmtSummaryPrint = function () {
     var per = (document.querySelector('input[name=vst-per]:checked') || {}).value || 'fy';
     var html = window.bmhVendorStmtSummaryHtml(per, (document.getElementById('vst-from') || {}).value, (document.getElementById('vst-to') || {}).value);
@@ -297,6 +375,10 @@
         var nm = row.querySelector('strong'); if (!nm) return;
         var right = row.children[1]; if (!right) return;
         right.insertAdjacentHTML('afterbegin', btn(nm.textContent.trim()));
+        try {
+          var us = usageStats(nm.textContent.trim());
+          if (us.any && !row.querySelector('.vst-use')) nm.parentNode.insertAdjacentHTML('beforeend', '<div class="vst-use" style="font-size:10.5px;color:#6a1b9a;margin-top:2px">Bill when used: used ' + inr(us.usedVal) + ' · paid ' + inr(us.paid) + ' · <b>due as per usage ' + inr(us.due) + '</b></div>');
+        } catch (e) {}
       });
       var hd = sum.previousElementSibling;
       if (hd && !hd.querySelector('.vst-hd-btn')) {
@@ -324,5 +406,5 @@
       return r;
     };
   }
-  window.bmhVendorStatement = { build: build, fyOf: fyOf, dupIds: dupIds };
+  window.bmhVendorStatement = { build: build, fyOf: fyOf, dupIds: dupIds, usageStats: usageStats };
 })();
