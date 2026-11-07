@@ -76,6 +76,7 @@
       + REASONS.map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>'
       + '<div class="form-group" id="apt-call-new-wrap" style="margin-top:8px"><label class="fl">New appointment (optional — fill to move the appointment)</label>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap"><input type="date" id="apt-call-date" style="max-width:170px"><select id="apt-call-time" style="max-width:150px"></select></div></div>'
+      + (typeof window.bmhCallStaffFieldHtml === 'function' ? window.bmhCallStaffFieldHtml('apt-call') : '')
       + '<div class="form-group" style="margin-top:8px"><label class="fl">Notes of the conversation</label><textarea id="apt-call-remark" style="min-height:60px" placeholder="What the patient said"></textarea></div>'
       + '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-gold" style="flex:1" id="apt-call-save" onclick="bmhSaveAptCall()">💾 Save call</button><button class="btn btn-gray" onclick="closeM(\'m-apt-call\')">Cancel</button></div></div>';
     document.body.appendChild(ov);
@@ -119,6 +120,7 @@
     document.getElementById('apt-call-remark').value = '';
     document.getElementById('apt-call-date').value = '';
     try { fillAppointmentTimeSelect(document.getElementById('apt-call-time'), time || '10:00 AM'); } catch (e) {}
+    try { if (typeof window.bmhCallStaffReset === 'function') window.bmhCallStaffReset('apt-call'); } catch (e) {}
     renderOutcomes();
     openM('m-apt-call');
   }
@@ -134,6 +136,8 @@
     if (current.outcome === 'resched' && !newDate) { toast('Pick the new appointment date', 'w'); return; }
     if (newDate && newDate < (typeof todayKey === 'function' ? todayKey() : '')) { toast('The new date is in the past', 'w'); return; }
     if (current.outcome === 'notcoming' && !reason && !remark) { toast('Write why the patient is not coming', 'w'); return; }
+    var pickCall = typeof window.bmhCallStaffValue === 'function' ? window.bmhCallStaffValue('apt-call') : null;
+    if (pickCall && pickCall.error) { toast(pickCall.error, 'w'); return; }
     if (!window.FBDB) { toast('Not connected to the database — call not saved', 'e'); return; }
     var cu = user() || {};
     var now = new Date().toISOString();
@@ -142,7 +146,8 @@
     if (newDate) {
       try { newTime = getNextAvailableApptSlotFrom(newDate, getAppointmentDoctor(apt), normalizeAptTimeLabel(wantTime || prevTime || '10:00 AM'), getAppointmentCentre(apt), key); } catch (e) { newTime = wantTime || prevTime || '10:00 AM'; }
     }
-    var entry = { at: now, by: cu.name || cu.username || 'Staff', outcome: current.outcome, reason: current.outcome === 'coming' ? '' : reason, remark: remark,
+    var enteredBy = cu.name || cu.username || 'Staff';
+    var entry = { at: (pickCall && pickCall.at) || now, by: (pickCall && pickCall.by) || enteredBy, enteredBy: enteredBy, enteredAt: now, outcome: current.outcome, reason: current.outcome === 'coming' ? '' : reason, remark: remark,
       prevDate: prevDate || '', prevTime: prevTime || '', newDate: newDate, newTime: newTime };
     var base = 'appointmentCalls/' + safeKey(key);
     var id = window.FBDB.ref().push().key;
