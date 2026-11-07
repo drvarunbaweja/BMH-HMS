@@ -55011,7 +55011,9 @@ window.addEventListener('DOMContentLoaded', function() {
       updates[base + '/' + k] = value == null ? '' : String(value);
     });
     if (!existing.createdAt) { updates[base + '/createdAt'] = now; updates[base + '/createdFrom'] = 'follow-up'; }
-    const entry = { at: now, by: by, action: mode, outcome: mode === 'drop' ? 'Dropped from list' : (mode === 'restore' ? 'Restored to list' : outcome), reason: reason, remark: remark, nextDate: mode === 'call' ? (selectedNext || '') : '' };
+    // "Called by" and call time picked on the sheet (call-staff.js); the login stays as enteredBy.
+    const callPick = (mode === 'call' && window.__bmhCallPick) || null;
+    const entry = { at: (callPick && callPick.at) || now, by: (callPick && callPick.by) || by, enteredBy: by, enteredAt: now, action: mode, outcome: mode === 'drop' ? 'Dropped from list' : (mode === 'restore' ? 'Restored to list' : outcome), reason: reason, remark: remark, nextDate: mode === 'call' ? (selectedNext || '') : '' };
     if (mode === 'call') {
       updates[base + '/status'] = selectedNext ? 'open' : 'closed';
       updates[base + '/nextDate'] = selectedNext || '';
