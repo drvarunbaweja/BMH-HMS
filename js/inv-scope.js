@@ -372,6 +372,10 @@
     (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (r) {
       if (!belongs(r, grp)) return;
       var q = Number(r.qty) || 0; if (!q) return;
+      if (r.kind === 'indent-receive') { // stock received on an indent (from Pharmacy): only added to the department
+        if (inS(r.toStore)) mv.push({ t: tsOf(r), d: q, kind: 'in', what: 'Received from ' + (r.fromStore || 'Pharmacy') + (r.indentNo ? ' · Indent ' + r.indentNo : ''), where: r.toStore || '', by: r.user || '' });
+        return;
+      }
       var a = inS(r.fromStore), b = inS(r.toStore);
       if (!a && !b) return;
       var d = a && b ? 0 : (b ? q : -q);

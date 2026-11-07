@@ -20010,10 +20010,11 @@ function getInventoryTodayMovementRows(dateKey) {
     );
   });
   (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
+    const indentIn = row && row.kind === 'indent-receive';
     push(
-      'Transferred',
+      indentIn ? 'Received (indent)' : 'Transferred',
       row,
-      -Math.abs(Number(row.qty || 0)),
+      indentIn ? Math.abs(Number(row.qty || 0)) : -Math.abs(Number(row.qty || 0)),
       row.itemName,
       [
         (row.fromStore || row.fromDept || 'Source') + ' -> ' + (row.toStore || row.toDept || 'Destination'),
