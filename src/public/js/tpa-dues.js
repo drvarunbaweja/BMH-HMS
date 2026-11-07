@@ -4,6 +4,8 @@
  * every open insurance-type claim (status pending or partial, any date) and adds it to those screens.
  * Opening a claim and saving the receipt updates that same claim (no duplicate is created).
  * Nothing is written by this file except through the existing Save / Delete buttons.
+ * Light on speed: the list is only loaded the first time a TPA screen is opened (not for doctors' screens), and a
+ * screen is redrawn only if it is open.
  */
 (function () {
   'use strict';
@@ -17,9 +19,16 @@
     var c = u.centre || 'CHD';
     try { return rowMatchesCentre(r, c, { allowUncentredToday: true }); } catch (e) { return true; }
   }
+  // redraw only a screen that is actually open (nothing is redrawn in the background)
+  function shown(id) { var el = document.getElementById(id); return !!(el && el.offsetParent !== null); }
+  var rt = null;
   function refresh() {
-    try { if (typeof renderInsuranceTab === 'function' && document.getElementById('rc-insurance-list')) renderInsuranceTab(); } catch (e) {}
-    try { if (typeof renderTpaPage === 'function' && document.getElementById('tpa-case-body')) renderTpaPage(); } catch (e) {}
+    if (rt) return;
+    rt = setTimeout(function () {
+      rt = null;
+      try { if (typeof renderInsuranceTab === 'function' && shown('rc-insurance-list')) renderInsuranceTab(); } catch (e) {}
+      try { if (typeof renderTpaPage === 'function' && shown('tpa-case-body')) renderTpaPage(); } catch (e) {}
+    }, 400);
   }
   var listening = false;
   function listen() {
@@ -38,13 +47,18 @@
     });
     return true;
   }
-  if (!listen()) { var tries = 0, t = setInterval(function () { if (listen() || ++tries > 90) clearInterval(t); }, 3000); }
+  var started = false;
+  function start() {
+    if (started) return; started = true;
+    if (!listen()) { var tries = 0, t = setInterval(function () { if (listen() || ++tries > 90) clearInterval(t); }, 3000); }
+  }
 
   function payReqs() { try { return PAY_REQUESTS || []; } catch (e) { return window.PAY_REQUESTS || []; } }
   var origGet = window.getDisplayTpaClaims;
   if (typeof origGet !== 'function') return;
   window.getDisplayTpaClaims = function () {
     var base = origGet.apply(this, arguments) || [];
+    start();
     if (!loaded) return base;
     var ids = {}, realBmh = {};
     base.forEach(function (r) { if (r && !r._synthetic) { ids[r.id] = 1; if (r.bmhId) realBmh[String(r.bmhId)] = 1; } });
