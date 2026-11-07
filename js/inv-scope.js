@@ -145,7 +145,18 @@
   var origStores = window.bmhInventoryStoreOptions;
   if (typeof origStores === 'function') {
     window.bmhInventoryStoreOptions = function () {
-      var list = origStores.apply(this, arguments) || [];
+      var list = (origStores.apply(this, arguments) || []).slice();
+      // every store that holds stock (as in Current Stock) is offered too, even if missing from the saved store list
+      try {
+        var low = function (x) { return String(x || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+        var have = {}; list.forEach(function (x) { have[low(x)] = 1; });
+        var hid = {}; try { (loadInventoryHiddenStoreLocations() || []).forEach(function (x) { hid[low(x)] = 1; }); } catch (e) {}
+        (inv() || []).forEach(function (r) {
+          var st = r && String(r.store || '').trim(); if (!st) return;
+          var k = low(st); if (have[k] || hid[k]) return;
+          have[k] = 1; list.push(st);
+        });
+      } catch (e) {}
       var sc = anyScope();
       return sc ? list.filter(function (s) { return storeInScope(s, sc); }) : list;
     };
@@ -165,7 +176,8 @@
       list.push(name); added++;
     });
     window.BMH_STORE_LOCATIONS = list;
-    if (added) { try { saveInventoryStoreLocations(); } catch (e) {} try { bmhPopulateInventorySelectors(); } catch (e) {} }
+    // never saved from here: on a fresh browser the saved list may not have loaded yet, and saving would overwrite it
+    if (added) { try { bmhPopulateInventorySelectors(); } catch (e) {} }
     try { localStorage.setItem('bmh_store_split_chd_v1', '1'); } catch (e) {}
   }
 
