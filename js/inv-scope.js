@@ -334,6 +334,131 @@
       + rows.slice(0, 300).map(function (r) { return '<tr style="border-bottom:1px solid #eee"><td style="padding:4px;white-space:nowrap">' + esc(fmt(tsOf(r))) + '</td><td style="padding:4px">' + esc(r.patientName || '') + '<div style="font-size:10px;color:#666">' + esc(r.bmhId || '') + '</div></td><td style="padding:4px">' + esc(r.itemName || '') + '</td><td style="padding:4px;text-align:center">' + esc(r.qty || 1) + '</td><td style="padding:4px">' + esc([r.store, r.procedure, r.source].filter(Boolean).join(' · ')) + '</td></tr>'; }).join('') + '</tbody></table></div>';
   };
 
+  // ── stock ledger: how an item's stock came down (or up) to today's level, date by date ──
+  function nk(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function itemGroups(q, ds) {
+    var g = {};
+    (inv() || []).forEach(function (it) {
+      if (!it || !(it.name || it.barcode)) return;
+      if (ds && !inScope(it, ds)) return;
+      var hay = [it.name, it.genericName, it.barcode, it.company].map(nk).join(' ');
+      if (hay.indexOf(q) < 0) return;
+      var k = nk(it.name || it.barcode);
+      var x = g[k] || (g[k] = { key: k, name: it.name || it.barcode, items: [], barcodes: {}, stock: 0, stores: {} });
+      x.items.push(it); if (it.barcode) x.barcodes[it.barcode] = 1; x.stock += Math.max(0, Number(it.stock) || 0); if (it.store) x.stores[it.store] = 1;
+    });
+    return Object.keys(g).map(function (k) { return g[k]; }).sort(function (a, b) { return (a.key.indexOf(q) === 0 ? 0 : 1) - (b.key.indexOf(q) === 0 ? 0 : 1) || a.name.localeCompare(b.name); });
+  }
+  function belongs(r, grp) { return !!r && ((r.barcode && grp.barcodes[r.barcode]) || nk(r.itemName) === grp.key); }
+  function movements(grp, ds) {
+    var mv = [];
+    var inS = function (store) { return !ds || storeInScope(store, ds); };
+    (window.BMH_PURCHASES || []).forEach(function (p) {
+      if (!belongs(p, grp) || (ds && !rowInScope(p, ds))) return;
+      var q = Number(p.qty) || 0; if (!q) return;
+      var ret = q < 0 || /^RET/.test(String(p.id || ''));
+      mv.push({ t: tsOf(p), d: q, kind: ret ? 'return' : 'in', what: ret ? 'Returned to vendor' + (p.vendor ? ' — ' + p.vendor : '') + (p.reason ? ' (' + p.reason + ')' : '') : 'Stock added' + (p.vendor ? ' — ' + p.vendor : '') + (p.invoiceNo ? ' · Inv ' + p.invoiceNo : ''), where: p.store || '', by: p.user || p.by || '' });
+    });
+    (window.BMH_INVENTORY_USAGE || []).forEach(function (u) {
+      if (!belongs(u, grp) || (ds && !rowInScope(u, ds))) return;
+      var q = Number(u.qty) || 0; if (!q) return;
+      mv.push({ t: tsOf(u), d: -q, kind: 'use', what: (u.patientName || u.bmhId || 'Patient') + (u.bmhId && u.patientName ? ' (' + u.bmhId + ')' : ''), why: [u.procedure, u.source === 'ipd' ? 'IPD' : ''].filter(Boolean).join(' · '), where: u.store || '', by: u.user || u.by || '' });
+    });
+    (window.BMH_INVENTORY_REMOVALS || []).forEach(function (r) {
+      if (!belongs(r, grp) || (ds && !rowInScope(r, ds))) return;
+      var q = Number(r.qty) || 0; if (!q) return;
+      mv.push({ t: tsOf(r), d: -q, kind: 'out', what: 'Removed' + (r.reason ? ' — ' + r.reason : ''), where: r.store || '', by: r.user || '' });
+    });
+    (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (r) {
+      if (!belongs(r, grp)) return;
+      var q = Number(r.qty) || 0; if (!q) return;
+      var a = inS(r.fromStore), b = inS(r.toStore);
+      if (!a && !b) return;
+      var d = a && b ? 0 : (b ? q : -q);
+      mv.push({ t: tsOf(r), d: d, kind: 'move', what: 'Moved ' + q + ': ' + (r.fromStore || '?') + ' → ' + (r.toStore || '?'), where: '', by: r.user || '' });
+    });
+    mv.sort(function (a, b) { return a.t - b.t; });
+    // walk back from today's stock to find the balance after each entry
+    var bal = grp.stock;
+    for (var i = mv.length - 1; i >= 0; i--) { mv[i].bal = bal; bal -= mv[i].d; }
+    return { list: mv, start: bal };
+  }
+  function dShort(ms) { try { return new Date(ms).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }); } catch (e) { return ''; } }
+  function ledgerData(grp, ds, since) {
+    var m = movements(grp, ds);
+    var inP = m.list.filter(function (x) { return !since || x.t >= since; });
+    var opening = inP.length ? inP[0].bal - inP[0].d : grp.stock;
+    var sum = function (k) { return inP.filter(function (x) { return k(x); }).reduce(function (t, x) { return t + Math.abs(x.d); }, 0); };
+    return { grp: grp, list: inP, opening: opening, added: sum(function (x) { return x.d > 0 && x.kind === 'in'; }) + sum(function (x) { return x.d > 0 && x.kind === 'move'; }), used: sum(function (x) { return x.kind === 'use'; }), removed: sum(function (x) { return x.d < 0 && x.kind !== 'use'; }), pts: Object.keys(inP.filter(function (x) { return x.kind === 'use'; }).reduce(function (o, x) { o[x.what] = 1; return o; }, {})).length, gap: m.start < 0 };
+  }
+  var DCOL = { in: '#1a8c3c', move: '#555', use: '#b71c1c', out: '#b55a00', return: '#b55a00' };
+  function ledgerHtml(L) {
+    var g = L.grp;
+    var head = '<div style="border:1px solid #dfe5ef;border-radius:10px;padding:9px 11px;margin-bottom:10px;background:#fbfcfe">'
+      + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:180px"><div style="font-size:13.5px;font-weight:900;color:#1A3C6E">' + esc(g.name) + '</div><div style="font-size:10.5px;color:#666">' + esc(Object.keys(g.stores).join(', ')) + '</div></div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11px">'
+      + pill('Opening', L.opening, '#1A3C6E') + pill('Added', '+' + L.added, '#1a8c3c') + pill('Used', '−' + L.used + (L.pts ? ' (' + L.pts + ' pt)' : ''), '#b71c1c') + (L.removed ? pill('Removed / returned', '−' + L.removed, '#b55a00') : '') + pill('Now', g.stock, '#111') + '</div></div>';
+    if (!L.list.length) return head + '<div style="font-size:11.5px;color:#888;margin-top:6px">No movement in this period — stock has stayed at ' + g.stock + '.</div></div>';
+    var rows = L.list.slice().reverse().map(function (x) {
+      return '<tr style="border-bottom:1px solid #eee"><td style="padding:3px 5px;white-space:nowrap">' + esc(fmt(x.t)) + '</td><td style="padding:3px 5px">' + esc(x.what) + (x.why ? '<div style="font-size:10px;color:#666">' + esc(x.why) + '</div>' : '') + '</td><td style="padding:3px 5px;font-size:10.5px;color:#666">' + esc(x.where) + '</td><td style="padding:3px 5px;text-align:right;font-weight:800;color:' + (DCOL[x.kind] || '#111') + '">' + (x.d > 0 ? '+' : x.d < 0 ? '−' : '') + Math.abs(x.d || 0) + '</td><td style="padding:3px 5px;text-align:right;font-weight:800">' + x.bal + '</td></tr>';
+    }).join('');
+    return head + '<div style="max-height:300px;overflow:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:11.5px;color:#111"><thead><tr style="background:#f1f4f9"><th style="text-align:left;padding:3px 5px">Date</th><th style="text-align:left;padding:3px 5px">Patient / entry</th><th style="text-align:left;padding:3px 5px">Store</th><th style="text-align:right;padding:3px 5px">Qty</th><th style="text-align:right;padding:3px 5px">Balance</th></tr></thead><tbody>' + rows
+      + '<tr style="background:#f6f7fa"><td style="padding:3px 5px" colspan="4"><b>Opening stock</b> (start of period)</td><td style="padding:3px 5px;text-align:right;font-weight:900">' + L.opening + '</td></tr></tbody></table></div>'
+      + (L.gap ? '<div style="font-size:10.5px;color:#b55a00;margin-top:4px">Some older stock changes were made without a record (e.g. a stock count edited by hand), so the earliest balances are approximate.</div>' : '') + '</div>';
+  }
+  function pill(l, v, c) { return '<span style="background:#fff;border:1px solid #e3e6ee;border-radius:8px;padding:2px 7px"><span style="color:#666">' + l + '</span> <b style="color:' + c + '">' + esc(v) + '</b></span>'; }
+  var lastPrint = null;
+  function periodLabel(days) { return days ? 'Last ' + (days === 30 ? '30 days' : days === 90 ? '3 months' : days === 365 ? '12 months' : days + ' days') : 'All time'; }
+  window.bmhInvTrackPrint = function () {
+    if (!lastPrint) return;
+    var P = lastPrint, hosp = 'Baweja Multispeciality Hospital';
+    try { hosp = getHospitalDetailValue('Hospital Name', hosp); } catch (e) {}
+    var blocks = '';
+    P.ledgers.forEach(function (L) {
+      blocks += '<div class="it"><b>' + esc(L.grp.name) + '</b> — Opening ' + L.opening + ' · Added +' + L.added + ' · Used −' + L.used + (L.removed ? ' · Removed −' + L.removed : '') + ' · <b>Now ' + L.grp.stock + '</b></div>';
+      blocks += '<div class="e o"><span>Opening stock</span><b>' + L.opening + '</b></div>';
+      L.list.forEach(function (x) {
+        blocks += '<div class="e"><span class="dt">' + esc(dShort(x.t)) + '</span> <span class="q ' + x.kind + '">' + (x.d > 0 ? '+' : x.d < 0 ? '−' : '·') + Math.abs(x.d || 0) + '</span> ' + esc(x.what) + (x.why ? ' <i>' + esc(x.why) + '</i>' : '') + ' <b class="b">= ' + x.bal + '</b></div>';
+      });
+    });
+    if (!P.ledgers.length) {
+      P.usage.forEach(function (r) { blocks += '<div class="e"><span class="dt">' + esc(dShort(tsOf(r))) + '</span> <span class="q use">−' + esc(r.qty || 1) + '</span> ' + esc(r.itemName || '') + ' — ' + esc(r.patientName || '') + ' ' + esc(r.bmhId || '') + (r.procedure ? ' <i>' + esc(r.procedure) + '</i>' : '') + '</div>'; });
+    }
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Stock movement</title><style>'
+      + '@page{size:A4;margin:9mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;font-size:9.5px;color:#111}'
+      + 'h1{font-size:13px;margin:0}.sub{font-size:9.5px;color:#555;margin:2px 0 6px;border-bottom:1.5px solid #1A3C6E;padding-bottom:4px}'
+      + '.cols{column-count:3;column-gap:6mm;column-rule:1px solid #ddd}.it{break-inside:avoid;background:#eef1f6;border-radius:3px;padding:3px 4px;margin:0 0 3px;font-size:9.5px}'
+      + '.e{break-inside:avoid;padding:1.5px 0;border-bottom:1px dotted #ccc;line-height:1.25}.e.o{display:flex;justify-content:space-between;font-weight:700}.dt{color:#555}.q{font-weight:800}.q.in{color:#1a7a35}.q.use{color:#b71c1c}.q.out,.q.return{color:#a35400}.b{float:right}i{color:#666}'
+      + '</style></head><body><h1>' + esc(hosp) + ' — Stock movement</h1><div class="sub">Search: "' + esc(P.q) + '" · ' + esc(P.period) + ' · Printed ' + esc(dShort(Date.now())) + '</div><div class="cols">' + blocks + '</div></body></html>';
+    try { safePrint(html); } catch (e) { var w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); w.print(); } }
+  };
+  var baseTrack = window.bmhInvTrack;
+  window.bmhInvTrack = function () {
+    baseTrack.apply(this, arguments);
+    try {
+      var q = nk((document.getElementById('bmh-track-q') || {}).value || '');
+      var days = Number((document.getElementById('bmh-track-days') || {}).value || 0);
+      var out = document.getElementById('bmh-track-out'); if (!out || q.length < 3) { lastPrint = null; return; }
+      var ds = docScope(); var since = days ? Date.now() - days * 864e5 : 0;
+      var looksPatient = /^bmsh/i.test(q);
+      var gs = looksPatient ? [] : itemGroups(q, ds);
+      var ledgers = gs.slice(0, 3).map(function (g) { return ledgerData(g, ds, since); });
+      var more = gs.length > 3 ? '<div style="font-size:11px;color:#666;margin-bottom:6px">' + gs.length + ' items match — showing the first 3. Pick one: ' + gs.slice(0, 12).map(function (g) { return '<a href="#" style="margin-right:6px" onclick="var i=document.getElementById(\'bmh-track-q\');i.value=this.textContent;bmhInvTrack();return false">' + esc(g.name) + '</a>'; }).join('') + '</div>' : '';
+      var usage = (window.BMH_INVENTORY_USAGE || []).filter(function (r) {
+        if (!r || (since && tsOf(r) < since)) return false;
+        if (ds && !rowInScope(r, ds)) return false;
+        return [r.itemName, r.barcode, r.bmhId, r.patientName, r.procedure].some(function (x) { return nk(x).indexOf(q) >= 0; });
+      }).sort(function (a, b) { return tsOf(a) - tsOf(b); });
+      lastPrint = { q: q, period: periodLabel(days), ledgers: ledgers, usage: usage };
+      var bar = '<div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button type="button" class="btn btn-outline btn-xs" onclick="bmhInvTrackPrint()">🖨️ Print (3 columns)</button></div>';
+      if (ledgers.length) {
+        out.innerHTML = bar + more + ledgers.map(ledgerHtml).join('') + '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:11.5px;font-weight:800;color:#1A3C6E">Patient-wise list</summary>' + out.innerHTML + '</details>';
+      } else if (usage.length) {
+        out.innerHTML = bar + out.innerHTML;
+      }
+    } catch (e) { console.warn('[inv-track]', e); }
+  };
+
   // ── page adjustments when the inventory page opens ──
   function adjustPage() {
     var page = document.getElementById('pg-inventory'); if (!page) return;
