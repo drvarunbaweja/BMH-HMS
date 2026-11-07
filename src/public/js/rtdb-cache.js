@@ -168,6 +168,40 @@
       return res;
     };
   });
+  // ── live update on other computers: when a library is saved elsewhere, reload it here (no manual refresh) ──
+  // (the drug list already follows the stamp through its own live listener above)
+  function call(name, arg) { try { if (typeof window[name] === 'function') return window[name](arg); } catch (e) { console.warn('[rtdb-cache] refresh', name, e); } }
+  var REFRESH = {
+    printLetterhead: function () { call('loadPrintLetterheadFromStorage'); },
+    rxTemplates: function () { call('loadRxTemplatesFromStorage'); },
+    consentDataDb: function () { call('loadConsentDataOverridesFromStorage'); },
+    consentLibraryDb: function () { call('loadConsentDataOverridesFromStorage'); },
+    consentTemplatesStub: function () { call('loadConsentTemplatesFromStorage'); },
+    deptPlanTemplates: function () { call('loadDeptPlanTemplatesFromDatabase'); },
+    consentLibrary: function () { call('loadUploadedConsentsCache', function () { call('populateConsentTypeSelectors'); call('populateReceptionSurgeryPackSelect'); }); }
+  };
+  var seen = null, ownAt = {}, due = {}, dueT = null;
+  metaListeners.push(function () {
+    if (!verReady()) return;
+    var now = {}; Object.keys(REFRESH).forEach(function (r) { now[r] = ver(r); });
+    if (!seen) { seen = now; return; } // first stamps after opening: the normal start-up load covers them
+    Object.keys(now).forEach(function (r) {
+      if (now[r] === seen[r]) return;
+      if (Date.now() - (ownAt[r] || 0) < 10000) return; // saved on this computer: already up to date here
+      due[r] = 1;
+    });
+    seen = now;
+    if (Object.keys(due).length && !dueT) dueT = setTimeout(function () {
+      dueT = null; var list = Object.keys(due); due = {};
+      var u = null; try { u = CURRENT_USER; } catch (e) {}
+      if (!u) return;
+      var done = {}; list.forEach(function (r) { var f = REFRESH[r]; if (f && !done[f]) { done[f] = 1; f(); } });
+      stats.live = (stats.live || 0) + list.length;
+    }, 1200);
+  });
+  var origStamp = stamp;
+  stamp = function (root) { ownAt[root] = Date.now(); return origStamp(root); };
+
   R.__bmhCache = true;
   if (!startMeta()) { var tries = 0, iv = setInterval(function () { if (startMeta() || ++tries > 40) clearInterval(iv); }, 500); }
   window.bmhRtdbCache = { stats: function () { return Object.assign({ ver: VER, drugLibraryMeta: DLM }, stats); }, clear: function () { return Promise.all(ROOTS.map(dropCopy)); } };
