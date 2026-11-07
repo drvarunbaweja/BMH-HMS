@@ -53117,7 +53117,8 @@ function saveVisit(dept, opts) {
             const refs = pt.crossRefs.map(function (r) {
               if (!r || String(r.id) !== String(activeXrefId)) return r;
               if (!crossRefTargetsDept(r, dept)) return r;
-              return Object.assign({}, r, { seen: true, status: 'seen', seenAt: r.seenAt || nowSeen, seenDept: dept, completedDept: dept, lastVisitKey: visitKey, lastSavedAt: nowSeen, updatedAt: nowSeen });
+              // Saving the sheet (e.g. the eye work-up) links the visit but does NOT finish the referral — the doctor's ✓ (markCrossRefSeen) does, same as a direct patient.
+              return Object.assign({}, r, { lastVisitKey: visitKey, lastSavedAt: nowSeen, updatedAt: nowSeen });
             });
             pt.crossRefs = refs;
             fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
