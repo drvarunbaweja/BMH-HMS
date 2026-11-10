@@ -4,13 +4,12 @@
  *
  * Part 1 — stamping (on for every computer): every save to patients/<id> (whole record or any field) also writes a
  *   tiny timestamp at patientsChanged/<id>. Nothing about the patient data itself changes.
- * Part 2 — changes-only download (only where switched on; for testing on one computer first):
+ * Part 2 — changes-only download (tested on one computer, then on for all from v76):
  *   • the full patient list is kept on this computer (IndexedDB);
  *   • opening / refreshing downloads only the patients whose stamp changed since the last download;
  *   • the live updates follow patientsChanged and fetch just the changed patients (instead of the whole list);
  *   • a full download is still done the first time, if the copy is more than 3 days old, or if very many changed.
- *   Switch on for this computer:  localStorage.setItem('bmh_patient_sync','1')  then reload
- *   Switch off again:             localStorage.removeItem('bmh_patient_sync')   then reload
+ *   On for every computer (v76). Switch off on one computer: localStorage.setItem('bmh_patient_sync','0'), reload.
  */
 (function () {
   'use strict';
@@ -55,7 +54,9 @@
   R.__bmhPatientStamp = true;
 
   // ── Part 2: changes-only download (switch per computer) ──
-  var ON = false; try { ON = localStorage.getItem('bmh_patient_sync') === '1'; } catch (e) {}
+  // on for every computer from v76 (it only acts on logins that load the whole patient list: admin / both centres);
+  // switch off on one computer with localStorage.setItem('bmh_patient_sync','0') and reload
+  var ON = true; try { ON = localStorage.getItem('bmh_patient_sync') !== '0'; } catch (e) {}
   var stats = { on: ON, full: 0, delta: 0, fetched: 0, live: 0, lastMs: 0 };
   window.bmhPatientSync = { stats: function () { return stats; } };
   var recentOwn = {};
