@@ -257,6 +257,7 @@
       + '<div style="padding:0 16px 8px"><input type="text" id="ivl-q" placeholder="🔍 Search" style="width:100%"></div>'
       + (kind === 'vendor' && isAdmin() ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#555">To rename a vendor everywhere (bills, payments, stock), use <a href="#" id="ivl-vm">Vendors → Merge similar names</a>.</div>' : '')
       + (kind === 'dept' ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#555">Renaming changes the name shown; stock keeps the same department.</div>' : '')
+      + (kind === 'store' && isAdmin() && typeof window.bmhMergeSameNameStores === 'function' ? '<div style="padding:0 16px 8px"><button type="button" class="btn btn-xs btn-outline" id="ivl-samename">🔤 Merge same-name stores (e.g. Eye RPR / Eye Rpr)</button></div>' : '')
       + (!canEdit() ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#9a6b00">Rename / Remove: admin and inventory logins only.</div>' : '')
       + '<div id="ivl-list"></div></div>';
     document.body.appendChild(ov);
@@ -265,6 +266,7 @@
     document.getElementById('ivl-addb').onclick = add;
     document.getElementById('ivl-add').onkeydown = function (e) { if (e.key === 'Enter') add(); };
     document.getElementById('ivl-q').oninput = function () { S.q = this.value; S.editing = ''; draw(); };
+    var sn = document.getElementById('ivl-samename'); if (sn) sn.onclick = function () { window.bmhMergeSameNameStores(); draw(); };
     var vm = document.getElementById('ivl-vm'); if (vm) vm.onclick = function (e) { e.preventDefault(); ov.remove(); try { bmhOpenVendorMerge(); } catch (er) {} };
     draw();
   };
