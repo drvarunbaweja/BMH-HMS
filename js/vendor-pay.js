@@ -20,6 +20,8 @@
   function out(v) { try { return bmhVendorBillOutstanding(v); } catch (e) { return Math.max(0, (Number(v && v.amount) || 0) - (Number(v && v.paidAmount) || 0)); } }
   function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function who() { try { return (CURRENT_USER && CURRENT_USER.name) || ''; } catch (e) { return ''; } }
+  function canon(name) { var n = String(name || '').trim(); try { if (typeof window.bmhVendorCanonical === 'function') n = String(window.bmhVendorCanonical(n) || n).trim(); } catch (e) {} return n; }
+  function same(a, b) { return canon(a).replace(/\s+/g, ' ').toLowerCase() === canon(b).replace(/\s+/g, ' ').toLowerCase(); }
   function vkey(name) { return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/[.#$\[\]\/]/g, '_') || '_'; }
   function invDate(v) { return String((v && (v.invoiceDate || v.billDateKey || v.createdAt)) || '').slice(0, 10); }
   function orderKey(v) { return (v.opening ? '0' : '1') + (invDate(v) || '9999-99-99') + String(v.createdAt || ''); }
@@ -52,9 +54,15 @@
 
   // ── advances (vendorAdvances/<vendor>/entries) ──
   var ADV = {};
-  function advBalance(vendor) { var a = ADV[vkey(vendor)]; if (!a || !a.entries) return 0; return Math.max(0, Math.round(Object.keys(a.entries).reduce(function (s, k) { return s + (Number(a.entries[k].amount) || 0); }, 0) * 100) / 100); }
+  // advances of merged / differently written names of the same vendor count together
+  function advBalance(vendor) {
+    var t = 0;
+    Object.keys(ADV).forEach(function (k) { var a = ADV[k]; if (!a || !a.entries || !same(a.vendor || k, vendor)) return; Object.keys(a.entries).forEach(function (e) { t += Number(a.entries[e].amount) || 0; }); });
+    return Math.max(0, Math.round(t * 100) / 100);
+  }
   window.bmhVendorAdvance = advBalance;
   function advAdd(vendor, amount, info) {
+    vendor = canon(vendor);
     var k = vkey(vendor), id = 'A' + Date.now() + Math.random().toString(36).slice(2, 5);
     var e = Object.assign({ amount: Math.round(amount * 100) / 100, at: new Date().toISOString(), by: who() }, info || {});
     ADV[k] = ADV[k] || { vendor: vendor, entries: {} }; ADV[k].vendor = vendor; ADV[k].entries = ADV[k].entries || {}; ADV[k].entries[id] = e;
@@ -74,7 +82,8 @@
   function openPay(opts) {
     var vendor = String(opts.vendor || '').trim();
     if (!vendor) { toast('Choose the vendor first', 'w'); return; }
-    var rows = bills().filter(function (v) { return String(v.vendor || '').trim() === vendor && out(v) > 0; });
+    var rows = bills().filter(function (v) { return same(v.vendor, vendor) && out(v) > 0; });
+    if (rows.length) { var cnt = {}; rows.forEach(function (v) { var n = String(v.vendor || '').trim(); cnt[n] = (cnt[n] || 0) + 1; }); vendor = Object.keys(cnt).sort(function (x, y) { return cnt[y] - cnt[x]; })[0] || vendor; }
     var adv = advBalance(vendor);
     if (!rows.length) { toast('No pending bills for ' + vendor + (adv > 0 ? ' (advance ' + inr(adv) + ' kept)' : ''), 'i'); return; }
     var picked = {}; (opts.ids || []).forEach(function (id) { picked[id] = true; });
@@ -190,7 +199,7 @@
     var ids = []; try { ids = bmhSelectedVendorBillIds(); } catch (e) {}
     if (!ids.length) { toast('Select bills first', 'w'); return; }
     var rows = bills().filter(function (v) { return ids.indexOf(String(v.id || '')) >= 0; });
-    var vendors = rows.map(function (v) { return String(v.vendor || '').trim(); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+    var vendors = []; rows.forEach(function (v) { var n = String(v.vendor || '').trim(); if (n && !vendors.some(function (x) { return same(x, n); })) vendors.push(n); });
     if (vendors.length > 1) { toast('Selected bills are from ' + vendors.length + ' vendors — pay one vendor at a time', 'w'); return; }
     openPay({ vendor: vendors[0], ids: ids });
   };

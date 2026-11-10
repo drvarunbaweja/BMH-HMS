@@ -55,7 +55,8 @@
       vendor: vendor, fy: fy, carried: carried, current: current, opening: openingRow(vendor, fy), payments: ledgerPayments(vendor, fy),
       carriedDue: sum(carried, due), curAmt: sum(current, function (v) { return Number(v.amount) || 0; }),
       curPaid: sum(current, function (v) { return Number(v.paidAmount) || 0; }), curDue: sum(current, due),
-      curRet: sum(current, returnedOf), dups: dupIds(vendor), credit: creditOf(vendor)
+      curRet: sum(current, returnedOf), dups: dupIds(vendor), credit: creditOf(vendor),
+      advance: (function () { try { return typeof window.bmhVendorAdvance === 'function' ? Number(window.bmhVendorAdvance(vendor)) || 0 : 0; } catch (e) { return 0; } })()
     };
   }
   function rowsHtml(list, empty, st, forPrint) {
@@ -87,9 +88,10 @@
       + '</div>';
     var nd = Object.keys(st.dups).length;
     var dupBox = nd ? '<div style="background:#fdecea;border:1px solid #f5b5b0;border-radius:10px;padding:9px 12px;margin-top:10px;font-size:12px;color:#8e1c1c"><b>⚠ ' + nd + ' bills share an invoice number with another bill</b> (marked in red below). The same invoice may have been entered twice — check them' + (isAdmin() ? ' and delete the extra one.' : ' and ask the admin to delete the extra one.') + ' If the extra one was paid, its payment entry stays in the ledger.</div>' : '';
-    var totalDue = Math.max(0, st.carriedDue + st.curDue - st.credit);
+    var totalDue = Math.max(0, st.carriedDue + st.curDue - st.credit - (st.advance || 0));
+    var advBox = st.advance > 0 ? '<div style="background:#e9f7ec;border:1px solid #9bd3ad;border-radius:10px;padding:9px 12px;margin-top:10px;font-size:12px">Advance paid to this vendor (more than was due): <b>' + inr(st.advance) + '</b>' + (forPrint ? '' : ' <span style="color:#555">— used first the next time you pay this vendor (Pay vendor).</span>') + '</div>' : '';
     var creditBox = st.credit > 0 ? '<div style="background:#e9f7ec;border:1px solid #9bd3ad;border-radius:10px;padding:9px 12px;margin-top:10px;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div style="flex:1">Credit with this vendor (from returns after payment): <b>' + inr(st.credit) + '</b></div>' + (!forPrint && (st.carriedDue + st.curDue) > 0 ? '<button type="button" class="btn btn-xs btn-gold" onclick="bmhVendorStmtUseCredit()">Adjust credit against dues</button>' : '') + '</div>' : '';
-    return (forPrint ? '' : dupBox) + openingBox + creditBox
+    return (forPrint ? '' : dupBox) + openingBox + creditBox + advBox
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px">'
       + box('Carried over — due now', inr(st.carriedDue), '#b55a00')
       + box(st.fy + ' bills', inr(st.curAmt) + '<div style="font-size:10.5px;font-weight:600;color:#555">Paid ' + inr(st.curPaid) + '</div>', '#1A3C6E')
@@ -100,7 +102,7 @@
       + tableHtml('2. Bills in ' + st.fy + ' (1 Apr ' + st.fy.slice(0, 4) + ' – 31 Mar ' + (Number(st.fy.slice(0, 4)) + 1) + ')', st.current, 'No bills this year', '<tfoot><tr><td colspan="2">Total' + (st.curRet ? ' <span style="font-weight:600;color:#6a1b9a;font-size:10.5px">(after returns of ' + inr(st.curRet) + ')</span>' : '') + '</td><td style="text-align:right">' + inr(st.curAmt) + '</td><td style="text-align:right">' + inr(st.curPaid) + '</td><td></td><td style="text-align:right">' + inr(st.curDue) + '</td></tr></tfoot>', st, forPrint)
       + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue,#1A3C6E);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 4px">3. Payments made in ' + st.fy + '</div>'
       + '<table class="vst"><thead><tr><th>Date</th><th colspan="4">Details</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + payRows + '</tbody></table>'
-      + '<div style="margin-top:10px;font-size:13px;font-weight:900;text-align:right;color:' + (totalDue > 0 ? '#b71c1c' : '#1a8c3c') + '">Total due now: ' + inr(totalDue) + (st.credit > 0 ? ' <span style="font-size:11px;color:#1a8c3c">(after credit ' + inr(st.credit) + ')</span>' : '') + '</div>'
+      + '<div style="margin-top:10px;font-size:13px;font-weight:900;text-align:right;color:' + (totalDue > 0 ? '#b71c1c' : '#1a8c3c') + '">Total due now: ' + inr(totalDue) + (st.credit > 0 || st.advance > 0 ? ' <span style="font-size:11px;color:#1a8c3c">(after ' + [st.credit > 0 ? 'credit ' + inr(st.credit) : '', st.advance > 0 ? 'advance ' + inr(st.advance) : ''].filter(Boolean).join(' and ') + ')</span>' : '') + '</div>'
       + '<div style="font-size:10.5px;color:#777;margin-top:4px">Anything still due at 31 March is carried over automatically into the next year\'s statement.</div>'
       + usageHtml(st, forPrint);
   }
@@ -250,11 +252,12 @@
   window.bmhVendorStmtPayBill = function (id) { try { bmhMarkVendorPaid(id); } catch (e) { console.warn(e); } render(); };
   window.bmhVendorStmtPayVendor = function () { try { bmhPayVendorOutstanding(state.vendor); } catch (e) { console.warn(e); } render(); };
   window.bmhVendorStmtDelete = function (id) { try { bmhDeleteVendorBill(id); } catch (e) { console.warn(e); } render(); };
+  function creditOrder(v) { return (v.opening ? '0' : '1') + String(v.invoiceDate || v.billDateKey || v.createdAt || '9999').slice(0, 10) + String(v.createdAt || ''); }
   // apply a credit amount to this vendor's outstanding bills, oldest first; returns what is left
   function applyCredit(amount, fromLabel, skipId) {
     var left = amount;
     vendorRows(state.vendor).filter(function (v) { return String(v.id) !== String(skipId) && due(v) > 0; })
-      .sort(function (a, b) { return String(a.createdAt || a.dueDate || '').localeCompare(String(b.createdAt || b.dueDate || '')); })
+      .sort(function (a, b) { return creditOrder(a).localeCompare(creditOrder(b)); }) // oldest invoice first (opening balance first)
       .forEach(function (v) {
         if (left <= 0) return;
         var use = Math.min(due(v), left);
