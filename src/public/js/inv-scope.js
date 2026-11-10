@@ -48,6 +48,8 @@
   function anyScope() { return scope() || docScope(); }
   function storeCentre(name) { var s = String(name || ''); return /\bCHD\b/i.test(s) ? 'CHD' : /\bRPR\b/i.test(s) ? 'RPR' : (s ? 'RPR' : ''); }
   function storeDept(name) {
+    // a department set by admin for this store (Move store to department) comes first
+    try { var o = window.__bmhStoreDeptOverride && window.__bmhStoreDeptOverride(name); if (o) return o; } catch (e) {}
     var s = String(name || '').toLowerCase();
     if (/^eye|eye ot/.test(s)) return 'ophtho';
     if (/^obg|labou?r room/.test(s)) return 'obg';

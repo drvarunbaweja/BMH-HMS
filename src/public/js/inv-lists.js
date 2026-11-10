@@ -195,6 +195,7 @@
     return out.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
   }
   function usage(K, n) { return K.count ? K.count(n) : rowsWhere(K.fields, n); }
+  function deptName(d) { if (!d) return 'No department'; try { var r = loadInventoryDeptRows().find(function (x) { return x.value === d; }); if (r) return r.label; } catch (e) {} return d; }
   function draw() {
     var K = KINDS[S.kind], box = document.getElementById('ivl-box'); if (!K || !box) return;
     var list = entries(), ed = canEdit();
@@ -208,6 +209,7 @@
       }
       return '<div class="r"><div class="n"><b>' + esc(n) + '</b><small>' + esc(info) + (lock ? ' · ' + esc(lock) : '') + '</small></div>'
         + (ed && !lock && !K.noRename ? '<button type="button" class="btn btn-xs btn-outline" data-a="ren" data-n="' + esc(n) + '">✏️ Rename</button>' : '')
+        + (S.kind === 'store' && isAdmin() && typeof window.bmhMoveStoreToDept === 'function' ? '<button type="button" class="btn btn-xs btn-outline" data-a="dept" data-n="' + esc(n) + '" title="Move this store to another department">🏷 ' + esc(deptName(window.bmhStoreDeptOf(n))) + '</button>' : '')
         + (ed && !lock ? '<button type="button" class="btn btn-xs btn-gray" data-a="del" data-n="' + esc(n) + '">Remove</button>' : '') + '</div>';
     }).join('') : '<div style="padding:14px;color:#777;font-size:12.5px">Nothing found.</div>')
       + (list.length > shown.length ? '<div style="padding:8px;color:#777;font-size:11.5px">Showing 300 of ' + list.length + ' — type to search.</div>' : '');
@@ -220,6 +222,7 @@
     var K = KINDS[S.kind];
     if (a === 'ren') { S.editing = n; draw(); return; }
     if (a === 'cancel') { S.editing = ''; draw(); return; }
+    if (a === 'dept') { window.bmhMoveStoreToDept(n); var iv = setInterval(function () { if (!document.getElementById('dl-ov')) { clearInterval(iv); draw(); } }, 500); return; }
     if (!canEdit()) { toast('Only admin and inventory logins can change these lists', 'w'); return; }
     if (a === 'saveren') {
       var to = trim((document.getElementById('ivl-ren') || {}).value);
@@ -258,6 +261,7 @@
       + (kind === 'vendor' && isAdmin() ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#555">To rename a vendor everywhere (bills, payments, stock), use <a href="#" id="ivl-vm">Vendors → Merge similar names</a>.</div>' : '')
       + (kind === 'dept' ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#555">Renaming changes the name shown; stock keeps the same department.</div>' : '')
       + (kind === 'store' && isAdmin() && typeof window.bmhMergeSameNameStores === 'function' ? '<div style="padding:0 16px 8px"><button type="button" class="btn btn-xs btn-outline" id="ivl-samename">🔤 Merge same-name stores (e.g. Eye RPR / Eye Rpr)</button></div>' : '')
+      + (kind === 'store' && isAdmin() && typeof window.bmhFixStoreDeptMismatch === 'function' ? '<div style="padding:0 16px 8px"><button type="button" class="btn btn-xs btn-outline" id="ivl-deptfix">🏷 Fix stock lines saved in the wrong department</button></div>' : '')
       + (!canEdit() ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#9a6b00">Rename / Remove: admin and inventory logins only.</div>' : '')
       + '<div id="ivl-list"></div></div>';
     document.body.appendChild(ov);
@@ -266,6 +270,7 @@
     document.getElementById('ivl-addb').onclick = add;
     document.getElementById('ivl-add').onkeydown = function (e) { if (e.key === 'Enter') add(); };
     document.getElementById('ivl-q').oninput = function () { S.q = this.value; S.editing = ''; draw(); };
+    var df = document.getElementById('ivl-deptfix'); if (df) df.onclick = function () { window.bmhFixStoreDeptMismatch(); draw(); };
     var sn = document.getElementById('ivl-samename'); if (sn) sn.onclick = function () { window.bmhMergeSameNameStores(); draw(); };
     var vm = document.getElementById('ivl-vm'); if (vm) vm.onclick = function (e) { e.preventDefault(); ov.remove(); try { bmhOpenVendorMerge(); } catch (er) {} };
     draw();
