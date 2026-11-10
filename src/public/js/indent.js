@@ -9,7 +9,8 @@
  *    Stock is only added to the department (Pharmacy stock is not tracked here). If the item is not yet in the
  *    requesting store, a new stock line is made there with the same name, category and details.
  *  • The question appears only on logins of the requesting department and centre (not, e.g., on an eye login).
- * Indents are kept in the same list as before (inventoryIndents in the financial snapshot), one row per line.
+ * Indents are saved line by line in their own database place (inventoryIndents/<id>) so other saves cannot wipe them;
+ * received stock can carry batch, expiry and MRP (a new stock line per batch / expiry). "All saved" shows every indent.
  */
 (function () {
   'use strict';
@@ -106,7 +107,7 @@
       + '#ind2 .dd small{color:#777}#ind2 .bt{border:1px solid #e3e7ef;border-radius:10px;padding:10px;margin-bottom:8px;background:#fff}'
       + '#ind2 .bt table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}#ind2 .bt td,#ind2 .bt th{padding:4px 6px;border-bottom:1px solid #f0f0f0;text-align:left}#ind2 .bt th{font-size:10.5px;color:#667;text-transform:uppercase}'
       + '.ind2-ov{position:fixed;inset:0;z-index:4900;background:rgba(10,20,40,.45);display:flex;align-items:center;justify-content:center;padding:14px}'
-      + '.ind2-box{background:#fff;border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.3)}'
+      + '.ind2-box{background:#fff;border-radius:14px;max-width:820px;width:100%;max-height:90vh;overflow:auto;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.3)}'
       + '.ind2-box table{width:100%;border-collapse:collapse;font-size:12.5px}.ind2-box td,.ind2-box th{padding:6px;border-bottom:1px solid #eee;text-align:left}.ind2-box input{width:80px;padding:6px;border:1px solid #cfd6e2;border-radius:6px}'
       + '#ind2-ask{position:fixed;right:14px;bottom:14px;z-index:4700;max-width:360px;background:#fff;border:2px solid #E8901A;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:12px;font-size:12.5px}';
     document.head.appendChild(s);
@@ -144,9 +145,14 @@
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhInd2.addLine()">+ Add line</button>'
       + '<div style="margin-top:10px"><label class="fl">Notes</label><input type="text" id="ind2-notes" placeholder="Reason / case details / staff note" value="' + esc(F.notes || '') + '"></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">' + (F.edit ? '<button type="button" class="btn btn-gray btn-sm" onclick="bmhInd2.cancelEdit()">Cancel edit</button>' : '')
+      + '<button type="button" class="btn btn-gold btn-sm" onclick="bmhInd2.save(true)">💾🖨️ Save &amp; print</button>'
       + '<button type="button" class="btn btn-orange btn-sm" onclick="bmhInd2.save()">' + (F.edit ? '💾 Save changes' : '💾 Save indent') + '</button></div></div>';
-    h.innerHTML = form + '<div class="card"><div class="card-hd"><div class="card-title">Indents</div></div><div id="ind2-list" style="padding:4px 2px"></div></div>';
+    var vw = F.view || 'open';
+    h.innerHTML = form + '<div class="card"><div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div class="card-title">Indents</div>'
+      + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' + [['open', 'Waiting / part'], ['received', 'Received'], ['all', 'All saved']].map(function (x) { return '<button type="button" class="btn btn-xs ' + (vw === x[0] ? 'btn-blue' : 'btn-outline') + '" onclick="bmhInd2.view(\'' + x[0] + '\')">' + x[1] + '</button>'; }).join('')
+      + '<input type="text" id="ind2-q" placeholder="🔍 Indent no. / item / store" style="width:200px;padding:6px 8px;border:1px solid #cfd6e2;border-radius:8px;font-size:12px" value="' + esc(F.q || '') + '"></div></div><div id="ind2-list" style="padding:4px 2px"></div></div>';
     bind(); renderList();
+    var qEl = document.getElementById('ind2-q'); if (qEl) qEl.oninput = function () { F.q = qEl.value; renderList(); };
   }
   function readTop() {
     var g = function (id) { var el = document.getElementById(id); return el ? el.value : ''; };
@@ -185,10 +191,17 @@
   }
   function renderList() {
     var el = document.getElementById('ind2-list'); if (!el) return;
-    var bs = batches(visible);
-    if (!bs.length) { el.innerHTML = '<div style="padding:12px;color:#777;font-size:12px">No indents yet.</div>'; return; }
+    var vw = F.view || 'open', q = norm(F.q || '');
+    var bs = batches(visible).filter(function (lines) {
+      var st = statusOf(lines);
+      if (vw === 'open' && !(st === 'open' || st === 'partial')) return false;
+      if (vw === 'received' && st !== 'received') return false;
+      if (q) { var h0 = lines[0], hay = norm([h0.indentNo, h0.requestStore, h0.sourceStore, h0.requestedBy, h0.notes].concat(lines.map(function (l) { return l.item; })).join(' ')); if (hay.indexOf(q) < 0) return false; }
+      return true;
+    });
+    if (!bs.length) { el.innerHTML = '<div style="padding:12px;color:#777;font-size:12px">' + (vw === 'open' && !q ? 'No indents waiting. Use "All saved" to see every indent.' : 'No indents found.') + '</div>'; return; }
     var badge = { open: ['Waiting', '#E8901A'], partial: ['Part received', '#B7791F'], received: ['Received', '#2F855A'], cancelled: ['Cancelled', '#888'] };
-    el.innerHTML = bs.slice(0, 60).map(function (lines) {
+    el.innerHTML = bs.slice(0, 200).map(function (lines) {
       var h = lines[0], st = statusOf(lines), b = badge[st];
       var btns = [];
       if (st === 'open' || st === 'partial') {
@@ -203,7 +216,7 @@
         + '<div style="font-size:10.5px;color:#666">' + esc(h.requestedBy || '') + ' · ' + esc(fmt(h.createdAt)) + (h.printedAt ? ' · 🖨️ printed ' + esc(fmt(h.printedAt)) : '') + (h.editedAt ? ' · edited ' + esc(fmt(h.editedAt)) : '') + '</div></div>'
         + '<span style="background:' + b[1] + ';color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:800">' + b[0] + '</span></div>'
         + '<table><tr><th>#</th><th>Item</th><th style="text-align:right">Asked</th><th style="text-align:right">Received</th></tr>'
-        + lines.map(function (l, k) { return '<tr><td>' + (k + 1) + '</td><td>' + esc(l.item) + (l.closed ? ' <small style="color:#888">(closed)</small>' : '') + '</td><td style="text-align:right">' + (Number(l.qty) || 0) + '</td><td style="text-align:right">' + (Number(l.receivedQty) || 0) + '</td></tr>'; }).join('') + '</table>'
+        + lines.map(function (l, k) { var rc = (l.receipts || []).filter(function (r) { return r && (r.exp || r.batch); }).map(function (r) { return [r.batch ? 'B ' + r.batch : '', r.exp ? 'exp ' + r.exp : ''].filter(Boolean).join(' '); }).join('; '); return '<tr><td>' + (k + 1) + '</td><td>' + esc(l.item) + (l.closed ? ' <small style="color:#888">(closed)</small>' : '') + (rc ? ' <small style="color:#2F855A">' + esc(rc) + '</small>' : '') + '</td><td style="text-align:right">' + (Number(l.qty) || 0) + '</td><td style="text-align:right">' + (Number(l.receivedQty) || 0) + '</td></tr>'; }).join('') + '</table>'
         + (h.notes ? '<div style="font-size:11px;color:#555;margin-top:4px">📝 ' + esc(h.notes) + '</div>' : '')
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' + btns.join('') + '</div></div>';
     }).join('');
@@ -212,6 +225,39 @@
   // ── actions ──
   function persist() {
     try { saveBmhFinancials(); } catch (e) { console.warn('[indent] save', e); }
+  }
+  // Indents are kept in their own place in the database (inventoryIndents/<line id>), saved line by line.
+  // (The shared financial record is rewritten as a whole by every computer, which could wipe a new indent.)
+  function fbref(p) { return window.FBDB ? window.FBDB.ref(p) : null; }
+  function plain(o) { return JSON.parse(JSON.stringify(o)); }
+  function putLines(lines) {
+    var r = fbref('inventoryIndents'); if (!r || !lines.length) return;
+    var up = {}; lines.forEach(function (l) { up[l.id] = plain(l); });
+    r.update(up).catch(function (e) { console.warn('[indent] cloud save', e); toast('Indent not saved to the server — check the internet and save again', 'w'); });
+  }
+  function dropLines(ids) { var r = fbref('inventoryIndents'); if (!r || !ids.length) return; var up = {}; ids.forEach(function (id) { up[id] = null; }); r.update(up).catch(function () {}); }
+  var REMOTE = null, migrated = false, listening = false;
+  function mergeRemote() {
+    if (!REMOTE) return;
+    var arr = list();
+    for (var i = arr.length - 1; i >= 0; i--) if (isNew(arr[i])) arr.splice(i, 1);
+    Object.keys(REMOTE).forEach(function (k) { var r = REMOTE[k]; if (r && typeof r === 'object') { r.id = r.id || k; arr.push(r); } });
+  }
+  function listen() {
+    var r = fbref('inventoryIndents'); if (!r || listening) return listening;
+    listening = true;
+    r.on('value', function (snap) {
+      var v = snap.val() || {};
+      if (!migrated) { // indents saved before this change (still in the financial record): copy them across once
+        migrated = true;
+        var miss = list().filter(function (x) { return isNew(x) && !v[x.id]; });
+        if (miss.length) { miss.forEach(function (x) { v[x.id] = x; }); putLines(miss); }
+      }
+      REMOTE = v; mergeRemote();
+      try { if (document.getElementById('ind2-list')) renderList(); } catch (e) {}
+      try { checkAsk(); } catch (e) {}
+    });
+    return true;
   }
   function linesOf(id) { return list().filter(function (r) { return isNew(r) && r.batchId === id; }); }
   function newNo() {
@@ -247,10 +293,15 @@
         editedAt: F.edit ? ts : '', editedBy: F.edit ? me() : '', editLog: log
       });
     });
+    var newLines = linesOf(batchId), newIds = newLines.map(function (l) { return l.id; });
+    dropLines(old.map(function (l) { return l.id; }).filter(function (id) { return newIds.indexOf(id) < 0; }));
+    putLines(newLines);
     persist();
     toast((F.edit ? 'Indent ' + no + ' updated' : 'Indent ' + no + ' saved') + ' ✓', 's');
-    F = { edit: null, lines: [], store: F.store, source: 'Pharmacy' };
+    var andPrint = F.andPrint;
+    F = { edit: null, lines: [], store: F.store, source: 'Pharmacy', view: F.view };
     render(); checkAsk();
+    if (andPrint) print(batchId);
   }
   function pinOk() {
     if (Number(window._bmhIndentPinUntil || 0) > Date.now()) return true;
@@ -285,23 +336,31 @@
       + '<table><tr><th style="width:30px">#</th><th>Item</th><th class="n">Qty asked</th><th class="n">Qty issued</th><th style="width:150px">Remarks</th></tr>' + rows + '</table>'
       + '<div class="sg"><div>Requested by</div><div>Issued by (' + esc(h.sourceStore) + ')</div><div>Received by</div></div>'
       + '<div style="margin-top:14px;font-size:10px;color:#666">Printed ' + esc(fmt(ts)) + ' by ' + esc(me()) + '</div></body></html>';
-    if (!h.printedAt) { lines.forEach(function (l) { l.printedAt = ts; l.printedBy = me(); }); persist(); renderList(); }
+    if (!h.printedAt) { lines.forEach(function (l) { l.printedAt = ts; l.printedBy = me(); }); putLines(lines); persist(); renderList(); }
     try { safePrint(html); } catch (e) { var w = window.open('', '_blank'); if (w) { w.document.write(html + '<script>window.onload=function(){window.print()}<\/script>'); w.document.close(); } }
   }
 
   // ── receiving: add stock to the requesting store ──
-  function addStock(line, qty, h, ts, changed) {
+  function addStock(line, qty, h, ts, changed, det) {
     var store = h.requestStore, all = inv();
-    var target = all.find(function (r) { return r && norm(r.store) === norm(store) && line.barcode && String(r.barcode) === String(line.barcode); })
-      || all.find(function (r) { return r && norm(r.store) === norm(store) && norm(itemLabel(r)) === norm(line.item); });
+    det = det || {};
+    var hasDet = !!(det.exp || det.batch);
+    var sameItem = function (r) { return r && norm(r.store) === norm(store) && ((line.barcode && String(r.barcode) === String(line.barcode)) || norm(itemLabel(r)) === norm(line.item)); };
+    var target = hasDet
+      // with an expiry / batch: add only to the stock line of that same batch & expiry, otherwise a new stock line
+      ? all.find(function (r) { return sameItem(r) && String(r.exp || '') === String(det.exp || '') && norm(r.batchNo || '') === norm(det.batch || ''); })
+      : (all.find(function (r) { return r && norm(r.store) === norm(store) && line.barcode && String(r.barcode) === String(line.barcode); })
+        || all.find(function (r) { return r && norm(r.store) === norm(store) && norm(itemLabel(r)) === norm(line.item); }));
     if (target) {
       target.stock = Math.max(0, Number(target.stock) || 0) + qty; target.updatedAt = ts;
+      if (det.mrp) target.mrp = Number(det.mrp) || target.mrp;
     } else {
       var tpl = (line.barcode && all.find(function (r) { return r && String(r.barcode) === String(line.barcode); }))
         || all.find(function (r) { return r && norm(itemLabel(r)) === norm(line.item) && (storeDept(r.store) || deptKey(r.dept)) === storeDept(store); }) || null;
       var bc = String((tpl && tpl.barcode) || 'IND') + '-IND-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
       target = tpl ? Object.assign({}, tpl) : { name: line.item, cat: 'General', dept: storeDept(store) || '' };
-      Object.assign(target, { barcode: bc, stock: qty, store: store, updatedAt: ts, vendor: h.sourceStore || 'Pharmacy', serialNo: '', batchNo: '', exp: '', invoiceNo: '', billMode: '', vendorBillingMode: '' });
+      Object.assign(target, { barcode: bc, stock: qty, store: store, updatedAt: ts, vendor: h.sourceStore || 'Pharmacy', serialNo: '', batchNo: det.batch || '', exp: det.exp || '', invoiceNo: '', billMode: '', vendorBillingMode: '' });
+      if (det.mrp) target.mrp = Number(det.mrp) || target.mrp;
       try { normalizeInventoryRecord(target); } catch (e) {}
       all.push(target);
       try { if (BCMAP) { BCMAP[bc] = target; if (target.name) BCMAP[String(target.name).toLowerCase().substring(0, 15)] = target; } } catch (e) {}
@@ -310,16 +369,18 @@
     window.BMH_INVENTORY_TRANSFERS = window.BMH_INVENTORY_TRANSFERS || [];
     window.BMH_INVENTORY_TRANSFERS.push({ id: 'TRI' + Date.now() + Math.random().toString(36).slice(2, 5), itemName: line.item, barcode: target.barcode, fromStore: h.sourceStore || 'Pharmacy', toStore: store, qty: qty, ts: ts, user: me(), kind: 'indent-receive', indentNo: h.indentNo, indentBatch: h.batchId });
   }
-  function applyReceipt(id, qtyByLine) {
+  function applyReceipt(id, qtyByLine, detByLine) {
     var lines = linesOf(id); if (!lines.length) return;
     var h = lines[0], ts = nowISO(), changed = [], n = 0;
     lines.forEach(function (l) {
       var q = Math.max(0, Math.round(Number(qtyByLine[l.id]) || 0)); if (!q) return;
-      addStock(l, q, h, ts, changed);
+      var det = (detByLine && detByLine[l.id]) || {};
+      addStock(l, q, h, ts, changed, det);
       l.receivedQty = (Number(l.receivedQty) || 0) + q; l.receivedAt = ts; l.receivedBy = me();
-      l.receipts = (l.receipts || []).concat([{ at: ts, by: me(), qty: q }]); n += q;
+      l.receipts = (l.receipts || []).concat([plain({ at: ts, by: me(), qty: q, exp: det.exp || '', batch: det.batch || '', mrp: det.mrp || '' })]); n += q;
     });
     var st = statusOf(lines); lines.forEach(function (l) { l.status = st; });
+    putLines(lines);
     try { bmhSyncInventoryRowsToCloud(changed); } catch (e) { changed.forEach(function (r) { try { saveInventoryToFirebase(r); } catch (e2) {} }); }
     try { saveInventoryStockToStorage(); } catch (e) {}
     persist();
@@ -336,18 +397,21 @@
         + '<div style="font-size:12.5px;color:#444;margin-bottom:12px">' + esc(h.requestStore) + ' ← ' + esc(h.sourceStore) + ' · ' + lines.length + ' item' + (lines.length === 1 ? '' : 's') + '<br><b>Has all the stock been received?</b></div>'
         + '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="btn btn-gray btn-sm" data-a="x">Not yet</button><button type="button" class="btn btn-outline btn-sm" data-a="part">No, part received</button><button type="button" class="btn btn-green btn-sm" data-a="all">Yes, all received</button></div>',
         function (a, close) {
-          if (a === 'all') { close(); var m = {}; lines.forEach(function (l) { m[l.id] = Math.max(0, (Number(l.qty) || 0) - (Number(l.receivedQty) || 0)); }); applyReceipt(id, m); }
+          if (a === 'all') { close(); partial(id, true); }
           else if (a === 'part') { close(); partial(id); }
           else close();
         });
     } else partial(id);
   }
-  function partial(id) {
+  function partial(id, full) {
     var lines = linesOf(id), h = lines[0];
-    ov('<div style="font-size:15px;font-weight:900;margin-bottom:4px">📦 Indent ' + esc(h.indentNo) + ' — quantity received</div>'
-      + '<div style="font-size:12px;color:#555;margin-bottom:8px">Enter what has come now. Only this is added to ' + esc(h.requestStore) + '.</div>'
-      + '<table><tr><th>Item</th><th style="text-align:right">Asked</th><th style="text-align:right">Already</th><th>Received now</th></tr>'
-      + lines.map(function (l) { var left = Math.max(0, (Number(l.qty) || 0) - (Number(l.receivedQty) || 0)); return '<tr><td>' + esc(l.item) + '</td><td style="text-align:right">' + (Number(l.qty) || 0) + '</td><td style="text-align:right">' + (Number(l.receivedQty) || 0) + '</td><td>' + (l.closed || !left ? '—' : '<input type="number" min="0" max="' + left + '" value="0" data-l="' + esc(l.id) + '">') + '</td></tr>'; }).join('') + '</table>'
+    ov('<div style="font-size:15px;font-weight:900;margin-bottom:4px">📦 Indent ' + esc(h.indentNo) + ' — stock received</div>'
+      + '<div style="font-size:12px;color:#555;margin-bottom:8px">Enter what has come now, with its batch, expiry and MRP (if known). Only this is added to ' + esc(h.requestStore) + '.</div>'
+      + '<div style="overflow-x:auto"><table><tr><th>Item</th><th style="text-align:right">Asked</th><th style="text-align:right">Already</th><th>Received now</th><th>Batch no.</th><th>Expiry</th><th>MRP ₹</th></tr>'
+      + lines.map(function (l) { var left = Math.max(0, (Number(l.qty) || 0) - (Number(l.receivedQty) || 0)); var open = !(l.closed || !left); return '<tr><td>' + esc(l.item) + '</td><td style="text-align:right">' + (Number(l.qty) || 0) + '</td><td style="text-align:right">' + (Number(l.receivedQty) || 0) + '</td><td>' + (open ? '<input type="number" min="0" max="' + left + '" value="' + (full ? left : 0) + '" data-l="' + esc(l.id) + '">' : '—') + '</td>'
+        + '<td>' + (open ? '<input type="text" data-b="' + esc(l.id) + '" placeholder="optional" style="width:90px">' : '') + '</td>'
+        + '<td>' + (open ? '<input type="month" data-e="' + esc(l.id) + '" style="width:130px">' : '') + '</td>'
+        + '<td>' + (open ? '<input type="number" min="0" step="0.01" data-m="' + esc(l.id) + '" placeholder="optional" style="width:80px">' : '') + '</td></tr>'; }).join('') + '</table></div>'
       + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn btn-gray btn-sm" data-a="x">Cancel</button><button type="button" class="btn btn-green btn-sm" data-a="ok">Add received stock</button></div>',
       function (a, close, box) {
         if (a !== 'ok') { close(); return; }
@@ -358,7 +422,12 @@
         });
         if (bad) { toast(bad, 'w'); return; }
         if (!Object.keys(m).some(function (k) { return m[k] > 0; })) { toast('Enter at least one received quantity', 'w'); return; }
-        close(); applyReceipt(id, m);
+        var det = {};
+        Object.keys(m).forEach(function (lid) {
+          var g = function (attr) { var el = box.querySelector('[' + attr + '="' + lid.replace(/"/g, '') + '"]'); return el ? String(el.value || '').trim() : ''; };
+          det[lid] = { batch: g('data-b'), exp: g('data-e'), mrp: g('data-m') };
+        });
+        close(); applyReceipt(id, m, det);
       });
   }
   function ov(html, onBtn) {
@@ -370,7 +439,7 @@
   function setStatus(id, fn, msg) {
     var lines = linesOf(id); if (!lines.length) return;
     if (!confirm(msg)) return;
-    lines.forEach(fn); persist(); renderList(); checkAsk();
+    lines.forEach(fn); putLines(lines); persist(); renderList(); checkAsk();
   }
 
   // ── "Has the stock been received?" — only on the requesting department's login ──
@@ -390,7 +459,7 @@
       b.onclick = function () {
         var a = b.getAttribute('data-a'), lines = linesOf(h.batchId);
         if (a === 'later') { snooze[h.batchId] = Date.now() + 60 * 60e3; checkAsk(); return; }
-        if (a === 'all') { var m = {}; lines.forEach(function (l) { m[l.id] = Math.max(0, (Number(l.qty) || 0) - (Number(l.receivedQty) || 0)); }); applyReceipt(h.batchId, m); return; }
+        if (a === 'all') { partial(h.batchId, true); return; }
         partial(h.batchId);
       };
     });
@@ -400,7 +469,8 @@
   window.bmhInd2 = {
     addLine: function () { readTop(); F.lines.push(blankLine()); render(); var all = document.querySelectorAll('#ind2 .ind2-it'); if (all.length) all[all.length - 1].focus(); },
     delLine: function (i) { readTop(); F.lines.splice(i, 1); render(); },
-    save: save, edit: edit, print: print, receive: receive,
+    save: function (andPrint) { F.andPrint = !!andPrint; save(); F.andPrint = false; }, edit: edit, print: print, receive: receive,
+    view: function (v) { readTop(); F.view = v; render(); },
     cancelEdit: function () { F = { edit: null, lines: [], store: F.store, source: 'Pharmacy' }; render(); },
     cancel: function (id) { setStatus(id, function (l) { l.status = 'cancelled'; l.cancelledAt = nowISO(); l.cancelledBy = me(); }, 'Cancel this indent? Nothing is added to stock.'); },
     close: function (id) { setStatus(id, function (l) { if ((Number(l.receivedQty) || 0) < (Number(l.qty) || 0)) l.closed = true; l.status = 'received'; l.closedAt = nowISO(); l.closedBy = me(); }, 'Close this indent? The items not received will not be expected any more.'); },
@@ -419,5 +489,10 @@
   };
   // financial data arrives a little after login, and indents raised on other devices arrive later: check every 30 s
   setInterval(function () { try { checkAsk(); } catch (e) {} }, 30000);
+  if (!listen()) { var lt = 0, liv = setInterval(function () { if (listen() || ++lt > 120) clearInterval(liv); }, 1000); }
+  var origApply = window.applyBmhFinancialsSnapshot;
+  if (typeof origApply === 'function') {
+    window.applyBmhFinancialsSnapshot = function () { var r = origApply.apply(this, arguments); try { mergeRemote(); } catch (e) {} return r; };
+  }
   setTimeout(function () { try { checkAsk(); } catch (e) {} }, 4000);
 })();
