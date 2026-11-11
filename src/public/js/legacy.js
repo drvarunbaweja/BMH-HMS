@@ -41198,7 +41198,8 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
         procedures: incPrcFinal ? procs.slice() : [],
         procDone: procDonePrintLine || '',
         investigations: (function () {
-          // Everything advised / ordered for this patient on this visit date prints, whether or not the "Lab Investigations" box is ticked.
+          // v90: investigations print only when "Lab Investigations" is ticked in the prescription print options
+          if (!incInvFinal) return [];
           const visitDay = String(printDateValue || todayKey());
           const dayOf = function (o) {
             const iso = String(o.orderedAt || '');

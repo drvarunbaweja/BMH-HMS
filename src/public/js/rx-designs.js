@@ -149,7 +149,9 @@
       + '<div class="sig-sub">' + esc([dr.spec, dr.reg ? 'Reg. ' + dr.reg : ''].filter(Boolean).join(' · ')) + '</div></div>';
   }
   function listLines(text) { return String(text || '').split(/\n|;\s*/).map(function (s) { return s.trim(); }).filter(Boolean); }
-  function adviceLines(c) { return (c.postSurgeryAdvice ? [c.postSurgeryAdvice] : []).concat(listLines(c.advice)); }
+  function adviceLines(c) { return listLines(c.advice); }
+  // "Post Op Medication Advice After … on …" — the same bold ruled line the standard design prints above the medicines
+  function postopLine(c) { return c.postSurgeryAdvice ? '<div style="display:block;width:100%;margin:2.5mm 0 1.5mm;padding:1.2mm 0;border-top:1px solid #000;border-bottom:1px solid #000;color:#000;font-family:Arial,Helvetica,sans-serif;font-weight:900;font-size:' + (c.postSurgeryAdvice.length > 115 ? '8.5' : c.postSurgeryAdvice.length > 90 ? '9.5' : '10.5') + 'pt;line-height:1.25;text-align:left">' + esc(c.postSurgeryAdvice) + '</div>' : ''; }
   function eyeRows(c) {
     var e = c.eye || {};
     return {
@@ -229,6 +231,7 @@
     if (c.findings.length) main += '<h3>' + esc(c.findingsTitle || 'Positive findings') + '</h3><ul class="p">' + c.findings.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
     if (c.procDone) main += '<h3>Procedure done</h3><div style="font-size:9.4pt">' + esc(c.procDone) + '</div>';
     if (c.dx.length) main += '<h3>Diagnosis</h3><div class="dx">' + c.dx.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div>';
+    main += postopLine(c);
     if (c.drugs.length) {
       main += '<div class="rx">℞</div>' + c.drugs.map(function (d, i) {
         var st = steps(d), r = totalRange(d);
@@ -320,6 +323,7 @@
     if (boxes.length) h += '<div class="two">' + boxes.join('') + '</div>';
     if (c.dept === 'obg' && c.obg && c.obg.history.length) h += '<div class="cap">Obstetric history</div><table class="hx">' + c.obg.history.map(function (x) { return '<tr><td>' + esc(x.label) + '</td><td>' + esc(x.text) + '</td></tr>'; }).join('') + '</table>';
     if (c.dx.length) h += '<div class="dx"><span>Diagnosis</span>' + c.dx.map(esc).join(' · ') + '</div>';
+    h += postopLine(c);
     if (c.drugs.length) {
       var eyeCol = c.dept === 'oe';
       h += '<table class="rx"><tr><th style="width:42%">Medicine' + (L ? ' · <span class="loc">' + L.meds + '</span>' : '') + '</th>' + (eyeCol ? '<th>Eye</th>' : '') + '<th>Morning · Noon · Evening · Night' + (L ? '<br><span class="loc" style="text-transform:none;letter-spacing:0">' + L.times + '</span>' : '') + '</th><th>How long · from → to</th></tr>';
@@ -398,6 +402,7 @@
     }
     if (c.procDone) h += '<div class="sec"><h4>Procedure done</h4><div style="font-size:9.4pt">' + esc(c.procDone) + '</div></div>';
     if (c.dx.length) h += '<div class="sec"><h4>Diagnosis</h4><div class="dx">' + c.dx.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div></div>';
+    h += postopLine(c);
     if (c.drugs.length) {
       h += '<div class="sec"><h4>Medicines' + (L ? ' · <span class="loc">' + L.meds + '</span>' : '') + '</h4>' + c.drugs.map(function (d, i) {
         var st = steps(d), r = totalRange(d), gen = F.rxDrugGenericName(d);
