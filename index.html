@@ -853,7 +853,7 @@
         <div class="ptab" onclick="ptab(this,'oe-va-iop-ref')">VA / IOP / Refraction</div>
         <div class="ptab" onclick="ptab(this,'oe-slitlamp')">Slit Lamp</div>
         <div class="ptab" onclick="ptab(this,'oe-fundus')">Fundus</div>
-        <div class="ptab" onclick="ptab(this,'oe-biometry')">Biometry</div>
+        <div class="ptab" onclick="ptab(this,'oe-biometry')">Diagnostics</div>
         <div class="ptab" onclick="ptab(this,'oe-plan')">Plan / Instructions</div>
         <div class="ptab" onclick="ptab(this,'oe-investigations')">Investigations</div>
         <div class="ptab" onclick="ptab(this,'oe-rx')">Prescription</div>
@@ -1603,7 +1603,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:10px 12px;background:#fff9e8;border:1px solid rgba(196,154,54,.35);border-radius:10px">
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);cursor:pointer">
             <input type="checkbox" id="bio-calc-enable" onchange="toggleBiometryCalcPanel()">
-            Enable biometry / IOL calculation
+            Enable IOL power calculation (SRK/T · Hoffer Q · Holladay 1 · Haigis · toric)
           </label>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <button type="button" class="btn btn-blue btn-sm" onclick="printBiometryIolCalculation()">🖨️ Print IOL Calculation</button>
@@ -1613,7 +1613,7 @@
         </div>
         <div id="bio-calc-panel" style="display:none;background:#fff;border:1.5px solid rgba(26,60,110,.18);border-radius:12px;padding:12px;margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-            <div><div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">Biometry / IOL Calculation</div><div style="font-size:10px;color:var(--g1)">Keratometry syncs with VA / IOP / Refraction both ways</div></div>
+            <div><div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">IOL Power Calculation</div><div style="font-size:10px;color:var(--g1)">Keratometry syncs with VA / IOP / Refraction both ways</div></div>
             <button type="button" class="btn btn-xs btn-outline" onclick="syncBiometryFromEyeExam()">Pull VA/K values</button>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
@@ -1697,7 +1697,7 @@
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">📁 Biometry &amp; Investigations</div>
+          <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">📁 Diagnostics &amp; Investigations</div>
           <label class="btn btn-gold btn-sm" style="cursor:pointer">
             📎 Upload File
             <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.dcm" style="display:none" onchange="handleInvestigationUpload(this)">
@@ -6798,48 +6798,49 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="/BMH-HMS/js/storage-guard.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/rtdb-cache.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/legacy.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/patient-sync.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/ot-sync.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/patient-education-brochures.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/patient-education-brochures-more.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/patient-education-sheets.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/patient-education-sheets-more.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/patient-education.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/bills-history.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/call-staff.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/appointment-calls.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/rx-designs.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/ipd-nursing.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/rx-extras.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/ipd-care.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/ipd-meds.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/ipd-reminders.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/ipd-onesave.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/inv-scope.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/inv-centre.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/store-manager.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/indent.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/inv-lists.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/store-names.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/dept-lock.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/inv-heading.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/obg-discharge-date.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/pay-alert.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/stock-print.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/vendor-statement.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/vendor-guard.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/vendor-pay.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/vendor-merge.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/vendor-names.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/iol-cost.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/staff-admin.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/patient-open.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/tpa-dues.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/queue-fix.js?v=20261110-vendornames-v88"></script>
-<script defer src="/BMH-HMS/js/recent-data.js?v=20261110-vendornames-v88"></script>
+<script defer src="/BMH-HMS/js/storage-guard.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/rtdb-cache.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/legacy.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/patient-sync.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/ot-sync.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/patient-education-brochures.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/patient-education-brochures-more.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/patient-education-sheets.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/patient-education-sheets-more.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/patient-education.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/bills-history.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/call-staff.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/appointment-calls.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/rx-designs.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/ipd-nursing.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/rx-extras.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/ipd-care.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/ipd-meds.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/ipd-reminders.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/ipd-onesave.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/inv-scope.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/inv-centre.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/store-manager.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/indent.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/inv-lists.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/store-names.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/dept-lock.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/inv-heading.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/obg-discharge-date.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/pay-alert.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/stock-print.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/vendor-statement.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/vendor-guard.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/vendor-pay.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/vendor-merge.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/vendor-names.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/diagnostics.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/iol-cost.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/staff-admin.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/patient-open.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/tpa-dues.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/queue-fix.js?v=20261111-diagnostics-v89"></script>
+<script defer src="/BMH-HMS/js/recent-data.js?v=20261111-diagnostics-v89"></script>
 <script defer src="/BMH-HMS/js/practice-growth.js?v=20261103-eyetotal-v33"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->

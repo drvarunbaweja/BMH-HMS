@@ -32211,15 +32211,21 @@ function getOphthoRefractiveAssessmentData() {
   const seOd = seFor('subj-od-sph', 'subj-od-cyl', visit.subjODsph, visit.subjODcyl);
   const seOs = seFor('subj-os-sph', 'subj-os-cyl', visit.subjOSsph, visit.subjOScyl);
   const ablationFor = function (se) { return Number.isFinite(se) ? Math.max(0, Math.round(Math.abs(se) * 14)) : null; };
+  // BMH v89: ablation on the most myopic meridian, vertex-corrected (Munnerlyn, 6.5 mm OZ); SMILE adds lenticule base; PTA
+  const RC = window.bmhRefrCalc || null;
+  const ablFor = function (sph, cyl, se, procName) { return RC ? RC.ablation(sph, cyl, procName) : ablationFor(se); };
   const procedureRows = [
     { name: 'FemtoLASIK', thickness: flap },
     { name: 'SMILE Pro', thickness: flap },
     { name: 'PRK', thickness: 0 }
   ].map(function (proc) {
-    const ablationOd = ablationFor(seOd);
-    const ablationOs = ablationFor(seOs);
+    const ablationOd = ablFor(sphOd, cylOd, seOd, proc.name);
+    const ablationOs = ablFor(sphOs, cylOs, seOs, proc.name);
     const rsbOd = Number.isFinite(pachyOd) && Number.isFinite(ablationOd) ? Math.round(pachyOd - proc.thickness - ablationOd) : null;
     const rsbOs = Number.isFinite(pachyOs) && Number.isFinite(ablationOs) ? Math.round(pachyOs - proc.thickness - ablationOs) : null;
+    const ptaOd = Number.isFinite(pachyOd) && pachyOd > 0 && Number.isFinite(ablationOd) ? Math.round((proc.thickness + ablationOd) / pachyOd * 100) : null;
+    const ptaOs = Number.isFinite(pachyOs) && pachyOs > 0 && Number.isFinite(ablationOs) ? Math.round((proc.thickness + ablationOs) / pachyOs * 100) : null;
+    const ptaMax = Math.max(Number.isFinite(ptaOd) ? ptaOd : 0, Number.isFinite(ptaOs) ? ptaOs : 0);
     let status = 'Suitable if correlated clinically';
     let note = 'Correlate with tomography, tear film, and clinical examination.';
     if (age != null && age < 18) { status = 'Defer'; note = 'Age below usual threshold.'; }
@@ -32230,6 +32236,8 @@ function getOphthoRefractiveAssessmentData() {
     else if ((Number.isFinite(rsbOd) && rsbOd < 300) || (Number.isFinite(rsbOs) && rsbOs < 300)) {
       status = proc.name === 'PRK' ? 'Borderline' : 'Avoid';
       note = proc.name === 'PRK' ? 'Surface ablation may still be safer than flap-based options.' : 'Estimated residual stromal bed is low.';
+    } else if (proc.name !== 'PRK' && ptaMax >= 40) {
+      status = 'Avoid'; note = 'Percent tissue altered ' + ptaMax + '% (40% or more = high ectasia risk).';
     } else if (proc.name === 'SMILE Pro' && (/Moderate/.test(dry) || /Contact sports/.test(occupation))) {
       status = 'Preferred';
       note = 'Often favored when flap avoidance is useful.';
@@ -32237,6 +32245,8 @@ function getOphthoRefractiveAssessmentData() {
       status = 'Preferred';
       note = 'Surface ablation may be safer in borderline stromal reserve.';
     }
+    if (proc.name !== 'PRK' && ptaMax >= 35 && ptaMax < 40 && !/Avoid|Defer/.test(status)) { status = 'Borderline'; note = 'Percent tissue altered ' + ptaMax + '% (35–39%: borderline). ' + note; }
+    if (Number.isFinite(ptaOd) || Number.isFinite(ptaOs)) note += ' PTA ' + (Number.isFinite(ptaOd) ? 'OD ' + ptaOd + '%' : '') + (Number.isFinite(ptaOd) && Number.isFinite(ptaOs) ? ' / ' : '') + (Number.isFinite(ptaOs) ? 'OS ' + ptaOs + '%' : '') + '.';
     return {
       name: proc.name,
       thicknessLabel: proc.thickness ? proc.thickness + ' um' : 'No flap',
@@ -53631,8 +53641,10 @@ function _renderOphthoRecapNow() {
     const seOs = seFrom('subj-os-sph','subj-os-cyl', pt.lastVisit?.subjOSsph, pt.lastVisit?.subjOScyl);
     const ablationFor = (se) => Number.isFinite(se) ? Math.max(0, Math.round(Math.abs(se) * 14)) : null;
     const rsbFor = (pachy, se) => Number.isFinite(pachy) && Number.isFinite(se) ? Math.round(pachy - flap - ablationFor(se)) : null;
-    const rsbOd = rsbFor(pachyOd, seOd);
-    const rsbOs = rsbFor(pachyOs, seOs);
+    const RCx = window.bmhRefrCalc || null;
+    const rsbOf = (eye, pachy, se) => { if (!RCx) return rsbFor(pachy, se); const r = RCx.read(eye, pt.lastVisit); return RCx.rsb(pachy, flap, r.sph, r.cyl, 'FemtoLASIK'); };
+    const rsbOd = rsbOf('od', pachyOd, seOd);
+    const rsbOs = rsbOf('os', pachyOs, seOs);
     const rsbNodes = { od: document.getElementById('refr-od-rsb'), os: document.getElementById('refr-os-rsb') };
     if(rsbNodes.od) rsbNodes.od.textContent = Number.isFinite(rsbOd) ? `${rsbOd} µm estimated residual bed` : 'Need pachymetry + subjective refraction';
     if(rsbNodes.os) rsbNodes.os.textContent = Number.isFinite(rsbOs) ? `${rsbOs} µm estimated residual bed` : 'Need pachymetry + subjective refraction';
