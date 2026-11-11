@@ -120,19 +120,24 @@
     var shown = rows.filter(function (r) { return !S.cat || catOf(r) === S.cat; });
     if (S.cat && S.cat.toLowerCase() === 'iol') shown.sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')) || (parseFloat(a.power) || 0) - (parseFloat(b.power) || 0); });
     shown = q ? shown.filter(function (r) { return cmp([r.name, r.barcode, r.batchNo, r.cat, r.vendor, r.power, r.serialNo].join(' ')).indexOf(q) >= 0; }) : shown;
+    // ticked items stay listed (at the top) while you search / change category, so several can be picked one by one
+    S.picked = S.picked || {};
+    var pinned = rows.filter(function (r) { return S.picked[String(r.barcode)] != null; });
+    shown = pinned.concat(shown.filter(function (r) { return S.picked[String(r.barcode)] == null; }));
     var catBar = cats.length > 1 ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' + ['' ].concat(cats).map(function (c) { var on = (S.cat || '') === c; var n = rows.filter(function (r) { return !c || catOf(r) === c; }).reduce(function (t, r) { return t + (Number(r.stock) || 0); }, 0); return '<button type="button" onclick="bmhStoreMgrCat(\'' + esc(c).replace(/'/g, '') + '\')" class="btn btn-xs ' + (on ? 'btn-blue' : 'btn-outline') + '">' + esc(c || 'All') + ' (' + n + ')</button>'; }).join('') + '</div>' : '';
     var targets = allStores().filter(function (n) { return cmp(n) !== cmp(S.store); });
     if (!rows.length) return '<div style="padding:16px;text-align:center;color:#888">No stock in this store.</div>' + historyHtml();
     var today = new Date().toISOString().slice(0, 7);
     var body = shown.map(function (r) {
       var exp = String(r.exp || ''), soon = exp && exp.slice(0, 7) <= today;
-      return '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:5px"><input type="checkbox" class="smg-c" data-b="' + esc(r.barcode) + '" style="width:17px;height:17px;margin:0"></td>'
+      var pk = S.picked[String(r.barcode)];
+      return '<tr style="border-bottom:1px solid #f0f0f0' + (pk != null ? ';background:#fff8e1' : '') + '"><td style="padding:5px"><input type="checkbox" class="smg-c" data-b="' + esc(r.barcode) + '"' + (pk != null ? ' checked' : '') + ' onchange="bmhStoreMgrPick(this)" style="width:17px;height:17px;margin:0"></td>'
         + '<td style="padding:5px"><b>' + esc(r.name || r.barcode) + '</b><div style="font-size:10.5px;color:#666">' + esc([r.cat, r.power ? r.power + ' D' : '', r.serialNo ? 'SN ' + r.serialNo : '', r.batchNo ? 'Batch ' + r.batchNo : '', r.vendor].filter(Boolean).join(' · ')) + '</div></td>'
         + '<td style="padding:5px;white-space:nowrap;color:' + (soon ? '#c62828;font-weight:800' : '#333') + '">' + esc(exp || '—') + '</td>'
         + '<td style="padding:5px;text-align:right;font-weight:800">' + esc(r.stock) + '</td>'
-        + '<td style="padding:5px;text-align:right"><input type="number" class="smg-qty" data-b="' + esc(r.barcode) + '" min="1" max="' + esc(r.stock) + '" value="' + esc(r.stock) + '" ></td></tr>';
+        + '<td style="padding:5px;text-align:right"><input type="number" class="smg-qty" data-b="' + esc(r.barcode) + '" min="1" max="' + esc(r.stock) + '" value="' + esc(pk != null && pk !== '' ? pk : r.stock) + '" oninput="bmhStoreMgrPickQty(this)"></td></tr>';
     }).join('');
-    return catBar + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><input id="smg-q" value="' + esc(S.q || '') + '" placeholder="Search item / batch / vendor" oninput="bmhStoreMgrSearch(this.value)" style="flex:1;min-width:180px"><label style="font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="smg-all" style="width:auto;margin:0" onchange="document.querySelectorAll(\'.smg-c\').forEach(function(c){c.checked=document.getElementById(\'smg-all\').checked})"> Select all shown</label></div>'
+    return catBar + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><input id="smg-q" value="' + esc(S.q || '') + '" placeholder="Search item / batch / vendor" oninput="bmhStoreMgrSearch(this.value)" style="flex:1;min-width:180px"><label style="font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="smg-all" style="width:auto;margin:0" onchange="document.querySelectorAll(\'.smg-c\').forEach(function(c){c.checked=document.getElementById(\'smg-all\').checked;bmhStoreMgrPick(c,1)})"> Select all shown</label>' + '<span id="smg-pickn" style="font-size:11.5px;color:#8a6400' + (Object.keys(S.picked).length ? '' : ';display:none') + '"><b>' + Object.keys(S.picked).length + ' ticked</b> (kept while you search) <button type="button" class="btn btn-xs btn-outline" onclick="bmhStoreMgrClearPicks()">Clear ticks</button></span>' + '</div>'
       + '<div style="max-height:44vh;overflow:auto;border:1px solid #eee;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f3f5f9;position:sticky;top:0"><th></th><th style="text-align:left;padding:5px">Item</th><th style="text-align:left;padding:5px">Expiry</th><th style="text-align:right;padding:5px">In stock</th><th style="text-align:right;padding:5px">Qty to move</th></tr></thead><tbody>' + (body || '<tr><td colspan="5" style="padding:10px;text-align:center;color:#888">Nothing matches</td></tr>') + '</tbody></table></div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:12px">'
       + '<div style="border:1px solid #dfe5ef;border-radius:10px;padding:10px"><div style="font-weight:900;font-size:12.5px;margin-bottom:6px">➡️ Transfer ticked items</div><select id="smg-to" style="margin-bottom:8px"><option value="">Choose store…</option>' + targets.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + (centreOf(n) && centreOf(n) !== centreOf(S.store) ? ' (other centre)' : '') + '</option>'; }).join('') + '</select><button type="button" class="btn btn-blue btn-sm" style="width:100%" onclick="bmhStoreMgrTransfer()">Transfer</button></div>'
@@ -140,6 +145,17 @@
       + '</div>' + historyHtml();
   }
   function catOf(r) { return String(r.cat || 'General').trim() || 'General'; }
+  window.bmhStoreMgrPick = function (c, quiet) {
+    S.picked = S.picked || {};
+    var b = String(c.getAttribute('data-b'));
+    if (c.checked) { var q = [].find.call(document.querySelectorAll('.smg-qty'), function (x) { return x.getAttribute('data-b') === b; }); S.picked[b] = q ? q.value : ''; }
+    else delete S.picked[b];
+    var n = Object.keys(S.picked).length, el = document.getElementById('smg-pickn');
+    if (el) { el.style.display = n ? '' : 'none'; var t = el.querySelector('b'); if (t) t.textContent = n + ' ticked'; }
+    var tr = c.closest('tr'); if (tr) tr.style.background = c.checked ? '#fff8e1' : '';
+  };
+  window.bmhStoreMgrPickQty = function (el) { S.picked = S.picked || {}; var b = String(el.getAttribute('data-b')); if (S.picked[b] != null) S.picked[b] = el.value; };
+  window.bmhStoreMgrClearPicks = function () { S.picked = {}; var box = document.getElementById('smg-body'); if (box) box.innerHTML = stockHtml(); };
   window.bmhStoreMgrCat = function (c) { S.cat = c; var box = document.getElementById('smg-body'); if (box) box.innerHTML = stockHtml(); };
   window.bmhStoreMgrSearch = function (v) { S.q = v; var box = document.getElementById('smg-body'); if (!box) return; var pos = v.length; box.innerHTML = stockHtml(); var i = document.getElementById('smg-q'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) {} } };
   function picked() {
@@ -171,6 +187,7 @@
     if (moved.length) { try { saveBmhFinancials(); } catch (e) {} }
     toast(ok + ' item' + (ok === 1 ? '' : 's') + ' transferred to ' + to + ' ✓', ok ? 's' : 'w');
     S.last = moved.length ? { type: 'TN', noteNo: noteNo } : null;
+    S.picked = {};
     draw();
   };
   window.bmhStoreMgrReturn = function () {
@@ -196,6 +213,7 @@
     if (tagged) { try { saveBmhFinancials(); } catch (e) {} }
     toast(ok + ' item' + (ok === 1 ? '' : 's') + ' returned to vendor ✓', ok ? 's' : 'w');
     S.last = tagged ? { type: 'RN', noteNo: noteNo } : null;
+    S.picked = {};
     draw();
   };
 
@@ -317,7 +335,7 @@
   window.bmhOpenStoreManager = function (store, tab, opts) {
     var go = function (st) {
       if (!st) return;
-      S.store = trimName(st); S.tab = tab || 'details'; S.q = ''; S.last = null; S.cat = (opts && opts.cat) || '';
+      S.store = trimName(st); S.tab = tab || 'details'; S.q = ''; S.last = null; S.cat = (opts && opts.cat) || ''; S.picked = {};
       var old = document.getElementById('smg-ov'); if (old) old.remove();
       var ov = document.createElement('div'); ov.id = 'smg-ov';
       ov.style.cssText = 'position:fixed;inset:0;z-index:4500;background:rgba(10,20,40,.45);display:flex;align-items:flex-start;justify-content:center;padding:20px 12px;overflow:auto';
