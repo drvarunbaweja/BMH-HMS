@@ -4650,7 +4650,10 @@ function openPatientForDept(bmhId, dept, xrefId) {
   }
   // Use freshStart (blank form) only when cross-ref hasn't been consulted yet.
   // If already marked seen (consultation done and saved), load today's saved visit for that dept.
-  const freshStart = !(xref && isCrossRefSeenInTargetDept(xref));
+  // v93: also load it when the work-up / exam was already saved for this referral (lastVisitKey) but the referral is
+  // still in the active queue (not yet ✓, or moved back to active) — otherwise the form opened blank and the next
+  // save wrote the empty form over that saved visit.
+  const freshStart = !(xref && (isCrossRefSeenInTargetDept(xref) || xref.lastVisitKey));
   // Store the active cross-ref context so save / done affects only this referred dept row.
   window._activeXrefContext = xrefId ? {
     bmhId: bmhId,
@@ -53121,6 +53124,19 @@ function saveVisit(dept, opts) {
       };
       if (dept === 'psych' && bmhFastPsychSaveEnabled()) bmhDeferNonCriticalWork(postSaveUiWork, opts.autosave ? 2200 : 1200);
       else postSaveUiWork();
+      if (activeXrefId && opts.autosave && normalizeDeptKeyForQueue(activeXref?.dept || inferredXrefForDept?.toDept || '') === dept) {
+        // v93: an auto-save also links the visit to the referral (once), so re-opening the referral loads it
+        try {
+          const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+          const cur = pt && Array.isArray(pt.crossRefs) ? pt.crossRefs.find(function (r) { return r && String(r.id) === String(activeXrefId); }) : null;
+          if (cur && crossRefTargetsDept(cur, dept) && cur.lastVisitKey !== visitKey) {
+            const at = new Date().toISOString();
+            const refs = pt.crossRefs.map(function (r) { return (r && String(r.id) === String(activeXrefId)) ? Object.assign({}, r, { lastVisitKey: visitKey, lastSavedAt: at, updatedAt: at }) : r; });
+            pt.crossRefs = refs;
+            fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
+          }
+        } catch (xrefAutoErr) { console.warn('cross-ref autosave link failed', xrefAutoErr); }
+      }
       if (activeXrefId && !opts.autosave && normalizeDeptKeyForQueue(activeXref?.dept || inferredXrefForDept?.toDept || '') === dept) {
         try {
           const nowSeen = new Date().toISOString();
