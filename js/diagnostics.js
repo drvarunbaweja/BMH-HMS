@@ -70,17 +70,39 @@
   function val(id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
   var DEFAULT_PLACEHOLDERS = {}; // the made-up constants of the old default list are not used as lens constants
   try { (window.BMH_DEFAULT_BIOMETRY_IOLS || BMH_DEFAULT_BIOMETRY_IOLS || []).forEach(function (r) { DEFAULT_PLACEHOLDERS[String(r.name || '').toLowerCase()] = { hoffer: r.hoffer, holladay: r.holladay, haigis: r.haigis, barrett: r.barrett }; }); } catch (e) {}
+  // Settings → Surgery Packs → IOL / implant catalogue ("IOL calculation constants") is the source of the constants
+  var FIELDS = ['opticalA', 'immersionA', 'contactA', 'hoffer', 'holladay', 'haigis', 'barrett', 'step', 'lensThickness'];
+  function lensKey(n) { var s = String(n || '').replace(/[+-]?\s*\d{1,2}(\.\d{1,2})?\s*D\b/gi, ' ').replace(/\s+/g, ' ').trim(); try { return normalizeInventoryCompareText(s); } catch (e) { return s.toLowerCase(); } }
+  function catalogFor(name) {
+    var rows = []; try { rows = getIolCatalogNormalizedRows(); } catch (e) {}
+    var k = lensKey(name); if (!k) return null;
+    var hits = rows.filter(function (r) { return lensKey(r.name) === k; });
+    return hits.filter(function (r) { return String(r.opticalA || r.immersionA || r.contactA || '').trim(); })[0] || hits[0] || null;
+  }
+  window.bmhIolCatalogConstants = catalogFor;
   function lensConstants(iol) {
+    var cat = catalogFor(iol.name);
+    if (cat) { var m = {}; Object.keys(iol).forEach(function (k) { m[k] = iol[k]; }); FIELDS.forEach(function (f) { var v = String(cat[f] || '').trim(); if (v) m[f] = v; }); m.__cat = cat; iol = m; }
     var A = num(iol.opticalA) || num(iol.immersionA) || num(iol.contactA);
     var ph = DEFAULT_PLACEHOLDERS[String(iol.name || '').toLowerCase()] || {};
-    var own = function (k) { var v = String(iol[k] || '').trim(); return v && v !== String(ph[k] || '').trim() ? v : ''; };
+    // values from the catalogue are the hospital's own; the old built-in placeholder values are not used
+    var own = function (k) { var v = String(iol[k] || '').trim(); if (cat && String(cat[k] || '').trim()) return v; return v && v !== String(ph[k] || '').trim() ? v : ''; };
     var pACD = num(own('hoffer')), SF = num(own('holladay'));
     var hg = String(own('haigis')).split(/[\/,; ]+/).map(num).filter(function (x) { return x != null; });
     return {
       A: A,
       pACD: pACD != null ? pACD : (A != null ? 0.58357 * A - 63.896 : null), pACDfromA: pACD == null,
       SF: SF != null ? SF : (A != null ? 0.5663 * A - 65.6 : null), SFfromA: SF == null,
-      haigis: hg.length === 3 ? hg : null
+      haigis: hg.length === 3 ? hg : null,
+      step: num(iol.step), fromCatalog: !!cat
+    };
+  }
+  // the lens table in Diagnostics shows the catalogue's constants (a per-computer saved list no longer hides them)
+  var origMerge = window.mergeBiometryIolRows;
+  if (typeof origMerge === 'function') {
+    window.mergeBiometryIolRows = function () {
+      var rows = origMerge.apply(this, arguments) || [];
+      return rows.map(function (r) { var cat = catalogFor(r.name); if (!cat) return r; var m = Object.assign({}, r); FIELDS.forEach(function (f) { var v = String(cat[f] || '').trim(); if (v) m[f] = v; }); if (!m.company && (cat.company || cat.mfr)) m.company = cat.company || cat.mfr; if (cat.type && (!m.type || m.type === 'IOL')) m.type = cat.type; return m; });
     };
   }
   function eyeData(eye) {
@@ -107,7 +129,7 @@
     d = d || eyeData(eye);
     var out = { iol: iol, ok: false, msg: '' };
     if (!(d.al > 15 && d.al < 40) || !(d.k > 30 && d.k < 60)) { out.msg = 'Enter AL and K1/K2'; return out; }
-    var c = lensConstants(iol), step = stepOf(iol);
+    var c = lensConstants(iol), step = c.step && c.step >= 0.25 ? c.step : stepOf(iol);
     if (c.A == null) { out.msg = 'Enter the lens A-constant'; return out; }
     out.ok = true; out.c = c; out.step = step;
     out.srkt = formulaRow(F.srkt(d.al, d.k, c.A), d.target, step);
@@ -264,7 +286,7 @@
       lensesFor(eye).forEach(function (iol) {
         var c = calcLens(eye, iol, d);
         var bm = b.power && b.lens && String(b.lens).toLowerCase() === String(iol.name).toLowerCase();
-        html += '<tr><td class="l">' + esc(iol.name) + (c.ok && (c.c.pACDfromA || c.c.SFfromA) ? '<div class="dx-muted">constants from A ' + c.c.A + '</div>' : '') + '</td>'
+        html += '<tr><td class="l">' + esc(iol.name) + (c.ok ? '<div class="dx-muted">A ' + c.c.A + (c.c.fromCatalog ? ' · catalogue' : '') + (c.c.pACDfromA || c.c.SFfromA ? ' · pACD/SF from A' : '') + '</div>' : '') + '</td>'
           + (c.ok ? '<td>' + cellPick(c.srkt) + '</td><td>' + cellPick(c.hq) + '</td><td>' + cellPick(c.h1) + '</td><td>' + (c.hg ? cellPick(c.hg) : '<span class="dx-muted">needs a0/a1/a2</span>') + '</td>' : '<td colspan="4" class="dx-muted">' + esc(c.msg) + '</td>')
           + '<td>' + (bm ? '<span class="dx-pick">' + esc(b.power) + '</span><div class="dx-muted">' + esc(b.ref || '') + '</div>' : '<span class="dx-muted">—</span>') + '</td></tr>';
       });
