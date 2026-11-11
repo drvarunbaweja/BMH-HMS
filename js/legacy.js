@@ -9266,6 +9266,8 @@ function reconcilePrintedDischargesInIpd(cardsByPatient, opts) {
       evidenceAt = String(match?.printedAt || '');
     }
     if (!evidenceAt) return;
+    // v95: a patient restored to IPD after a discharge is not discharged again by that same (earlier) discharge evidence
+    if (ipd.restoredAt && (Date.parse(evidenceAt) || 0) <= (Date.parse(ipd.restoredAt) || 0)) return;
     const atIso = Number.isNaN(Date.parse(evidenceAt)) ? new Date().toISOString() : new Date(evidenceAt).toISOString();
     const by = 'Discharge card print reconciliation';
     ipd.status = 'discharged';
