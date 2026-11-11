@@ -120,7 +120,7 @@
 
   // ───────────────────────── toric ─────────────────────────
   var CYLS_DEFAULT = '1.00, 1.50, 2.25, 3.00, 3.75, 4.50, 5.25, 6.00';
-  function axisMode() { return val('dx-axis-mode'); }
+  function axisMode() { return val('dx-axis-mode') || 'k1'; } // clinic practice: the Axis box is K1's axis, K2 is 90° away
   function steepAxis(d, mode) {
     if (d.axis == null || d.k1 == null || d.k2 == null) return null;
     if (mode === 'steep') return ax(d.axis);
@@ -223,7 +223,7 @@
     if (!document.getElementById('dx-css')) document.head.insertAdjacentHTML('beforeend', CSS);
     var box = document.createElement('div'); box.id = 'dx-extra';
     box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:10px;padding:8px;border:1px solid #f0d68a;background:#fffbf0;border-radius:10px">'
-      + '<div><label class="fl">The K "Axis" value is the…</label><select id="dx-axis-mode" class="dx-in"><option value="">— choose (needed for toric) —</option><option value="k1">axis of K1</option><option value="steep">steep axis (of the higher K)</option></select></div>'
+      + '<div><label class="fl">The K "Axis" value is the…</label><select id="dx-axis-mode" class="dx-in"><option value="k1">axis of K1 (K2 at 90° to it) — steep axis = axis of the higher K</option><option value="steep">steep axis (of the higher K)</option></select></div>'
       + '<div><label class="fl">Main incision RE (°)</label>' + inp('dx-od-inc', 'e.g. 180 temporal', '', 'number') + '</div>'
       + '<div><label class="fl">Main incision LE (°)</label>' + inp('dx-os-inc', 'e.g. 0 temporal', '', 'number') + '</div>'
       + '<div><label class="fl">Toric cylinders available (IOL plane, D)</label>' + inp('dx-toric-cyls', CYLS_DEFAULT) + '</div></div>'
