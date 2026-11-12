@@ -45251,6 +45251,7 @@ function buildDischargePrintSection(sel) {
     + '</div>'
     + '<div class="sec"><div class="sec-h">Summary</div><div class="summary">' + esc(summary) + '</div></div>'
     + (followupRows ? '<div class="sec"><div class="sec-h">Default Follow-ups</div>' + followupRows + '</div>' : '')
+    + bmhDischargeWarningHtml(data.sel)
     + '<div class="sign"><div><div class="line"></div><div class="small">Patient / Attendant Signature</div></div><div><div class="line"></div><div class="small">' + esc(surgeonName + (surgeonDegrees ? ' · ' + surgeonDegrees : '')) + '</div></div><div><div class="line"></div><div class="small">Printed on ' + esc(today) + '</div></div></div>'
     + '</section>';
 }
@@ -45386,6 +45387,16 @@ function medTimeSlotIcon(row, t) {
   if (!timeSlotMatchesActive(row, t)) return '';
   return bmhDischargeMedIconSvg(bmhDischargeMedForm(row));
 }
+function bmhDischargeWarningHtml(dept, small) {
+  const d = String(dept || '').toLowerCase();
+  const text = d === 'obg'
+    ? 'In case of excessive bleeding, fever or breast engorgement, follow up in the Out-Patient Department or call +91-8146622802.'
+    : (d === 'ophtho' || d === 'eye')
+      ? 'In case of decreased vision, pain or extreme redness, contact the hospital immediately or call +91-8146622802.'
+      : '';
+  if (!text) return '';
+  return '<div style="margin:' + (small ? '4px 10px 6px' : '8px 0 0') + ';border:1.5px solid #b42318;border-radius:8px;padding:' + (small ? '4px 8px' : '6px 10px') + ';background:#fff5f5;color:#8a1c12;font-size:' + (small ? '9.6px' : '10.6px') + ';font-weight:800;line-height:1.35">⚠ ' + escapeHtmlConsent(text) + '</div>';
+}
 function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const esc = escapeHtmlConsent;
   const blue = colorPrint ? '#1A3C6E' : '#333';
@@ -45447,6 +45458,7 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + gridHtml(meds, 'Medicines and timings')
     + '<div style="font-size:7.6px;color:#444;margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">' + [['drop', 'Drops'], ['tablet', 'Tablet'], ['capsule', 'Capsule'], ['syrup', 'Syrup'], ['injection', 'Injection'], ['ointment', 'Ointment / gel']].map(function (x) { return '<span>' + bmhDischargeMedIconSvg(x[0]) + ' ' + x[1] + '</span>'; }).join('') + '</div>'
     + '</div>'
+    + bmhDischargeWarningHtml('ophtho', true)
     + '<div style="display:flex;justify-content:space-between;padding:6px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient / attendant signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
     + '</div></body></html>';
 }
@@ -45662,6 +45674,7 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + (medRows ? '<div style="margin-top:7px;border:1px solid #e6dbe0;border-radius:10px;overflow:hidden"><div style="padding:5px 9px;background:#f9f2f4;font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">#</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Medicine</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
     + (instructionRows ? '<div style="margin-top:7px;border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Advice</div><div style="font-size:9.7px;line-height:1.35;color:#5a4630">' + instructionRows + '</div></div>' : '')
     + (followupRows ? '<div style="margin-top:7px"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Follow-up</div>' + followupRows + '</div>' : '')
+    + bmhDischargeWarningHtml('obg')
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:10px"><div style="text-align:center"><div style="border-bottom:1px solid #333;height:24px"></div><div style="font-size:8px;color:#666;margin-top:3px">Patient / Attendant Signature</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:24px"></div><div style="font-size:8px;color:#666;margin-top:3px">Nursing / Duty Staff</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:24px"></div><div style="font-size:8px;color:#666;margin-top:3px">' + esc(surgeonName) + '</div></div></div></div></div></body></html>';
 }
 function buildDischargeCardPrintHtml() {
