@@ -100,6 +100,7 @@
     Object.keys(byBill).forEach(function (key) {
       var ts = byBill[key].sort(function (a, b) { return String(a.date || '').localeCompare(String(b.date || '')); });
       var t0 = ts[0]; var full = saved[key] || null;
+      if (full && full.status === 'void') { delete saved[key]; return; }
       var paid = ts.reduce(function (s, t) { return s + (t.type === 'advance-adjustment' || t.source === 'advance-adjustment' ? 0 : Number(t.amount || 0)); }, 0);
       out.push({ kind: 'bill', key: 'B:' + key, at: (full && full.createdAt) || t0.createdAt || t0.date, bmhId: t0.bmhId || (full && full.bmhId) || '', name: t0.patient || (full && full.patientName) || '', centre: t0.centre || '', dept: t0.dept || '', amount: full ? Number(full.netPayable || paid) : paid, paid: paid, mode: ts.map(function (t) { return t.mode; }).filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' + '), label: billLabel(ts, full), no: t0.billNo || (full && full.billNo) || key, billId: key, txns: ts, full: full });
       delete saved[key];
@@ -187,6 +188,7 @@
       + (e.kind === 'bill' ? '<button type="button" class="btn btn-blue btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'bill\')">🖨 Bill</button>' : '')
       + ((e.kind === 'bill' ? e.paid : (e.adj ? 0 : e.amount)) !== 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'receipt\')">🧾 Receipt</button>' : '')
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryPatient(\'' + jsArg(e.bmhId) + '\')">History</button>'
+      + (e.kind === 'bill' && isAdmin() ? '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" title="Delete this bill (admin)" onclick="bmhBillHistoryVoid(\'' + k + '\')">🗑 Delete</button>' : '')
       + '</div></div>';
   }
   function render(list, sq, date, forceList) {
@@ -227,6 +229,35 @@
   }
 
   function findEntry(key) { return (S.view || []).find(function (e) { return e.key === key; }) || buildEntries().find(function (e) { return e.key === key; }); }
+  function isAdmin() { try { return !!(CURRENT_USER && (CURRENT_USER.isAdmin || String(CURRENT_USER.role || '').toLowerCase() === 'admin')); } catch (e) { return false; } }
+  // Admin: delete (void) a bill. The saved bill is kept, marked void; its payment rows move to deletedTransactions/<day>
+  // (a copy for audit) so they leave collection totals; a balance on the dues list for it is closed.
+  function voidBill(key) {
+    if (!isAdmin()) { toast('Only admin can delete a bill', 'w'); return; }
+    var e = findEntry(key); if (!e || e.kind !== 'bill' || !window.FBDB) return;
+    var reason = prompt('Delete bill ' + e.no + ' for ' + (e.name || e.bmhId) + '?\n\nBill ' + money(e.amount) + ' · paid ' + money(e.paid) + ' · ' + fmtDate(e.at)
+      + '\n\nThe bill and its ' + e.txns.length + ' payment record' + (e.txns.length === 1 ? '' : 's') + ' will be removed from billing and the collection totals. A copy is kept.\n\nReason:', 'Duplicate bill');
+    if (reason === null) return;
+    if (!confirm('Delete bill ' + e.no + ' (' + money(e.amount) + ') now?')) return;
+    var at = new Date().toISOString(), by = (window.CURRENT_USER && CURRENT_USER.name) || 'Admin', id = String(e.billId || e.no), up = {};
+    up['savedBills/' + id + '/status'] = 'void'; up['savedBills/' + id + '/voidedAt'] = at; up['savedBills/' + id + '/voidedBy'] = by; up['savedBills/' + id + '/voidReason'] = reason || '';
+    if (!e.full) { up['savedBills/' + id + '/id'] = id; up['savedBills/' + id + '/billNo'] = e.no; up['savedBills/' + id + '/bmhId'] = e.bmhId; up['savedBills/' + id + '/patientName'] = e.name; up['savedBills/' + id + '/netPayable'] = e.amount; up['savedBills/' + id + '/createdAt'] = e.at; }
+    e.txns.forEach(function (t) {
+      var day = t._day || dayOf(t.date || t.createdAt); if (!day || !t.id) return;
+      var copy = Object.assign({}, t, { deletedAt: at, deletedBy: by, deleteReason: reason || '', voidBill: id }); delete copy._day;
+      up['deletedTransactions/' + day + '/' + t.id] = copy; up['transactions/' + day + '/' + t.id] = null;
+    });
+    if (e.bmhId) up['patientDues/' + e.bmhId + '/items/' + id + '/void'] = true;
+    window.FBDB.ref().update(up).then(function () { toast('Bill ' + e.no + ' deleted ✓', 's'); }, function (err) { console.warn('[bills] void', err); toast('Could not delete — check connection', 'w'); });
+    // this computer: drop the rows at once
+    var ids = {}; e.txns.forEach(function (t) { ids[t.id] = 1; });
+    S.cache.forEach(function (rows, d) { S.cache.set(d, rows.filter(function (r) { return !(r && ids[r.id]); })); });
+    try { for (var i = TRANSACTIONS.length - 1; i >= 0; i--) if (TRANSACTIONS[i] && ids[TRANSACTIONS[i].id]) TRANSACTIONS.splice(i, 1); } catch (x) {}
+    [window.BMH_SAVED_BILLS || [], window.BILLS || []].forEach(function (arr) { arr.forEach(function (b) { if (b && (b.id === id || b.billNo === e.no)) b.status = 'void'; }); });
+    if (S.saved && S.saved[id]) S.saved[id].status = 'void'; else { S.saved = S.saved || {}; S.saved[id] = { id: id, status: 'void' }; }
+    if (S.patient) patientView(S.patient); else search(S.lastQuery || '');
+  }
+  window.bmhBillHistoryVoid = voidBill;
   function reprint(key, what) {
     var e = findEntry(key); if (!e) { toast('Record not found', 'w'); return; }
     if (e.kind === 'bill') {
