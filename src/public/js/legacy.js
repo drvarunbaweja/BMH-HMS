@@ -11224,6 +11224,7 @@ function saveIolInventoryGrid() {
           const rowExp = rowExpiries[0] || '';
           const existing = (brandKey && rowExpiries.length <= 1) ? INVENTORY.find(function (x) {
             return String(x.cat || '').toLowerCase() === 'iol'
+              && (!String(x.store || '').trim() || String(x.store) === String(base.store))
               && normalizeInventoryCompareText(_iolBrandLabel(x)) === brandKey
               && String(x.power || extractIolPower(x.name || '') || '') === String(row.power || '')
               && String(x.exp || '').trim() === rowExp;
@@ -11233,10 +11234,10 @@ function saveIolInventoryGrid() {
             if (rowExp) existing.exp = rowExp;
             if (bd.batchNo) existing.batchNo = bd.batchNo;
             existing._localAddedAt = Date.now();
+            bmhRecordInventoryPurchase(existing, row.qty, billFile || null);
             if (typeof window.saveInventoryToFirebase === 'function') {
               window.saveInventoryToFirebase(existing).catch(err => console.error('Firebase save error:', err));
             }
-            bmhRecordInventoryPurchase(existing, row.qty, billFile || null);
             added += row.qty;
           } else {
             for (let idx = 0; idx < row.qty; idx += 1) {
@@ -16056,11 +16057,9 @@ function saveInventoryTransfer(opts) {
     const item = entry.item;
     const qty = Math.max(1, Number(line.qty || 1));
     item.stock = Math.max(0, (Number(item.stock) || 0) - qty);
-    let target = INVENTORY.find(function (x) { return x.barcode === item.barcode && String(x.store || '') === line.toStore; });
-    if (!target) {
-      target = Object.assign({}, item, { stock: 0, store: line.toStore });
-      INVENTORY.push(target);
-    }
+    if (!String(item.store || '').trim()) item.store = line.fromStore;
+    // destination line of its own (separate key), so the source store's line is not overwritten
+    const target = bmhInventoryStoreLineFor(item, line.toStore);
     target.stock = (Number(target.stock) || 0) + qty;
     changed.push(item, target);
     const transferRow = { id: batchId + '-' + idx, batchId, itemName: item.name, barcode: item.barcode, fromStore: line.fromStore, toStore: line.toStore, qty, ts, user: CURRENT_USER?.name || 'Inventory' };
@@ -29833,22 +29832,48 @@ function initCcDurationControls() {
   });
 }
 // Extend processBC — stock in / patient use with inventory deduction + patient charge line
+// Stock-in / transfer: a stock line belongs to one store. When the item already exists only in another store,
+// a separate line is made for the chosen store (its own key), so the other store's stock is never moved or overwritten.
+function bmhInventoryStoreLineFor(item, store) {
+  store = String(store || '').trim();
+  if (!item || !store) return item;
+  if (!String(item.store || '').trim() || String(item.store) === store) return item;
+  const nameKey = normalizeInventoryCompareText(item.name || '');
+  const codeKey = String(item.qr || item.barcode || '');
+  const live = function (x) { return x && x._deleted !== true && String(x._deleted) !== 'true'; };
+  const same = (INVENTORY || []).find(function (x) {
+    return x !== item && live(x) && String(x.store || '') === store
+      && (String(x.barcode || '') === String(item.barcode || '') || (codeKey && String(x.qr || '') === codeKey) || (nameKey && normalizeInventoryCompareText(x.name || '') === nameKey));
+  });
+  if (same) return same;
+  const slug = store.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'store';
+  let bc = String(codeKey || item.name || 'INV') + '@' + slug, n = 2;
+  const taken = function (code) { return (INVENTORY || []).some(function (x) { return x && String(x.barcode || '') === code; }); };
+  while (taken(bc)) bc = String(codeKey || item.name || 'INV') + '@' + slug + '-' + (n++);
+  const line = Object.assign({}, item, { barcode: bc, qr: codeKey, stock: 0, store: store, _deleted: false, _localAddedAt: Date.now() });
+  delete line.updatedAt;
+  normalizeInventoryRecord(line);
+  INVENTORY.push(line);
+  BCMAP[bc] = line;
+  return line;
+}
+window.bmhInventoryStoreLineFor = bmhInventoryStoreLineFor;
 function processBC(mode, code) {
   if (!code) return;
   const translated = String(code);
   const item = BCMAP[code] || BCMAP[code.toLowerCase().substring(0, 15)] || bmhFindInventoryItemForText(code);
   if (mode === 'in') {
     const qty = Math.max(1, Number(document.getElementById('inv-in-qty')?.value || '1'));
-    const target = item || bmhFindOrCreateInventoryItem(code, translated);
+    const target = bmhInventoryStoreLineFor(item || bmhFindOrCreateInventoryItem(code, translated), bmhInventoryStoreValue() || bmhDefaultStoreForDept(bmhInventoryDeptValue()));
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], (billFile) => {
       try {
         target._localAddedAt = Date.now();
         target.stock = (target.stock || 0) + qty;
-        // Save to Firebase
+        // store / department / category from the form are set first, then saved
+        bmhRecordInventoryPurchase(target, qty, billFile);
         if (typeof window.saveInventoryToFirebase === 'function') {
           window.saveInventoryToFirebase(target).catch(err => console.error('Firebase save error:', err));
         }
-        bmhRecordInventoryPurchase(target, qty, billFile);
         saveInventoryStockToStorage();
         renderInventoryImportDatalists && renderInventoryImportDatalists();
         const catFilter = document.getElementById('inv-stock-cat-filter');
