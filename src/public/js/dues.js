@@ -195,10 +195,20 @@
     var centre = ''; try { centre = (typeof getEffectiveCentre === 'function' && getEffectiveCentre()) || p.centre || user().centre || ''; } catch (e) { centre = p.centre || ''; }
     if (centre === 'BOTH' || centre === 'ALL') centre = p.centre || '';
     var src = role() === 'reception' ? 'reception' : 'billing';
-    var txns = parts.map(function (x, i) {
-      return { id: 'TXNDUE' + Date.now() + i, patient: p.name || '', bmhId: id, service: 'Balance payment — ' + (desc || 'previous bill'), for: 'Balance payment · Bill ' + billNos,
-        amount: x.amount, mode: x.mode, paymentRef: x.ref || '', dept: p.dept || (rows[0] && rows[0].item.dept) || 'ophtho', centre: centre,
-        date: at, createdAt: at, time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), source: src, type: 'due-payment', billNo: billNos, duePaymentId: payId, collected: true, createdBy: who() };
+    // one payment row per (mode, bill), linked to the original bill (billId) so Billing counts it as a payment
+    // against that bill — not as a new bill
+    var queue = rows.filter(function (r) { return alloc[r.item.id]; }).map(function (r) { return { r: r, left: alloc[r.item.id] }; });
+    var txns = [], n = 0, bi = 0;
+    parts.forEach(function (x) {
+      var amt = x.amount;
+      while (amt > 0 && bi < queue.length) {
+        var q = queue[bi], use = Math.min(amt, q.left), it = q.r.item;
+        txns.push({ id: 'TXNDUE' + Date.now() + (n++), patient: p.name || '', bmhId: id, service: 'Balance payment — ' + (it.desc || 'previous bill'), for: 'Balance payment · Bill ' + it.billNo,
+          amount: use, mode: x.mode, paymentRef: x.ref || '', dept: it.dept || p.dept || 'ophtho', centre: centre,
+          date: at, createdAt: at, time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), source: src, type: 'due-payment',
+          billId: it.billId || it.id, billNo: it.billNo, duePaymentId: payId, collected: true, createdBy: who() });
+        amt -= use; q.left -= use; if (q.left <= 0) bi++;
+      }
     });
     txns.forEach(function (t) { try { saveTransactionToFirebase(t); } catch (e) { console.warn('[dues] txn', e); } });
     var pay = { id: payId, at: at, amount: total, parts: parts, alloc: alloc, by: who(), centre: centre, balanceBefore: bal, balanceAfter: Math.max(0, bal - total), txnIds: txns.map(function (t) { return t.id; }) };

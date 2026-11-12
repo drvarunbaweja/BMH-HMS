@@ -88,9 +88,11 @@
   }
   function buildEntries() {
     var saved = localSaved(); var byBill = {}; var out = [];
+    var idByNo = {}; Object.keys(saved).forEach(function (k) { var b = saved[k]; if (b && b.billNo) idByNo[String(b.billNo)] = k; });
     allTxns().forEach(function (t) {
       if (t.billId || t.billNo) {
-        var key = String(t.billId || t.billNo);
+        // a balance payment belongs to the original bill (by bill id, or by its bill number)
+        var key = String(t.billId || idByNo[String(t.billNo)] || t.billNo);
         (byBill[key] = byBill[key] || []).push(t);
       } else {
         var adj = t.type === 'advance-adjustment' || t.source === 'advance-adjustment';
