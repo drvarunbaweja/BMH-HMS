@@ -16509,6 +16509,15 @@ function addInventoryCategoryPrompt() {
   const name = normalizeInventoryTextValue(prompt('New inventory category name') || '');
   if (!name) return;
   if (!Array.isArray(window.BMH_INVENTORY_CATEGORIES)) window.BMH_INVENTORY_CATEGORIES = [];
+  // already there (any spelling / capitals / plural)? warn and offer the existing one
+  const sameCat = bmhInventoryCategoryOptions().find(function (c) { return normalizeInventoryCompareText(c) === normalizeInventoryCompareText(name); })
+    || (typeof window.bmhInvSimilarCategory === 'function' ? window.bmhInvSimilarCategory(name) : '');
+  if (sameCat && !confirm('Category "' + sameCat + '" already exists.\n\nOK = add "' + name + '" as a separate category anyway\nCancel = use "' + sameCat + '"')) {
+    const selEx = document.getElementById('inv-in-cat');
+    if (selEx) { if (![...selEx.options].some(function (o) { return o.value === sameCat; })) selEx.add(new Option(sameCat, sameCat)); selEx.value = sameCat; }
+    showToast('Using existing category "' + sameCat + '"', 's');
+    return;
+  }
   if (!window.BMH_INVENTORY_CATEGORIES.includes(name)) window.BMH_INVENTORY_CATEGORIES.push(name);
   try { localStorage.setItem('bmh_inventory_categories', JSON.stringify(window.BMH_INVENTORY_CATEGORIES)); } catch (e) {}
   if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
