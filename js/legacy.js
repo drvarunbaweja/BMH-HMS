@@ -12602,8 +12602,55 @@ function queueNoFeeConsultationBadge(compact, p) {
     ? 'background:#eef2f7;color:#334155;border:1px dashed #94a3b8;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800'
     : 'font-size:10px;color:#475569;font-weight:800';
   const payer = queueNoFeeConsultationPayerLabel(p);
-  return '<span style="' + style + '">No fee consultation' + (payer ? ' (' + escapeHtmlConsent(payer) + ')' : '') + '</span>';
+  const idArg = String((p && p.bmhId) || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  // clickable like "Paid": shows any payments made later (surgery, investigations …)
+  return '<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails(\'' + idArg + '\')" style="' + style + ';cursor:pointer">No fee consultation' + (payer ? ' (' + escapeHtmlConsent(payer) + ')' : '') + '</span>' + bmhQueueBillHistoryLink(p);
 }
+// small 🧾 next to the payment badge → Billing → Bills & History for this patient (only for logins that have Billing)
+// saved bills (surgery, investigations …) of earlier days, read from savedBills — this computer may only hold today's payments
+function bmhQueueLoadSavedBillsInto(bmhId, hostId) {
+  const host = document.getElementById(hostId);
+  if (!host || !bmhId || !window.FBDB) return;
+  host.innerHTML = '<div style="font-size:11px;color:var(--g2)">Loading bills…</div>';
+  window.FBDB.ref('savedBills').once('value').then(function (snap) {
+    const el = document.getElementById(hostId); if (!el) return;
+    const bills = Object.values(snap.val() || {}).filter(function (b) { return b && b.bmhId === bmhId; })
+      .sort(function (a, b) { return String(b.createdAt || b.date || '').localeCompare(String(a.createdAt || a.date || '')); });
+    if (!bills.length) { el.innerHTML = ''; return; }
+    const r = function (n) { return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN'); };
+    el.innerHTML = '<div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.3px;margin:6px 0 2px">Bills</div>' + bills.map(function (b, idx) {
+      const items = Array.isArray(b.items) ? b.items : [];
+      const desc = items.map(function (i) { return i && i.desc; }).filter(Boolean).join(', ') || 'Bill';
+      const net = Number(b.netPayable || 0), tpa = Number(b.tpaAmount || 0), paid = Number(b.amountReceived || 0) + Number(b.advanceApplied || 0);
+      const bal = Math.max(0, net - tpa - paid);
+      const when = b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (b.date || '');
+      return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5)">'
+        + '<div><div style="font-weight:800;font-size:12.5px">' + escapeHtmlConsent(desc) + '</div><div style="font-size:10.5px;color:var(--g2);margin-top:2px">' + escapeHtmlConsent([b.billNo, when, b.paymentMode].filter(Boolean).join(' · ')) + '</div></div>'
+        + '<div style="text-align:right;font-size:11.5px;white-space:nowrap"><div style="font-weight:900">Bill ' + r(net) + '</div><div style="color:#1a8c3c;font-weight:800">Paid ' + r(paid) + '</div>' + (tpa ? '<div style="color:var(--blue)">TPA ' + r(tpa) + '</div>' : '') + (bal > 0 && idx === 0 ? '<div style="color:#b45309;font-weight:900">Balance ' + r(bal) + '</div>' : '') + '</div></div>';
+    }).join('');
+  }).catch(function () { const el = document.getElementById(hostId); if (el) el.innerHTML = ''; });
+}
+function bmhCanOpenBilling() {
+  return !!document.querySelector('#sbnav .ni[onclick*="nav(\'billing\'"]');
+}
+function bmhQueueBillHistoryLink(p) {
+  if (!p || !p.bmhId || !bmhCanOpenBilling()) return '';
+  const idArg = String(p.bmhId).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return ' <span title="Bill history" onclick="event.stopPropagation();bmhOpenPatientBillHistory(\'' + idArg + '\')" style="cursor:pointer;font-size:10px;opacity:.85">🧾</span>';
+}
+function bmhOpenPatientBillHistory(bmhId) {
+  if (!bmhId) return;
+  try { closeM('m-queue-payments'); } catch (e) {}
+  const navEl = document.querySelector('#sbnav .ni[onclick*="nav(\'billing\'"]');
+  if (!navEl) { showToast('Billing is not available for this login', 'w'); return; }
+  nav('billing', navEl);
+  setTimeout(function () {
+    const tab = Array.from(document.querySelectorAll('#pg-billing > .ptabs .ptab')).find(function (t) { return /Bills\s*&\s*History/i.test(t.textContent || ''); });
+    try { bmhBillingTabSwitch(tab || null, 'search'); } catch (e) {}
+    if (typeof window.bmhBillHistoryPatient === 'function') window.bmhBillHistoryPatient(bmhId);
+  }, 120);
+}
+window.bmhOpenPatientBillHistory = bmhOpenPatientBillHistory;
 
 function queuePaymentLabelForEntry(entry) {
   if (!entry) return 'Payment';
@@ -12691,8 +12738,12 @@ function showQueuePaymentDetails(bmhId) {
     + '<div style="padding:12px 14px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px">'
     + '<div style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:800">' + escapeHtmlConsent(bmhId || '') + '</div>'
     + '<div style="font-size:13px;font-weight:900;color:#1a8c3c">Total ₹' + total.toLocaleString('en-IN') + '</div></div>'
-    + rows + '</div></div>';
+    + rows
+    + '<div id="m-queue-payments-bills" style="margin-top:8px"></div>'
+    + (bmhCanOpenBilling() ? '<div style="text-align:right;margin-top:10px"><button type="button" class="btn btn-sm btn-outline" onclick="bmhOpenPatientBillHistory(\'' + String(bmhId || '').replace(/'/g, "\\'") + '\')">🧾 Bill history</button></div>' : '')
+    + '</div></div>';
   modal.classList.add('open');
+  bmhQueueLoadSavedBillsInto(bmhId, 'm-queue-payments-bills');
 }
 
 function bmhDeleteTransactionEntry(txnId) {
@@ -51133,7 +51184,7 @@ function buildQCard(p, sno) {
   const chargeHtml = runningDue>0
     ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ ${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
     : paidServiceEntries.length
-    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>`
+    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>${bmhQueueBillHistoryLink(p)}`
     : noFeeConsult
     ? queueNoFeeConsultationBadge(true, p)
     : advanceBalance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
@@ -51246,7 +51297,7 @@ function buildQTableRow(p, sno, opts) {
     : runningDue>0
     ? `<span style="font-size:10px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
     : paidServiceEntries.length
-    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
+    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${bmhQueueBillHistoryLink(p)}${advLbl ? ' · ' + advLbl : ''}`
     : noFeeConsult
     ? `${queueNoFeeConsultationBadge(false, p)}${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
