@@ -31,6 +31,11 @@
     try { saveInventoryStockToStorage(); } catch (e) {}
   }
   function rowsWhere(fields, name) { var k = cmp(name); return inv().filter(function (r) { return r && fields.some(function (f) { return cmp(r[f]) === k && k; }); }); }
+  // "IV cannula", "IV Cannulas", "iv-cannula" → same key (case, spaces, punctuation and plural s/es ignored)
+  function simKey(v) { return cmp(v).replace(/[^a-z0-9+ ]/g, ' ').split(/\s+/).filter(Boolean).map(function (w) { return w.length > 3 ? w.replace(/(es|s)$/, '') : w; }).join(''); }
+  function similarCat(name) { var k = simKey(name); if (!k) return ''; var hit = ''; (KINDS.category.list() || []).concat(inv().map(function (r) { return r && r.cat; })).some(function (x) { if (x && simKey(x) === k && trim(x) !== trim(name)) { hit = trim(x); return true; } return false; }); return hit; }
+  window.bmhInvSimilarCategory = function (name) { return similarCat(name); };
+  function liveRow(r) { return r && r._deleted !== true && String(r._deleted) !== 'true'; }
   function units(rows) { return rows.reduce(function (t, r) { return t + Math.max(0, Number(r.stock) || 0); }, 0); }
   function catalogHas(name, field) { try { var k = cmp(name); return (IOL_CATALOG || []).some(function (c) { return c && cmp(c[field]) === k; }); } catch (e) { return false; } }
   function memRename(bucket, from, to) {
@@ -247,8 +252,53 @@
     var inp = document.getElementById('ivl-add'), v = trim(inp && inp.value); if (!v) { toast('Type a name to add', 'w'); return; }
     var K = KINDS[S.kind];
     if (!K.byValue && (K.list() || []).some(function (x) { return cmp(x) === cmp(v); })) { toast('"' + v + '" is already in the list', 'w'); return; }
+    if (S.kind === 'category') { var sim = similarCat(v); if (sim && !confirm('A similar category already exists: "' + sim + '".\n\nOK = add "' + v + '" as a separate category anyway\nCancel = don\'t add (use "' + sim + '")')) { inp.value = ''; toast('Use "' + sim + '"', 'w'); return; } }
     Promise.resolve(K.add(v)).then(function () { inp.value = ''; done('Added ✓'); });
   }
+  // ── merge categories within one store (or all stores) ──
+  var M = { store: '' };
+  function storeRows() { return inv().filter(function (r) { return liveRow(r) && (!M.store || trim(r.store) === M.store); }); }
+  function catsInStore() {
+    var by = {};
+    storeRows().forEach(function (r) { var c = trim(r.cat) || 'Miscellaneous'; by[c] = by[c] || []; by[c].push(r); });
+    return by;
+  }
+  function drawMerge() {
+    var host = document.getElementById('ivl-merge'); if (!host) return;
+    var stores = []; inv().forEach(function (r) { var s = trim(r && r.store); if (s && stores.indexOf(s) < 0) stores.push(s); }); stores.sort();
+    if (M.store && stores.indexOf(M.store) < 0) M.store = '';
+    var by = catsInStore(), cats = Object.keys(by).sort(function (a, b) { return a.localeCompare(b); });
+    var groups = {}; cats.forEach(function (c) { var k = simKey(c); (groups[k] = groups[k] || []).push(c); });
+    var sims = Object.keys(groups).filter(function (k) { return groups[k].length > 1; }).map(function (k) { var inList = function (c) { return (window.BMH_INVENTORY_CATEGORIES || []).indexOf(c) >= 0 ? 1 : 0; };
+      return groups[k].sort(function (a, b) { return (inList(b) - inList(a)) || (by[b].length - by[a].length) || (units(by[b]) - units(by[a])); }); });
+    var opt = function (sel) { return cats.map(function (c) { return '<option value="' + esc(c) + '"' + (c === sel ? ' selected' : '') + '>' + esc(c) + ' (' + by[c].length + ')</option>'; }).join(''); };
+    host.innerHTML = '<div style="font-size:12.5px;font-weight:900;margin-bottom:6px">🔀 Merge categories</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px">Store <select id="ivl-m-store" style="padding:5px;border:1px solid #cfd6e2;border-radius:8px"><option value="">All stores</option>' + stores.map(function (s) { return '<option' + (s === M.store ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>'
+      + (sims.length ? '<div style="margin-top:6px;font-size:11.5px;color:#9a3412;font-weight:800">Look-alike categories' + (M.store ? ' in this store' : '') + ':</div>' + sims.map(function (g) {
+        return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid #eef0f4;font-size:12px"><span style="flex:1;min-width:160px">' + g.map(function (c) { return '<b>' + esc(c) + '</b> <span style="color:#777">(' + by[c].length + ')</span>'; }).join(' · ') + '</span>'
+          + '<button type="button" class="btn btn-xs btn-gold" data-mg="' + esc(JSON.stringify(g)) + '">Merge into "' + esc(g[0]) + '"</button></div>';
+      }).join('') : '<div style="margin-top:6px;font-size:11.5px;color:#667085">No look-alike categories' + (M.store ? ' in this store' : '') + '.</div>')
+      + (cats.length > 1 ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px">Move all of <select id="ivl-m-from" style="padding:5px;border:1px solid #cfd6e2;border-radius:8px;max-width:180px">' + opt(cats[0]) + '</select> into <select id="ivl-m-to" style="padding:5px;border:1px solid #cfd6e2;border-radius:8px;max-width:180px">' + opt(cats[1]) + '</select><button type="button" class="btn btn-xs btn-blue" id="ivl-m-go">Merge</button></div>' : '');
+    document.getElementById('ivl-m-store').onchange = function () { M.store = this.value; drawMerge(); };
+    Array.prototype.forEach.call(host.querySelectorAll('[data-mg]'), function (b) { b.onclick = function () { var g = JSON.parse(b.getAttribute('data-mg')); doMerge(g.slice(1), g[0]); }; });
+    var go = document.getElementById('ivl-m-go'); if (go) go.onclick = function () { var f = document.getElementById('ivl-m-from').value, t = document.getElementById('ivl-m-to').value; if (f === t) { toast('Choose two different categories', 'w'); return; } doMerge([f], t); };
+  }
+  function doMerge(froms, to) {
+    if (!canEdit()) { toast('Only admin and inventory logins can merge categories', 'w'); return; }
+    var rows = storeRows().filter(function (r) { return froms.indexOf(trim(r.cat) || 'Miscellaneous') >= 0; });
+    if (!rows.length) { toast('Nothing to merge', 'w'); return; }
+    if (!confirm('Merge ' + froms.map(function (f) { return '"' + f + '"'; }).join(', ') + ' into "' + to + '"' + (M.store ? ' in ' + M.store : ' in all stores') + '?\n\n' + rows.length + ' stock line' + (rows.length === 1 ? '' : 's') + ' (' + units(rows) + ' units) will move to "' + to + '". Stock quantities do not change.')) return;
+    rows.forEach(function (r) { r.cat = to; });
+    syncRows(rows);
+    // drop the old names from the category list when no stock line uses them any more
+    var still = function (f) { return inv().some(function (r) { return liveRow(r) && trim(r.cat) === f; }); };
+    var drop = froms.filter(function (f) { return !still(f); });
+    if (drop.length) { window.BMH_INVENTORY_CATEGORIES = (window.BMH_INVENTORY_CATEGORIES || []).filter(function (x) { return drop.indexOf(trim(x)) < 0 || cmp(x) === cmp(to); }); KINDS.category.saveList(); }
+    if (!(window.BMH_INVENTORY_CATEGORIES || []).some(function (x) { return cmp(x) === cmp(to); })) { window.BMH_INVENTORY_CATEGORIES = (window.BMH_INVENTORY_CATEGORIES || []).concat([to]); KINDS.category.saveList(); }
+    refresh(); toast('Merged ✓ · ' + rows.length + ' stock line' + (rows.length === 1 ? '' : 's') + ' now in "' + to + '"', 's');
+    drawMerge(); draw();
+  }
+
   window.bmhInvListOpen = function (kind) {
     if (!KINDS[kind]) return; css(); S = { kind: kind, q: '', editing: '' };
     var old = document.getElementById('ivl-ov'); if (old) old.remove();
@@ -262,6 +312,7 @@
       + (kind === 'dept' ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#555">Renaming changes the name shown; stock keeps the same department.</div>' : '')
       + (kind === 'store' && isAdmin() && typeof window.bmhMergeSameNameStores === 'function' ? '<div style="padding:0 16px 8px"><button type="button" class="btn btn-xs btn-outline" id="ivl-samename">🔤 Merge same-name stores (e.g. Eye RPR / Eye Rpr)</button></div>' : '')
       + (kind === 'store' && isAdmin() && typeof window.bmhFixStoreDeptMismatch === 'function' ? '<div style="padding:0 16px 8px"><button type="button" class="btn btn-xs btn-outline" id="ivl-deptfix">🏷 Fix stock lines saved in the wrong department</button></div>' : '')
+      + (kind === 'category' && canEdit() ? '<div id="ivl-merge" style="margin:0 16px 8px;padding:8px 10px;border:1px solid #e3e8f2;border-radius:10px;background:#f8fafc"></div>' : '')
       + (!canEdit() ? '<div style="padding:0 16px 8px;font-size:11.5px;color:#9a6b00">Rename / Remove: admin and inventory logins only.</div>' : '')
       + '<div id="ivl-list"></div></div>';
     document.body.appendChild(ov);
@@ -270,6 +321,7 @@
     document.getElementById('ivl-addb').onclick = add;
     document.getElementById('ivl-add').onkeydown = function (e) { if (e.key === 'Enter') add(); };
     document.getElementById('ivl-q').oninput = function () { S.q = this.value; S.editing = ''; draw(); };
+    if (kind === 'category') drawMerge();
     var df = document.getElementById('ivl-deptfix'); if (df) df.onclick = function () { window.bmhFixStoreDeptMismatch(); draw(); };
     var sn = document.getElementById('ivl-samename'); if (sn) sn.onclick = function () { window.bmhMergeSameNameStores(); draw(); };
     var vm = document.getElementById('ivl-vm'); if (vm) vm.onclick = function (e) { e.preventDefault(); ov.remove(); try { bmhOpenVendorMerge(); } catch (er) {} };
