@@ -1,10 +1,10 @@
 /* BMH — Vendor payments (Billing / Inventory → Vendors only).
  *  • "Part payment / vendor total", "Pay selected bills" and a bill's "Pay" open one pop-up instead of the one-line boxes:
  *      – amount, mode, UTR / cheque no., payment date;
- *      – "Clear oldest bills first" goes by INVOICE DATE (the bill's invoice date if entered, else its bill date),
+ *      – "Clear oldest bills first" goes by BILL DATE (the bill date entered on the bill, else the day it was entered),
  *        oldest first; opening balances come first. Or "Choose bills" to tick the bills yourself;
  *      – a preview of what the amount clears (paid / partly paid / remaining due) before anything is saved;
- *      – each bill's invoice date can be corrected in the pop-up (saved with the payment);
+ *      – each bill's bill date can be corrected in the pop-up (saved with the payment);
  *      – vendors with "bill when used" (IOL / consignment) bills: a tick box decides whether the payment may clear them.
  *  • Paying more than is due keeps the extra as an ADVANCE with that vendor (saved at vendorAdvances/<vendor>). The
  *    advance is shown in the vendor list and offered ("Use advance") the next time that vendor is paid.
@@ -167,7 +167,7 @@
       + '<label style="font-size:11px;font-weight:800;color:#555">Payment date<input id="vp-date" type="date" value="' + today() + '" max="' + today() + '" style="' + inp + ';margin-top:3px"></label></div>'
       + (adv > 0 ? '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin:2px 0 6px"><input type="checkbox" id="vp-useadv" checked> Also use the advance with vendor (' + inr(adv) + ')</label>' : '')
       + (S.hasUse ? '<label style="display:flex;gap:6px;align-items:flex-start;font-size:12.5px;margin:2px 0 6px"><input type="checkbox" id="vp-incuse"' + (S.incUse ? ' checked' : '') + ' style="margin-top:2px"> <span>Include “bill when used” (IOL / consignment) bills<br><span style="font-size:11px;color:#777">Leave unticked to pay only the regular bills. To pay for lenses actually used, use “Pay as per usage” in the vendor statement.</span></span></label>' : '')
-      + '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;font-weight:800;margin:4px 0 6px"><label><input type="radio" name="vp-m" value="oldest"' + (S.mode === 'oldest' ? ' checked' : '') + '> Clear oldest bills first (by invoice date)</label><label><input type="radio" name="vp-m" value="choose"' + (S.mode === 'choose' ? ' checked' : '') + '> Choose bills</label></div>'
+      + '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;font-weight:800;margin:4px 0 6px"><label><input type="radio" name="vp-m" value="oldest"' + (S.mode === 'oldest' ? ' checked' : '') + '> Clear oldest bills first (by bill date)</label><label><input type="radio" name="vp-m" value="choose"' + (S.mode === 'choose' ? ' checked' : '') + '> Choose bills</label></div>'
       + '<div id="vp-table"></div><div id="vp-sum" style="margin-top:8px;font-size:12.5px"></div></div>'
       + '<div style="padding:10px 16px;border-top:1px solid #eef0f4;display:flex;justify-content:flex-end;gap:8px"><button type="button" class="btn btn-gray btn-sm" id="vp-x">Cancel</button><button type="button" class="btn btn-gold btn-sm" id="vp-ok">Record payment</button></div></div>';
     document.body.appendChild(ov);
@@ -200,7 +200,7 @@
     if (!S) return;
     var p = plan(), tb = document.getElementById('vp-table'), sm = document.getElementById('vp-sum');
     var th = 'padding:5px 6px;text-align:left;font-size:10.5px;color:#666;border-bottom:1px solid #e3e6ee';
-    tb.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>' + (S.mode === 'choose' ? '<th style="' + th + '"></th>' : '') + '<th style="' + th + '">Invoice</th><th style="' + th + '">Invoice date</th><th style="' + th + ';text-align:right">Due</th><th style="' + th + ';text-align:right">This payment</th><th style="' + th + '">After</th></tr></thead><tbody>'
+    tb.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>' + (S.mode === 'choose' ? '<th style="' + th + '"></th>' : '') + '<th style="' + th + '">Invoice</th><th style="' + th + '">Bill date</th><th style="' + th + ';text-align:right">Due</th><th style="' + th + ';text-align:right">This payment</th><th style="' + th + '">After</th></tr></thead><tbody>'
       + p.list.map(function (r) {
         var after = r.apply <= 0 ? (r.on ? 'unpaid' : '—') : (r.apply >= r.due - 0.005 ? '<b style="color:#1a8c3c">paid</b>' : '<b style="color:#b55a00">part paid · ' + inr(r.due - r.apply) + ' due</b>');
         return '<tr style="border-bottom:1px solid #f0f2f6' + (r.apply > 0 ? ';background:#f3fbf5' : '') + '">'
@@ -231,7 +231,7 @@
       + (p.advUsed > 0 ? '\n\nAdvance used: ' + inr(p.advUsed) : '') + (p.extra > 0 ? '\nKept as advance: ' + inr(p.extra) : '');
     if (!confirm(msg)) return;
     var payId = 'VP' + Date.now();
-    // invoice dates corrected in the pop-up
+    // bill dates corrected in the pop-up
     Object.keys(S.dates).forEach(function (id) { var b = S.rows.find(function (v) { return v.id === id; }); if (b && S.dates[id] && S.dates[id] !== invDate(b)) { b.invoiceDate = S.dates[id]; b.updatedAt = new Date().toISOString(); } });
     meta = { date: date, payId: payId };
     try { applied.forEach(function (r) { window.bmhApplyVendorPaymentToBills([r.v], r.apply, mode, ref); }); } finally { meta = null; }
@@ -293,18 +293,18 @@
         var box = document.createElement('div'); box.className = 'vp-hist'; box.style.cssText = 'padding:0 12px 12px;font-size:11.5px';
         var pays = Array.isArray(v.payments) ? v.payments : [];
         var a = advBalance(v.vendor);
-        box.innerHTML = '<div style="font-size:11px;font-weight:900;color:var(--g1,#666);text-transform:uppercase;margin-bottom:4px">Invoice date: ' + esc(invDate(v) || '—') + (v.invoiceDate ? '' : ' <span style="font-weight:600;text-transform:none">(bill date)</span>') + ' <button type="button" class="btn btn-xs btn-outline" style="margin-left:6px" id="vp-setdate">Set invoice date</button></div>'
+        box.innerHTML = '<div style="font-size:11px;font-weight:900;color:var(--g1,#666);text-transform:uppercase;margin-bottom:4px">Bill date: ' + esc(invDate(v) || '—') + (v.invoiceDate ? '' : ' <span style="font-weight:600;text-transform:none">(bill date)</span>') + ' <button type="button" class="btn btn-xs btn-outline" style="margin-left:6px" id="vp-setdate">Set invoice date</button></div>'
           + '<div style="font-size:11px;font-weight:900;color:var(--g1,#666);text-transform:uppercase;margin:8px 0 4px">Payments on this bill</div>'
           + (pays.length ? pays.map(function (p) { return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid #f0f2f6"><span>' + esc(p.date || '') + ' · ' + esc(p.mode || '') + (p.ref ? ' · ' + esc(p.ref) : '') + (p.by ? ' · ' + esc(p.by) : '') + '</span><b>' + inr(p.amount) + '</b></div>'; }).join('')
             : '<div style="color:#777">' + ((Number(v.paidAmount) || 0) > 0 ? inr(v.paidAmount) + ' paid earlier' + (v.paidRef ? ' (last ref ' + esc(v.paidRef) + ')' : '') + ' — before payment history was kept' : 'No payments yet') + '</div>')
           + (a > 0 ? '<div style="margin-top:6px;color:#1a8c3c;font-weight:800">Advance with ' + esc(v.vendor) + ': ' + inr(a) + '</div>' : '');
         det.appendChild(box);
         box.querySelector('#vp-setdate').onclick = function () {
-          var d = prompt('Invoice date of ' + (v.invoiceNo || 'this bill') + ' (YYYY-MM-DD)', invDate(v)); if (d === null) return;
+          var d = prompt('Bill date of ' + (v.invoiceNo || 'this bill') + ' (YYYY-MM-DD)', invDate(v)); if (d === null) return;
           d = String(d).trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { toast('Use the format YYYY-MM-DD', 'w'); return; }
           v.invoiceDate = d; v.updatedAt = new Date().toISOString();
           try { saveBmhFinancials(); } catch (e) {}
-          rerender(); toast('Invoice date saved ✓', 's');
+          rerender(); toast('Bill date saved ✓', 's');
         };
       }
     }
