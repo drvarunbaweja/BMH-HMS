@@ -10204,11 +10204,52 @@ function _bmhMergeRemoteVendorBills(remoteArr) {
   }
   return added;
 }
+// ── Financials safety (13 Nov): the shared financials record is one big snapshot; a computer that has not received it
+// yet (or holds an older, smaller copy) must never write over it. ──
+const BMH_FIN_ARRAYS = ['vendorBills', 'officeBills', 'savedBills', 'expenses', 'ledger', 'purchases', 'inventoryUsage', 'inventoryIndents', 'inventoryTransfers', 'inventoryRemovals'];
+function bmhFinCounts(data) {
+  const d = data || {}, out = {};
+  BMH_FIN_ARRAYS.forEach(function (k) { const v = d[k]; out[k] = Array.isArray(v) ? v.filter(Boolean).length : (v && typeof v === 'object' ? Object.keys(v).length : 0); });
+  out.patientCharges = d.patientCharges && typeof d.patientCharges === 'object' ? Object.keys(d.patientCharges).length : 0;
+  return out;
+}
+// true when `small` has lost a big part of what `big` holds (a list of 10+ rows dropping by half or more)
+function bmhFinLooksWiped(small, big) {
+  const a = bmhFinCounts(small), b = bmhFinCounts(big);
+  return ['vendorBills', 'purchases', 'inventoryUsage', 'savedBills', 'patientCharges', 'inventoryTransfers'].some(function (k) { return b[k] >= 10 && a[k] < b[k] * 0.5; });
+}
+function bmhFinRowKey(r) { if (!r || typeof r !== 'object') return JSON.stringify(r); return r.id ? 'id:' + String(r.id) : JSON.stringify(r).slice(0, 300); }
+function bmhFinUnion(remote, local) {
+  const out = Object.assign({}, remote || {});
+  BMH_FIN_ARRAYS.forEach(function (k) {
+    const ra = Array.isArray(out[k]) ? out[k].filter(Boolean) : [];
+    const la = Array.isArray((local || {})[k]) ? local[k].filter(Boolean) : [];
+    const seen = new Set(ra.map(bmhFinRowKey));
+    out[k] = ra.concat(la.filter(function (r) { return !seen.has(bmhFinRowKey(r)); }));
+  });
+  out.patientCharges = Object.assign({}, (local || {}).patientCharges || {}, out.patientCharges || {});
+  return out;
+}
 function queueBmhFinancialsRemoteSync() {
   if (!window.FBDB || window._bmhFinancialsHydrating) return;
+  // not until this computer has received the shared record once (else an empty / old copy would replace it)
+  if (!window._bmhFinRemoteSeen) {
+    // merged into the shared record as soon as it arrives (see the listener) instead of replacing it
+    window._bmhFinPendingPush = true;
+    try { if (!window._bmhFinancialsSyncStarted) startBmhFinancialsFirebaseSync(); } catch (e) {}
+    return;
+  }
+  try {
+    if (window._bmhFinLastRemote && bmhFinLooksWiped(bmhFinancialsSnapshot(), window._bmhFinLastRemote)) {
+      console.warn('[financials] cloud save skipped — this computer holds much less than the shared record', bmhFinCounts(bmhFinancialsSnapshot()), bmhFinCounts(window._bmhFinLastRemote));
+      return;
+    }
+  } catch (e) {}
   if (window._bmhFinancialsRemoteSyncTimer) clearTimeout(window._bmhFinancialsRemoteSyncTimer);
   window._bmhFinancialsRemoteSyncTimer = setTimeout(function () {
-    window.FBDB.ref('financials').set(bmhFinancialsSnapshot()).catch(function (err) {
+    const snapNow = bmhFinancialsSnapshot();
+    window._bmhFinLastRemote = snapNow;
+    window.FBDB.ref('financials').set(snapNow).catch(function (err) {
       console.warn('Financials cloud sync error:', err);
     });
   }, 200);
@@ -10217,8 +10258,47 @@ function startBmhFinancialsFirebaseSync() {
   if (!window.FBDB || window._bmhFinancialsSyncStarted) return;
   window._bmhFinancialsSyncStarted = true;
   window.FBDB.ref('financials').on('value', function (snap) {
-    const remote = snap.val();
-    if (!remote || typeof remote !== 'object') return;
+    let remote = snap.val();
+    if (!remote || typeof remote !== 'object') { window._bmhFinRemoteSeen = true; return; }
+    // the shared record lost most of its rows (overwritten by a computer with an empty / old copy):
+    // keep this computer's rows, merge, and put the merged record back
+    try {
+      const local = bmhFinancialsSnapshot();
+      if (bmhFinLooksWiped(remote, local)) {
+        console.warn('[financials] shared record looks wiped — restoring from this computer', bmhFinCounts(remote), bmhFinCounts(local));
+        const merged = bmhFinUnion(remote, local);
+        merged.updatedAt = Date.now();
+        merged.updatedBy = (window.CURRENT_USER && CURRENT_USER.name) || 'restore';
+        merged.restoredFrom = 'local copy ' + new Date().toISOString();
+        remote = merged;
+        window._bmhFinLastRemote = merged;
+        window._bmhFinRemoteSeen = true;
+        window._bmhFinancialsHydrating = true;
+        applyBmhFinancialsSnapshot(merged, { persistLocal: true });
+        window._bmhFinancialsHydrating = false;
+        try { localStorage.setItem('bmh_financials_updated_at', String(merged.updatedAt)); } catch (e) {}
+        window.FBDB.ref('financials').set(merged).catch(function (err) { console.warn('Financials restore error:', err); });
+        renderBillingPageIfActive && renderBillingPageIfActive();
+        return;
+      }
+    } catch (e) { console.warn('[financials] check', e); }
+    if (window._bmhFinPendingPush && !window._bmhFinRemoteSeen) {
+      // this computer saved something before the shared record had arrived: add its new rows to the shared record
+      window._bmhFinPendingPush = false;
+      const merged = bmhFinUnion(remote, bmhFinancialsSnapshot());
+      merged.updatedAt = Date.now();
+      window._bmhFinRemoteSeen = true;
+      window._bmhFinLastRemote = merged;
+      window._bmhFinancialsHydrating = true;
+      applyBmhFinancialsSnapshot(merged, { persistLocal: true });
+      window._bmhFinancialsHydrating = false;
+      try { localStorage.setItem('bmh_financials_updated_at', String(merged.updatedAt)); } catch (e) {}
+      window.FBDB.ref('financials').set(merged).catch(function (err) { console.warn('Financials cloud sync error:', err); });
+      renderBillingPageIfActive && renderBillingPageIfActive();
+      return;
+    }
+    window._bmhFinRemoteSeen = true;
+    window._bmhFinLastRemote = remote;
     const remoteTs = Number(remote.updatedAt || 0);
     const localTs = Number(localStorage.getItem('bmh_financials_updated_at') || 0);
     if (remoteTs && remoteTs < localTs) {
