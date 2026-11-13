@@ -35312,13 +35312,14 @@ function renderLabOrders() {
       <div style="font-size:13px;font-weight:900">${o.patient}</div>
       <div style="display:flex;align-items:center;gap:6px">
         <span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${o.status==='completed'?(o.unread?'🔔 Ready':'✅ Done'):'⏳ Pending'}</span>
-        <button type="button" class="btn btn-xs btn-gray" title="${o.status === 'pending' ? 'Delete pending lab block' : 'Delete lab block for selected date'}" onclick="event.stopPropagation();deleteLabOrderGroup('${o.id}')">🗑️</button>
+        <button type="button" class="btn btn-xs btn-outline" title="Add more tests for this patient" onclick="event.stopPropagation();bmhLabOpenPanel('${o.bmhId}')">➕ Tests</button>
+        <button type="button" class="btn btn-xs btn-gray" title="${o.status === 'pending' ? 'Delete all pending tests of this patient' : 'Delete lab block for selected date'}" onclick="event.stopPropagation();deleteLabOrderGroup('${o.id}')">🗑️ All</button>
       </div>
     </div>
     <div style="font-family:var(--mono);font-size:9.5px;color:var(--bmh-teal);margin-bottom:4px">${o.bmhId} · ${o.age ? o.age+'Y' : '—'}${o.sex ? ' / '+o.sex : ''}</div>
     <div style="font-size:11px;color:var(--tx3)">Ref: ${o.dr} · ${o.date}</div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
-      ${o.tests.map(t=>`<span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${t}</span>`).join('')}
+      ${o.tests.map((t,ti)=>`<span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${t}<span title="Delete this test" onclick="event.stopPropagation();bmhLabDeleteTest('${o.id}',${ti})" style="margin-left:5px;cursor:pointer;font-weight:900;opacity:.75">×</span></span>`).join('')}
     </div>
   </div>`).join('');
   const sel = document.getElementById('lab-pt-sel');
