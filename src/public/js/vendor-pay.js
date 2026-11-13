@@ -107,7 +107,10 @@
   }
   if (!listenPay()) { var lp = 0, lpi = setInterval(function () { if (listenPay() || ++lp > 120) clearInterval(lpi); }, 1000); }
   var rcT = null;
-  function reconcileSoon() { clearTimeout(rcT); rcT = setTimeout(function () { if (window._bmhFinancialsHydrating) { reconcileSoon(); return; } if (reconcile()) { try { saveBmhFinancials(); } catch (e) {} try { bmhRenderVendorTables(); } catch (e) {} } }, 400); }
+  function reconcileSoon() { clearTimeout(rcT); rcT = setTimeout(function () { if (window._bmhFinancialsHydrating) { reconcileSoon(); return; }
+      // only once this computer holds the shared financials record (never on an empty / not-yet-loaded copy)
+      if (!window._bmhFinRemoteSeen || !bills().length) return;
+      if (reconcile()) { try { saveBmhFinancials(); } catch (e) {} try { bmhRenderVendorTables(); } catch (e) {} } }, 400); }
   function reconcile() {
     var ids = Object.keys(VPAY); if (!ids.length) return false;
     var byBill = {}, changed = false, at = new Date().toISOString();
