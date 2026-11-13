@@ -9,6 +9,10 @@
  *  • Paying more than is due keeps the extra as an ADVANCE with that vendor (saved at vendorAdvances/<vendor>). The
  *    advance is shown in the vendor list and offered ("Use advance") the next time that vendor is paid.
  *  • Every payment is kept on the bill it cleared (date, amount, mode, ref, who) — shown under the selected bill.
+ *  • Every payment is also saved on its own (vendorPayments/<payId>: which bills, how much, ledger line). The shared
+ *    financials record can be overwritten by a computer holding an older copy; the bills and the ledger line are put back
+ *    from vendorPayments whenever that happens, so a payment never "un-pays" a bill again.
+ *  • Admin: "✏️ Correct advance" next to a vendor's advance sets it to the right figure (an adjustment line is kept).
  *  Only vendor bills, vendor payments and the matching ledger line are touched; patient billing / reception are not.
  */
 (function () {
@@ -46,6 +50,7 @@
           if (!Array.isArray(v.payments)) v.payments = [];
           v.payments.push({ amount: Math.round(got * 100) / 100, date: m.date || at.slice(0, 10), at: at, mode: mode || '', ref: ref || '', by: who(), payId: m.payId || '' });
           if (m.date) v.paidAt = m.date + 'T' + at.slice(11);
+          v.updatedAt = at;
         });
       } catch (e) {}
       return left;
@@ -61,6 +66,21 @@
     return Math.max(0, Math.round(t * 100) / 100);
   }
   window.bmhVendorAdvance = advBalance;
+  function isAdmin() { try { return !!(CURRENT_USER && (CURRENT_USER.isAdmin || String(CURRENT_USER.role || '').toLowerCase() === 'admin')); } catch (e) { return false; } }
+  window.bmhVendorCorrectAdvance = function (vendor) {
+    if (!isAdmin()) { toast('Only admin can correct an advance', 'w'); return; }
+    var cur = advBalance(vendor);
+    var v = prompt('Advance with ' + vendor + ' is ' + inr(cur) + '.\n\nEnter the correct advance amount (0 if there is no advance):', '0');
+    if (v === null) return;
+    var n = Number(String(v).replace(/[^0-9.]/g, ''));
+    if (!isFinite(n) || n < 0) { toast('Enter an amount', 'w'); return; }
+    var why = prompt('Reason (kept with the correction):', 'Recorded as advance by mistake — paid bill to bill') || '';
+    var diff = Math.round((n - cur) * 100) / 100; if (!diff) return;
+    if (!confirm('Change the advance with ' + vendor + ' from ' + inr(cur) + ' to ' + inr(n) + '?')) return;
+    advAdd(vendor, diff, { note: 'Correction by admin' + (why ? ' — ' + why : ''), date: today() });
+    try { decorate(); } catch (e) {} rerender();
+    toast('Advance with ' + vendor + ' is now ' + inr(n) + ' ✓', 's');
+  };
   function advAdd(vendor, amount, info) {
     vendor = canon(vendor);
     var k = vkey(vendor), id = 'A' + Date.now() + Math.random().toString(36).slice(2, 5);
@@ -76,6 +96,46 @@
     return true;
   }
   if (!listenAdv()) { var ln = 0, liv = setInterval(function () { if (listenAdv() || ++ln > 120) clearInterval(liv); }, 1000); }
+
+  // ── payment record of its own + putting bills / ledger back after an overwrite ──
+  var VPAY = {}, vpOn = false;
+  function listenPay() {
+    if (vpOn || !window.FBDB) return vpOn;
+    vpOn = true;
+    window.FBDB.ref('vendorPayments').on('value', function (s) { VPAY = s.val() || {}; reconcileSoon(); }, function () {});
+    return true;
+  }
+  if (!listenPay()) { var lp = 0, lpi = setInterval(function () { if (listenPay() || ++lp > 120) clearInterval(lpi); }, 1000); }
+  var rcT = null;
+  function reconcileSoon() { clearTimeout(rcT); rcT = setTimeout(function () { if (window._bmhFinancialsHydrating) { reconcileSoon(); return; } if (reconcile()) { try { saveBmhFinancials(); } catch (e) {} try { bmhRenderVendorTables(); } catch (e) {} } }, 400); }
+  function reconcile() {
+    var ids = Object.keys(VPAY); if (!ids.length) return false;
+    var byBill = {}, changed = false, at = new Date().toISOString();
+    ids.forEach(function (pid) { var p = VPAY[pid] || {}; var a = p.alloc || {}; Object.keys(a).forEach(function (bid) { (byBill[bid] = byBill[bid] || []).push({ pid: pid, p: p, amt: Number(a[bid]) || 0 }); }); });
+    bills().forEach(function (v) {
+      var key = String(v && v.id || '').replace(/[.#$\[\]\/]/g, '_'); var logged = byBill[key]; if (!logged) return;
+      var pays = Array.isArray(v.payments) ? v.payments : [];
+      var have = {}; pays.forEach(function (x) { if (x && x.payId) have[x.payId] = 1; });
+      var miss = logged.filter(function (l) { return !have[l.pid] && l.amt > 0; });
+      if (!miss.length) return;
+      var add = miss.reduce(function (t, l) { return t + l.amt; }, 0);
+      var amount = Number(v.amount) || 0;
+      v.paidAmount = Math.min(amount || Infinity, Math.round(((Number(v.paidAmount) || 0) + add) * 100) / 100);
+      v.payments = pays.concat(miss.map(function (l) { return { amount: l.amt, date: l.p.date || '', at: l.p.at || at, mode: l.p.mode || '', ref: l.p.ref || '', by: l.p.by || '', payId: l.pid }; }));
+      var last = miss[miss.length - 1].p;
+      v.paidAt = (last.date ? last.date + 'T' + String(last.at || at).slice(11) : at); v.paidRef = last.ref || v.paidRef || ''; v.paymentMode = last.mode || v.paymentMode || '';
+      try { v.status = bmhVendorBillOutstanding(v) <= 0 ? 'paid' : 'partial'; } catch (e) { v.status = v.paidAmount >= amount ? 'paid' : 'partial'; }
+      v.updatedAt = at; changed = true;
+    });
+    var L = window.BMH_LEDGER || [], haveL = {}; L.forEach(function (r) { if (r && r.payId) haveL[r.payId] = 1; });
+    ids.forEach(function (pid) { var p = VPAY[pid]; if (p && p.ledger && !haveL[pid]) { L.push(Object.assign({ id: 'L' + pid }, p.ledger, { payId: pid })); changed = true; } });
+    return changed;
+  }
+  window.bmhVendorReconcilePayments = function () { var c = reconcile(); if (c) { try { saveBmhFinancials(); } catch (e) {} try { bmhRenderVendorTables(); } catch (e) {} } return c; };
+  var origApplySnap = window.applyBmhFinancialsSnapshot;
+  if (typeof origApplySnap === 'function') window.applyBmhFinancialsSnapshot = function () { var r = origApplySnap.apply(this, arguments); reconcileSoon(); return r; };
+  var origMerge = window._bmhMergeRemoteVendorBills;
+  if (typeof origMerge === 'function') window._bmhMergeRemoteVendorBills = function () { var r = origMerge.apply(this, arguments); reconcileSoon(); return r; };
 
   // ── the pop-up ──
   var S = null;
@@ -175,12 +235,16 @@
     Object.keys(S.dates).forEach(function (id) { var b = S.rows.find(function (v) { return v.id === id; }); if (b && S.dates[id] && S.dates[id] !== invDate(b)) { b.invoiceDate = S.dates[id]; b.updatedAt = new Date().toISOString(); } });
     meta = { date: date, payId: payId };
     try { applied.forEach(function (r) { window.bmhApplyVendorPaymentToBills([r.v], r.apply, mode, ref); }); } finally { meta = null; }
+    var alloc = {}; applied.forEach(function (r) { alloc[String(r.v.id || '').replace(/[.#$\[\]\/]/g, '_')] = r.apply; });
+    var rec = { vendor: S.vendor, date: date, at: new Date().toISOString(), mode: mode, ref: ref, amount: p.amt, advUsed: p.advUsed, extra: p.extra, alloc: alloc, by: who() };
     if (p.advUsed > 0) advAdd(S.vendor, -p.advUsed, { note: 'Used against bills', payId: payId, date: date, bills: applied.map(function (r) { return r.v.invoiceNo || r.v.id; }).join(', ') });
     if (p.extra > 0) advAdd(S.vendor, p.extra, { note: 'Paid more than due', payId: payId, date: date, mode: mode, ref: ref });
     if (p.amt > 0) {
       var nar = (S.mode === 'choose' ? 'Vendor bills — ' + applied.map(function (r) { return r.v.invoiceNo || 'Bill'; }).join(', ') : 'Vendor account clearance — ' + S.vendor) + (p.extra > 0 ? ' (' + inr(p.extra) + ' kept as advance)' : '');
-      try { bmhAppendLedger({ date: date + 'T' + new Date().toISOString().slice(11), type: 'Payment', narration: nar, dr: p.amt, cr: 0, party: S.vendor, ref: (mode ? mode + ' · ' : '') + ref }); } catch (e) { console.warn(e); }
+      rec.ledger = { date: date + 'T' + new Date().toISOString().slice(11), type: 'Payment', narration: nar, dr: p.amt, cr: 0, party: S.vendor, ref: (mode ? mode + ' · ' : '') + ref };
+      try { bmhAppendLedger(Object.assign({ payId: payId }, rec.ledger)); } catch (e) { console.warn(e); }
     }
+    try { if (window.FBDB) { VPAY[payId] = rec; window.FBDB.ref('vendorPayments/' + payId).set(rec).catch(function (er) { console.warn('[vendor-pay] log', er); }); } } catch (er) {}
     try { saveBmhFinancials(); } catch (e) {}
     var v = S.vendor;
     document.getElementById('vp-ov').remove(); S = null;
@@ -218,7 +282,7 @@
       Array.prototype.forEach.call(el.querySelectorAll('strong'), function (st) {
         var n = st.textContent.trim(), a = names[n] ? advBalance(n) : 0;
         var tag = st.parentNode.querySelector('.vp-adv');
-        if (a > 0) { if (!tag) { tag = document.createElement('span'); tag.className = 'vp-adv'; tag.style.cssText = 'margin-left:6px;font-size:10.5px;font-weight:800;color:#1a8c3c;background:#e8f6ec;border-radius:8px;padding:1px 6px'; st.after(tag); } tag.textContent = 'Advance ' + inr(a); }
+        if (a > 0) { if (!tag) { tag = document.createElement('span'); tag.className = 'vp-adv'; tag.style.cssText = 'margin-left:6px;font-size:10.5px;font-weight:800;color:#1a8c3c;background:#e8f6ec;border-radius:8px;padding:1px 6px'; st.after(tag); } tag.textContent = 'Advance ' + inr(a) + (isAdmin() ? ' ✏️' : ''); if (isAdmin()) { tag.style.cursor = 'pointer'; tag.title = 'Correct advance (admin)'; tag.onclick = (function (nm) { return function (e) { e.stopPropagation(); window.bmhVendorCorrectAdvance(nm); }; })(n); } }
         else if (tag) tag.remove();
       });
     });

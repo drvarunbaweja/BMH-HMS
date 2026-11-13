@@ -19385,7 +19385,8 @@ function _renderStockListNow() {
     const storeTabs = storeKeys.map(function (store) {
       const bucket = stores[store] || { total: 0 };
       const active = store === activeStore;
-      return `<button type="button" class="btn btn-sm ${active ? 'btn-blue' : 'btn-outline'}" style="white-space:nowrap;flex:0 0 auto" onclick="bmhSelectInventoryStockStore(${bmhInventoryJsString(dk)},${bmhInventoryJsString(store)})">${escapeHtmlConsent(store)} (${Number(bucket.total || 0)})</button>`;
+      return `<button type="button" class="btn btn-sm ${active ? 'btn-blue' : 'btn-outline'}" style="white-space:nowrap;flex:0 0 auto" onclick="bmhSelectInventoryStockStore(${bmhInventoryJsString(dk)},${bmhInventoryJsString(store)})">${escapeHtmlConsent(store)} (${Number(bucket.total || 0)})</button>`
+        + (active && typeof window.bmhMoveStoreToDept === 'function' && window.CURRENT_USER && CURRENT_USER.isAdmin ? `<button type="button" class="btn btn-sm btn-outline" style="white-space:nowrap;flex:0 0 auto" title="Move this store and all its stock to another heading" onclick="bmhMoveStoreToDept(${bmhInventoryJsString(store)})">🏷 Move to heading</button>` : '');
     }).join('');
     let storeDetailHtml = '<div style="font-size:11px;color:var(--g1);padding:10px 0">Select a store to view its categories and stock items.</div>';
     if (activeStore && stores[activeStore]) {
