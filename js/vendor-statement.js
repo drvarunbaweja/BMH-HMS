@@ -18,7 +18,8 @@
   function norm(s) { try { return normalizeInventoryCompareText(String(s || '')); } catch (e) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); } }
   function due(v) { try { return bmhVendorBillOutstanding(v); } catch (e) { return Math.max(0, (Number(v.amount) || 0) - (Number(v.paidAmount) || 0)); } }
   function bills() { return window.BMH_VENDOR_BILLS || []; }
-  function dateOf(v) { return String(v.billDateKey || v.createdAt || '').slice(0, 10); }
+  // bill date (entered / corrected on the bill), else the day it was entered
+  function dateOf(v) { return String(v.invoiceDate || v.billDateKey || v.createdAt || '').slice(0, 10); }
   function fmtDate(k) { if (!k) return '—'; var p = String(k).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : k; }
   function todayKey() { try { return localDateKey(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
   // financial year "2026-27" runs 1 Apr 2026 → 31 Mar 2027

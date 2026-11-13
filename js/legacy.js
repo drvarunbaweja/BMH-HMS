@@ -14768,7 +14768,7 @@ function bmhGetFilteredVendorBillRows() {
   const filterDateTo = String(document.getElementById('inv-vendor-date-to')?.value || '').trim();
   return (window.BMH_VENDOR_BILLS || []).slice().reverse().filter(function (v) {
     const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
-    const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
+    const dateKey = String(v.invoiceDate || v.billDateKey || v.createdAt || '').slice(0, 10);
     const dateOk = (!filterDateFrom || dateKey >= filterDateFrom) && (!filterDateTo || dateKey <= filterDateTo);
     return vendorOk && dateOk;
   });
@@ -14853,7 +14853,7 @@ function bmhRenderVendorTables() {
         const idArg = String(v.id || '').replace(/'/g, "\\'");
         return `<tr style="cursor:pointer;${selBg}" onclick="bmhSelectVendorBill('${idArg}')">
           <td onclick="event.stopPropagation()">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}" onclick="event.stopPropagation()">` : ''}</td>
-          <td style="padding-left:22px"><div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal);font-weight:900">${escapeHtmlConsent(v.invoiceNo || 'No invoice')}</div><div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''} · ${escapeHtmlConsent(String(v.billDateKey || v.createdAt || '').slice(0, 10) || 'No date')}</div></td>
+          <td style="padding-left:22px"><div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal);font-weight:900">${escapeHtmlConsent(v.invoiceNo || 'No invoice')}</div><div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''} · ${escapeHtmlConsent(String(v.invoiceDate || v.billDateKey || v.createdAt || '').slice(0, 10) || 'No date')}</div></td>
           <td>₹${Number(v.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:${out > 0 ? '#b55a00' : 'var(--g1)'}">Due ₹${out.toLocaleString('en-IN')}</div></td>
           <td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(v.dueDate || (v.billMode === 'on-use' ? 'On use' : '—'))}</div></td>
           <td style="font-size:10px" onclick="event.stopPropagation()">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${idArg}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td>
@@ -14911,7 +14911,7 @@ function bmhRenderVendorTables() {
           <div style="padding-top:2px">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}">` : ''}</div>
           <div style="min-width:0">
             <a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')" style="font-weight:800;color:var(--bmh-blue);text-decoration:none">${escapeHtmlConsent(v.invoiceNo || 'No Invoice')}</a>
-            <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(v.vendor || '')} · Bill date ${escapeHtmlConsent(String(v.billDateKey || v.createdAt || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(v.dept || '')}</div>
+            <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(v.vendor || '')} · Bill date ${escapeHtmlConsent(String(v.invoiceDate || v.billDateKey || v.createdAt || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(v.dept || '')}</div>
             <div style="font-size:10px;color:var(--g1);margin-top:2px">Amount ₹${Number(v.amount || 0).toLocaleString('en-IN')} · Paid ₹${paid.toLocaleString('en-IN')} · Pending ₹${out.toLocaleString('en-IN')} · ${escapeHtmlConsent(v.paymentMode || 'Pending')}${v.paidRef ? ' · ' + escapeHtmlConsent(v.paidRef) : ''}</div>
           </div>
           <div style="text-align:right">
