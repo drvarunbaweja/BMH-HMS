@@ -57,6 +57,20 @@
     if (/^skin/.test(s)) return 'skin';
     return '';
   }
+  // a heading named after a department belongs to it (e.g. "Ophthalmology - CHD" → Eye), so that department's login sees it
+  function fam(d) {
+    var k = String(d || '').trim().toLowerCase(); if (!k || /^(ophtho|obg|psych|skin)$/.test(k)) return k;
+    try {
+      var rows = typeof loadInventoryDeptRows === 'function' ? loadInventoryDeptRows() : [];
+      var r = rows.find(function (x) { return String(x.value || '').toLowerCase() === k; });
+      var l = String((r && r.label) || '').toLowerCase();
+      if (/^(ophthal|eye)/.test(l)) return 'ophtho';
+      if (/^(obg|obst|gyn)/.test(l)) return 'obg';
+      if (/^psych/.test(l)) return 'psych';
+      if (/^(skin|derm)/.test(l)) return 'skin';
+    } catch (e) {}
+    return k;
+  }
   function itemDept(item) { try { return normalizeDeptKeyForQueue(item.dept || '') || deptKey(item.dept); } catch (e) { return deptKey(item.dept); } }
   function inScope(item, sc) {
     sc = sc || scope(); if (!sc) return true; if (!item) return false;
@@ -64,13 +78,13 @@
     var c = st ? storeCentre(st) : (centreKey(item.centre) || 'RPR');
     if (sc.centre !== 'ALL' && c !== sc.centre) return false;
     var d = storeDept(st) || itemDept(item);
-    return d === sc.dept;
+    return fam(d) === sc.dept;
   }
   function storeInScope(name, sc) {
     sc = sc || anyScope(); if (!sc) return true;
     if (sc.centre !== 'ALL' && storeCentre(name) !== sc.centre) return false;
     var d = storeDept(name);
-    return !d || d === sc.dept;
+    return !d || fam(d) === sc.dept;
   }
 
   // ── keep a department login's working stock list to its own stock ──
@@ -107,10 +121,10 @@
   var SWAP = ['BMH_PURCHASES', 'BMH_INVENTORY_USAGE', 'BMH_INVENTORY_TRANSFERS', 'BMH_INVENTORY_INDENTS', 'BMH_INVENTORY_REMOVALS'];
   function rowInScope(row, sc) {
     if (!row) return false;
-    if (row.fromStore || row.toStore) return (!!row.fromStore && storeInScope(row.fromStore, sc) && (storeDept(row.fromStore) || itemDept(row)) === sc.dept) || (!!row.toStore && storeInScope(row.toStore, sc) && (storeDept(row.toStore) || itemDept(row)) === sc.dept);
+    if (row.fromStore || row.toStore) return (!!row.fromStore && storeInScope(row.fromStore, sc) && fam(storeDept(row.fromStore) || itemDept(row)) === sc.dept) || (!!row.toStore && storeInScope(row.toStore, sc) && fam(storeDept(row.toStore) || itemDept(row)) === sc.dept);
     if (row.store) return inScope({ store: row.store, dept: row.dept }, sc);
     var d = itemDept(row);
-    return d === sc.dept && (sc.centre === 'ALL' || !row.centre || centreKey(row.centre) === sc.centre);
+    return fam(d) === sc.dept && (sc.centre === 'ALL' || !row.centre || centreKey(row.centre) === sc.centre);
   }
   function withScopedLists(fn, self, args) {
     var sc = anyScope();
