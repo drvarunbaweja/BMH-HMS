@@ -3553,10 +3553,56 @@ function togglePayCard(pid) {
   if(chevron) chevron.innerHTML = open ? '&#8964;' : '&#8963;';
 }
 
+// Collect one charge in two or three payment modes (e.g. ₹500 Cash + ₹500 UPI): one payment row per mode
+function bmhCollectSplitPayment(reqId) {
+  const req = PAY_REQUESTS.find(function (r) { return r.id === reqId; });
+  if (!req) return;
+  const total = Math.max(0, Number(req.amount) || 0);
+  const old = document.getElementById('bmh-split-collect'); if (old) old.remove();
+  const ov = document.createElement('div'); ov.id = 'bmh-split-collect';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:4950;background:rgba(10,20,40,.45);display:flex;align-items:center;justify-content:center;padding:12px';
+  const modes = ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Cheque'];
+  const row = function (i, mode, amt) {
+    return '<div style="display:flex;gap:6px;align-items:center;margin-top:6px"><select class="bmh-sc-mode" style="width:auto;flex:0 0 auto;padding:6px;border:1px solid #cfd6e2;border-radius:8px">' + modes.map(function (m) { return '<option' + (m === mode ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select>'
+      + '<input class="bmh-sc-amt" type="number" min="0" step="1" value="' + (amt || '') + '" placeholder="₹" style="width:110px;padding:6px;border:1px solid #cfd6e2;border-radius:8px;font-weight:800">'
+      + '<input class="bmh-sc-ref" placeholder="Ref / UTR" style="flex:1;min-width:80px;padding:6px;border:1px solid #cfd6e2;border-radius:8px"></div>';
+  };
+  ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.3)">'
+    + '<div style="font-size:15px;font-weight:900">Split payment</div>'
+    + '<div style="font-size:12px;color:#555;margin-top:2px">' + escapeHtmlConsent(req.patient || '') + ' · ' + escapeHtmlConsent(req.for || 'Service') + ' · <b>₹' + total.toLocaleString('en-IN') + '</b></div>'
+    + '<div id="bmh-sc-rows">' + row(0, 'Cash', Math.ceil(total / 2)) + row(1, 'UPI', Math.floor(total / 2)) + '</div>'
+    + '<div style="margin-top:6px"><a href="#" id="bmh-sc-add" style="font-size:11.5px">+ add another mode</a></div>'
+    + '<div id="bmh-sc-left" style="font-size:12.5px;font-weight:900;margin-top:8px"></div>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button type="button" class="btn btn-gray btn-sm" id="bmh-sc-cancel">Cancel</button><button type="button" class="btn btn-sm" style="background:var(--green);color:#fff" id="bmh-sc-ok">Collect ₹' + total.toLocaleString('en-IN') + '</button></div></div>';
+  document.body.appendChild(ov);
+  const read = function () {
+    return Array.from(ov.querySelectorAll('#bmh-sc-rows > div')).map(function (d) {
+      return { mode: d.querySelector('.bmh-sc-mode').value, amount: Math.max(0, Math.round(Number(d.querySelector('.bmh-sc-amt').value) || 0)), ref: String(d.querySelector('.bmh-sc-ref').value || '').trim() };
+    }).filter(function (x) { return x.amount > 0; });
+  };
+  const upd = function () {
+    const sum = read().reduce(function (t, x) { return t + x.amount; }, 0), diff = total - sum;
+    document.getElementById('bmh-sc-left').innerHTML = diff === 0 ? '<span style="color:#15803d">Total matches ✓</span>' : '<span style="color:#b42318">' + (diff > 0 ? '₹' + diff.toLocaleString('en-IN') + ' still to enter' : '₹' + (-diff).toLocaleString('en-IN') + ' more than the charge') + '</span>';
+  };
+  ov.addEventListener('input', upd);
+  document.getElementById('bmh-sc-add').onclick = function (e) { e.preventDefault(); const box = document.getElementById('bmh-sc-rows'); if (box.children.length >= 3) return; box.insertAdjacentHTML('beforeend', row(box.children.length, 'Credit Card', 0)); };
+  document.getElementById('bmh-sc-cancel').onclick = function () { ov.remove(); };
+  document.getElementById('bmh-sc-ok').onclick = function () {
+    const parts = read(), sum = parts.reduce(function (t, x) { return t + x.amount; }, 0);
+    if (sum !== total) { showToast('The amounts must add up to ₹' + total.toLocaleString('en-IN'), 'w'); return; }
+    ov.remove();
+    if (parts.length === 1) { req.mode = parts[0].mode; if (parts[0].ref) req.paymentRef = parts[0].ref; markPaid(reqId); return; }
+    req._splits = parts;
+    markPaid(reqId);
+  };
+  upd();
+}
+window.bmhCollectSplitPayment = bmhCollectSplitPayment;
 function collectPayment(reqId, pid) {
   // Set mode from UI selector, then delegate to markPaid
   const modeEl = document.getElementById('pay-mode-'+pid);
   const mode = modeEl ? modeEl.value : 'Cash';
+  if (mode === 'Split') { bmhCollectSplitPayment(reqId); return; }
   const req = PAY_REQUESTS.find(r=>r.id===reqId);
   if(req) req.mode = mode;
   if (req && isInsuranceLikeMode(mode)) {
@@ -5276,28 +5322,37 @@ function markPaid(id) {
   pr.status = 'paid';
   pr.updatedAt = new Date().toISOString();
   bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('payment-collected');
-  // Record as collected transaction
-  const txnId = 'TXN'+Date.now();
-  const txn = {
-    id:txnId, patient:pr.patient, bmhId:pr.bmhId, service:pr.for||'Service',
-    amount:pr.amount, mode:pr.mode||'Cash', collected:true,
-    dept:pr.dept||PATIENTS.find(x=>x.bmhId===pr.bmhId)?.dept||'ophtho',
-    time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    date:new Date().toISOString(), centre:pr.centre||CURRENT_USER?.centre||'CHD',
-    createdBy:CURRENT_USER?.name||'Reception',
-    payRequestId: pr.id,
-    billCats: [inferChargeCategoryFromService(pr.for || pr.service || 'Service')]
-  };
-  TRANSACTIONS.push(txn);
-  txn.chargeAllocations = bmhAllocatePaymentToChargeLines(pr.bmhId, pr.amount, {
-    txnId: txnId,
-    payRequestId: pr.id,
-    date: txn.date,
-    mode: txn.mode,
-    by: txn.createdBy
+  // Record as collected transaction(s) — one per payment mode when the payment is split (Cash + UPI …)
+  const baseTxnId = 'TXN'+Date.now();
+  const splitRows = Array.isArray(pr._splits) && pr._splits.length ? pr._splits.filter(function (x) { return x && Number(x.amount) > 0; }) : [];
+  const parts = splitRows.length ? splitRows : [{ mode: pr.mode || 'Cash', amount: pr.amount, ref: pr.paymentRef || '' }];
+  delete pr._splits;
+  if (splitRows.length > 1) pr.mode = splitRows.map(function (x) { return x.mode; }).join(' + ');
+  parts.forEach(function (part, idx) {
+    const txnId = baseTxnId + (parts.length > 1 ? '-' + (idx + 1) : '');
+    const txn = {
+      id:txnId, patient:pr.patient, bmhId:pr.bmhId, service:pr.for||'Service',
+      amount:Number(part.amount)||0, mode:part.mode||'Cash', collected:true,
+      dept:pr.dept||PATIENTS.find(x=>x.bmhId===pr.bmhId)?.dept||'ophtho',
+      time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+      date:new Date().toISOString(), centre:pr.centre||CURRENT_USER?.centre||'CHD',
+      createdBy:CURRENT_USER?.name||'Reception',
+      payRequestId: pr.id,
+      billCats: [inferChargeCategoryFromService(pr.for || pr.service || 'Service')]
+    };
+    if (part.ref) txn.paymentRef = part.ref;
+    if (parts.length > 1) { txn.splitPart = idx + 1; txn.splitOf = parts.length; }
+    TRANSACTIONS.push(txn);
+    txn.chargeAllocations = bmhAllocatePaymentToChargeLines(pr.bmhId, txn.amount, {
+      txnId: txnId,
+      payRequestId: pr.id,
+      date: txn.date,
+      mode: txn.mode,
+      by: txn.createdBy
+    });
+    saveTransactionToFirebase&&saveTransactionToFirebase(txn);
+    bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Payment: ' + (pr.for || 'Service'), dr: 0, cr: txn.amount, party: pr.patient, ref: (txn.mode || 'Cash') + (part.ref ? ' · ' + part.ref : (pr.paymentRef ? ' · ' + pr.paymentRef : '')) });
   });
-  saveTransactionToFirebase&&saveTransactionToFirebase(txn);
-  bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Payment: ' + (pr.for || 'Service'), dr: 0, cr: pr.amount, party: pr.patient, ref: (pr.mode || 'Cash') + (pr.paymentRef ? ' ' + pr.paymentRef : '') });
   saveBmhFinancials();
   // Deduct from advance if applicable
   const pt = PATIENTS.find(x=>x.bmhId===pr.bmhId);
@@ -13495,10 +13550,14 @@ function bmhCollectionDedupeKey(txn) {
   if (cat === 'consultation' || String(txn.type || '').toLowerCase() === 'consultation-synthetic' || isConsultationPurposeText(text)) {
     return ['consultation', date, bmhId, dept, amount].join('|');
   }
+  // a payment split between modes (Cash + UPI …) is several rows of one bill / request — keep each part
+  const splitPart = Number(txn.splitPart || ((String(txn.id || '').match(/-(\d+)$/) || [])[1]) || 0);
+  const splitSfx = splitPart > 1 ? '|' + splitPart : '';
+  if (String(txn.type || '').toLowerCase() === 'due-payment' && txn.id) return 'id|' + String(txn.id);
   const billId = String(txn.billId || '').trim();
-  if (billId) return 'bill|' + billId;
+  if (billId) return 'bill|' + billId + splitSfx;
   const prId = String(txn.payRequestId || '').trim();
-  if (prId) return 'pay-request|' + prId;
+  if (prId) return 'pay-request|' + prId + splitSfx;
   const id = String(txn.id || '').trim();
   if (id) return 'id|' + id;
   return ['row', date, bmhId, dept, amount, String(text || '').trim().toLowerCase()].join('|');
@@ -28753,6 +28812,7 @@ function renderDeptSummary() {
               <option value="UPI"${String(r.mode || '').toLowerCase()==='upi' ? ' selected' : ''}>UPI</option>
               <option value="Credit Card"${String(r.mode || '').toLowerCase()==='credit card' ? ' selected' : ''}>Credit Card</option>
               <option value="Insurance/TPA"${isInsuranceLikeMode(r.mode || r.ins || '') ? ' selected' : ''}>Insurance/TPA</option>
+              <option value="Split">Split (Cash + UPI …)</option>
             </select><button class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="collectPayment('${r.id}','${String(r.id || '').replace(/[^a-z0-9]/gi,'')}')">Collect</button>`:`<span style="font-size:10px;background:var(--green-lt);color:#1a8c3c;padding:2px 8px;border-radius:10px;font-weight:700">✓ Paid</span>`}
             ${canDeleteDue ? `<button class="btn btn-xs btn-gray" onclick="deletePayRequest('${r.id}')" title="Delete due">✕</button>` : ''}
             <button class="btn btn-xs btn-outline" onclick="openXRefModal('${r.bmhId}')" title="Cross-refer">↔️</button>
