@@ -7177,6 +7177,8 @@ function buildSidebarForRole(role, dept, name) {
     nav_el.innerHTML = `
       <div class="ngrp">Staff</div>
       <div class="ni active" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`;
+    // staff phones open straight on Attendance (incl. a night duty still open from last evening)
+    setTimeout(function () { try { nav('attendance', nav_el.querySelector('.ni')); } catch (e) {} }, 60);
   }
   // Admin role keeps the full default sidebar — no change needed
   appendApprovedModules();
@@ -49109,7 +49111,7 @@ function renderAttendanceKioskCard() {
       + '</div>';
   });
 }
-async function markStaffAttendance(kind) {
+async function markStaffAttendance(kind, forceNightDuty) {
   if (!CURRENT_USER) { showToast('Please login first', 'w'); return; }
   if (!['in','lunchOut','lunchIn','out'].includes(kind)) { showToast('Unknown attendance action', 'w'); return; }
   showToast('Checking location for ' + attendanceEventLabel(kind) + '…', 'i');
@@ -49136,7 +49138,7 @@ async function markStaffAttendance(kind) {
   if (!existing) existing = await fetchAttendanceForDate(targetDate, attendanceUserKey()) || {};
   const isEveningPunchIn = kind === 'in' && nowDate.getHours() >= 17;
   const nightDuty = kind === 'in'
-    ? (isEveningPunchIn && confirm('Are you on night duty for this punch in?'))
+    ? (forceNightDuty ? true : (isEveningPunchIn && confirm('Are you on night duty for this punch in?')))
     : !!existing.nightDuty;
   const centre = patientCentreKey(CURRENT_USER.centre || getEffectiveCentre?.() || 'CHD');
   const event = {
@@ -49222,7 +49224,13 @@ function renderAttendancePage() {
   if (!card && !recent) return;
   if (sub) sub.textContent = CURRENT_USER ? ((CURRENT_USER.name || CURRENT_USER.username || 'Staff') + ' · ' + (CURRENT_USER.centre || '')) : 'Not logged in';
   Promise.all([fetchAttendanceDisplayRow(), loadAttendanceGeofenceConfig()]).then(function ([row, config]) {
-    if (card) card.innerHTML = renderAttendanceRowCard(row || {});
+    if (card) {
+      const r = row || {}, ev = r.events || {};
+      const openNight = !!(r.nightDuty && ev.in && !ev.out);
+      card.innerHTML = (openNight ? '<div style="background:#1e1b4b;color:#fff;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;font-weight:800">🌙 Night duty in progress since ' + formatAttendanceTime(ev.in.at) + (r.date && r.date !== todayKey() ? ' (' + formatAttendanceDate(r.date) + ')' : '') + ' — press <b>Night Duty Out</b> when the shift ends</div>' : (r.nightDuty ? '<div style="font-size:11.5px;font-weight:800;color:#4338ca;margin-bottom:8px">🌙 Night duty</div>' : ''))
+        + renderAttendanceRowCard(r);
+      const nOut = document.getElementById('att-night-out'); if (nOut) nOut.style.display = openNight ? '' : 'none';
+    }
     if (recent) recent.innerHTML = renderMyRecentAttendanceLocal();
     const old = document.getElementById('att-geofence-admin-card');
     if (old) old.remove();
