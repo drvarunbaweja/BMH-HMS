@@ -152,6 +152,9 @@
 
   // ── surgeries (completed OT entries only) ─────────────────────────────────
   function otDone(c) { var s = String(c.status || '').toLowerCase(); return s === 'completed' || s === 'done'; }
+  // operated but never marked "Completed": the discharge card was printed / the patient was discharged
+  function otDischarged(c) { return !!(c.dischargePrintedAt || c.ipdDischargedAt || String(c.ipdStatus || '').toLowerCase() === 'discharged'); }
+  function eyeOf(c) { var s = String(c.eye || c.site || '').toLowerCase(); if (/\bou\b|both/.test(s)) return 'ou'; if (/\bod\b|right/.test(s)) return 'od'; if (/\bos\b|left/.test(s)) return 'os'; return ''; }
   function surgeryGroup(proc, hasIol, dept) {
     var s = String(proc || '').toLowerCase();
     if (dept === 'obg' || /lscs|caesar|cesar|delivery|\bnvd\b|mtp|termination|hysterect|d\s*&\s*c|laparo|cerclage|tubectomy|ligation/.test(s)) {
@@ -268,9 +271,20 @@
       var proc = String(c.procedureMain || c.procedure || c.surgery || '').trim();
       var st = String(c.status || 'pending').toLowerCase(); if (st === 'scheduled') st = 'pending';
       return { c: c, id: c.id, bmhId: String(c.bmhId || '').trim(), patient: c.patient || c.name || '', day: day, dept: dk, centre: centreKey(c.centre), proc: proc || 'Procedure',
-        group: surgeryGroup(proc + ' ' + String(c.procedure || ''), hasRealIol(c), dk), done: otDone(c), status: st, cancelled: st === 'cancelled',
+        group: surgeryGroup(proc + ' ' + String(c.procedure || ''), hasRealIol(c), dk), done: otDone(c), marked: otDone(c), status: st, cancelled: st === 'cancelled', eye: eyeOf(c),
         paid: 0, paidItems: [], claim: 0, claimStatus: '', insurer: '', unpaidBill: 0, cls: '' };
     }).filter(function (r) { return r.day; });
+    // Discharge card printed / discharged, OT date passed, not cancelled → counted as operated.
+    // A second entry for the same patient, same kind of surgery and same eye within 3 days is the same operation.
+    var today0 = todayKey_();
+    rows.forEach(function (r) { if (!r.done && !r.cancelled && r.day < today0 && otDischarged(r.c)) { r.done = true; r.byDischarge = true; } });
+    var seen = {};
+    rows.filter(function (r) { return r.done && r.bmhId; }).sort(function (a, b) { return (a.byDischarge ? 1 : 0) - (b.byDischarge ? 1 : 0) || String(a.day).localeCompare(String(b.day)); }).forEach(function (r) {
+      var k = r.bmhId + '|' + r.group;
+      var twin = (seen[k] || []).filter(function (o) { return (o.eye === r.eye || !o.eye || !r.eye) && Math.abs((new Date(o.day + 'T12:00:00') - new Date(r.day + 'T12:00:00')) / 864e5) <= 3; })[0];
+      if (twin && r.byDischarge) { r.done = false; r.byDischarge = false; r.dupOf = twin; return; }
+      (seen[k] = seen[k] || []).push(r);
+    });
     var byPt = {};
     rows.forEach(function (r) { if (r.bmhId && !r.cancelled) (byPt[r.bmhId] = byPt[r.bmhId] || []).push(r); });
     function nearest(id, day, lo, hi) {
@@ -326,6 +340,7 @@
     });
     rows.forEach(function (r) {
       if (r.cancelled) { r.cls = 'cancelled'; return; }
+      if (r.dupOf) { r.cls = 'duplicate'; r.future = r.day >= today; var ov0 = data.amounts && data.amounts[r.id]; r.override = ov0 && ov0.amount != null && ov0.amount !== '' ? Number(ov0.amount) : null; r.mark = data.marks && data.marks[r.id] || null; return; }
       if (r.paid > 0) r.cls = 'paid';
       else if (r.claim > 0 || r.claimStatus) r.cls = 'cashless';
       else if (r.unpaidBill > 0) r.cls = 'unpaid';
@@ -769,7 +784,7 @@
     }
     // Surgeries
     if (on('surgery')) {
-      var basis = 'Counting: completed OT entries' + (res.opt.countPaid ? ' + pending entries with a surgery payment' : '') + (res.opt.countCashless ? ' + pending entries with an ECHS/TPA claim' : '') + '.';
+      var basis = 'Counting: OT entries marked Completed, and past entries whose discharge card was printed (a repeat entry for the same patient, surgery and eye within 3 days is counted once)' + (res.opt.countPaid ? ' + pending entries with a surgery payment' : '') + (res.opt.countCashless ? ' + pending entries with an ECHS/TPA claim' : '') + '.';
       h += section('surgery', '⚕️ Surgeries', matrix(months, M, function (x) { return x.surgGroups; }, { first: 'Surgery' }), basis + ' Change this under Options → Surgery counting.');
     }
     // OT vs bills
@@ -788,17 +803,18 @@
         if (flt === 'donenobill') return r.done && (r.cls === 'none' || r.cls === 'ins-noclaim' || r.cls === 'camp');
         if (flt === 'cashless') return r.cls === 'cashless' || r.cls === 'ins-noclaim';
         if (flt === 'pendnone') return !r.done && (r.cls === 'none' || r.cls === 'duplicate');
+        if (flt === 'pastpend') return !r.marked && !r.future;
         return true;
       }).sort(function (x, y) { return String(y.day).localeCompare(String(x.day)); });
       var fbtn = function (k, label) { return '<button type="button" class="btn btn-sm ' + (flt === k ? 'btn-gold' : 'btn-outline') + '" style="margin:2px" onclick="bmhPracticeGrowth.otFilter(\'' + k + '\')">' + label + '</button>'; };
       var shown = list.slice(0, 300);
       h += section('otbills', '🧾 OT entries vs bills & ECHS / cashless claims',
         table(['What was found for the same patient', 'OT marked Completed', 'OT still pending', 'Total'], rowsC, { boldLast: true })
-        + '<div style="margin:10px 0 6px">' + fbtn('attention', 'Needs attention') + fbtn('pendpaid', 'Pending but paid / claimed') + fbtn('donenobill', 'Completed, no bill') + fbtn('cashless', 'ECHS / TPA') + fbtn('pendnone', 'Pending, no bill') + fbtn('all', 'All') + '</div>'
+        + '<div style="margin:10px 0 6px">' + fbtn('attention', 'Needs attention') + fbtn('pendpaid', 'Pending but paid / claimed') + fbtn('donenobill', 'Completed, no bill') + fbtn('cashless', 'ECHS / TPA') + fbtn('pendnone', 'Pending, no bill') + fbtn('pastpend', 'Past, not marked Completed') + fbtn('all', 'All') + '</div>'
         + (shown.length ? table(['Date', 'Patient', 'Procedure', 'OT status', 'Found', 'Paid', 'Claim', 'Case amount', 'Action', 'Details'], shown.map(function (r) {
           var sid = String(r.id || '').replace(/[^A-Za-z0-9_-]/g, '');
-          var status = r.done ? '<span style="color:#1a8c3c;font-weight:700">Completed</span>' + (r.c.completedVia === 'practice-growth' ? '<div style="font-size:9.5px;color:var(--g1)">marked here</div>' : '') : '<span style="color:#b45309;font-weight:700">' + esc(r.status) + '</span>';
-          var action = !sid ? '' : !r.done
+          var status = r.byDischarge ? '<span style="color:#1a8c3c;font-weight:700">Discharged</span><div style="font-size:9.5px;color:#b45309">not marked Completed</div>' : r.dupOf ? '<span style="color:#64748b;font-weight:700">Repeat entry</span><div style="font-size:9.5px;color:var(--g1)">same as ' + esc(fmtDay(r.dupOf.day)) + '</div>' : r.done ? '<span style="color:#1a8c3c;font-weight:700">Completed</span>' + (r.c.completedVia === 'practice-growth' ? '<div style="font-size:9.5px;color:var(--g1)">marked here</div>' : '') : '<span style="color:#b45309;font-weight:700">' + esc(r.status) + '</span>';
+          var action = !sid ? '' : !r.marked
             ? '<button type="button" class="btn btn-sm" id="pg-mk-' + sid + '" style="background:#1a8c3c;color:#fff;border:0;white-space:nowrap" onclick="bmhPracticeGrowth.markDone(\'' + sid + '\')">✓ Mark OT completed</button>'
             : (r.c.completedVia === 'practice-growth' && r.mark ? '<button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="bmhPracticeGrowth.undoDone(\'' + sid + '\')">↶ Undo</button>' : '');
           var amtCell = '<span id="pg-amt-' + sid + '">' + (r.override != null ? '<b>' + money(r.override) + '</b> <span style="font-size:9.5px;color:#6b3fa0">edited</span>' : (caseValue(r) ? money(caseValue(r)) : '–'))
@@ -972,7 +988,7 @@
   function rebuild() { G.recon = reconcile(G.data); draw(); }
   function markDone(id) {
     if (!allowed() || !isUnlocked()) { lockNow(); return; }
-    var r = findRow(id); if (!r || r.done) return;
+    var r = findRow(id); if (!r || r.marked) return;
     var btn = document.getElementById('pg-mk-' + id);
     if (btn && btn.dataset.armed !== '1') {
       btn.dataset.armed = '1'; btn.textContent = 'Tap again to confirm'; btn.style.background = '#c0392b';
@@ -1241,7 +1257,7 @@
         var io = iolName(r.c, data.catalog);
         val = (io && median(byIol[io.name] || [])) || (io && median(byTier[iolTier(io.type, io.name)] || [])) || median(byGroup[r.group] || []) || allMed;
       }
-      mm.otN++; if (r.done) mm.otDone++;
+      mm.otN++; if (r.marked) mm.otDone++;
       mm.otPot += val; mm.otPaid += Math.min(val, r.paid + (r.claimStatus === 'received' ? r.claim : 0));
       if (est) mm.otEst++;
       surgRows.push({ r: r, val: val, est: est });
