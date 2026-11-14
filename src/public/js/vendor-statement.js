@@ -20,6 +20,14 @@
   function bills() { return window.BMH_VENDOR_BILLS || []; }
   // bill date (entered / corrected on the bill), else the day it was entered
   function dateOf(v) { return String(v.invoiceDate || v.billDateKey || v.createdAt || '').slice(0, 10); }
+  function hasBillDate(v) { return !!(v.invoiceDate || v.billDateKey || v.opening); }
+  function dateCell(v, forPrint) {
+    if (hasBillDate(v)) return fmtDate(dateOf(v));
+    var ent = fmtDate(String(v.createdAt || '').slice(0, 10));
+    if (forPrint) return ent;
+    var idA = esc(String(v.id || '').replace(/'/g, ''));
+    return '<span title="Bill date not entered — shown by the date it was entered in the computer">' + ent + '</span>' + (typeof window.bmhSetVendorBillDate === 'function' ? '<div><a href="javascript:void 0" style="font-size:10px;font-weight:800;color:#d35400" onclick="bmhSetVendorBillDate(\'' + idA + '\')">📅 set bill date</a></div>' : '<div style="font-size:10px;color:#d35400">entered date</div>');
+  }
   function fmtDate(k) { if (!k) return '—'; var p = String(k).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : k; }
   function todayKey() { try { return localDateKey(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
   // financial year "2026-27" runs 1 Apr 2026 → 31 Mar 2027
@@ -65,10 +73,10 @@
     if (!list.length) return '<tr><td colspan="' + cols + '" style="text-align:center;color:#888;padding:8px">' + empty + '</td></tr>';
     return list.map(function (v) {
       var d = due(v), dup = st && st.dups[v.id], idA = esc(String(v.id || '').replace(/'/g, ''));
-      var acts = forPrint ? '' : '<td style="white-space:nowrap">' + (d > 0 ? '<button type="button" class="btn btn-xs btn-gold" onclick="bmhVendorStmtPayBill(\'' + idA + '\')">Pay</button> ' : '') + (!v.opening && Number(v.amount) > 0 ? '<button type="button" class="btn btn-xs btn-outline" onclick="bmhVendorStmtReturn(\'' + idA + '\')">Return</button>' : '') + (dup && isAdmin() ? ' <button type="button" class="btn btn-xs btn-red" onclick="bmhVendorStmtDelete(\'' + idA + '\')">Delete</button>' : '') + '</td>';
+      var acts = forPrint ? '' : '<td style="white-space:nowrap">' + (d > 0 ? '<button type="button" class="btn btn-xs btn-gold" onclick="bmhVendorStmtPayBill(\'' + idA + '\')">Pay</button> ' : '') + (!v.opening && Number(v.amount) > 0 ? '<button type="button" class="btn btn-xs btn-outline" onclick="bmhVendorStmtReturn(\'' + idA + '\')">Return</button>' : '') + (!v.opening && typeof window.bmhEditVendorBill === 'function' ? ' <button type="button" class="btn btn-xs btn-outline" title="Edit this bill (same invoice number)" onclick="bmhEditVendorBill(\'' + idA + '\',{lockInvoice:true})">✏️ Edit</button>' : '') + (dup && isAdmin() ? ' <button type="button" class="btn btn-xs btn-red" onclick="bmhVendorStmtDelete(\'' + idA + '\')">Delete</button>' : '') + '</td>';
       var ret = returnedOf(v) > 0 ? '<div style="font-size:10px;color:#6a1b9a">Returned ' + inr(returnedOf(v)) + (v.originalAmount ? ' of ' + inr(v.originalAmount) : '') + '</div>' : '';
       var cred = Number(v.creditBalance) > 0 ? '<div style="font-size:10px;color:#1a8c3c">Credit ' + inr(v.creditBalance) + '</div>' : '';
-      return '<tr' + (dup ? ' style="background:#fff3f3"' : '') + '><td>' + fmtDate(dateOf(v)) + '</td><td>' + esc(v.opening ? (v.invoiceNo || 'Opening balance') : (v.invoiceNo || 'No invoice')) + (dup ? ' <span style="font-size:10px;font-weight:800;color:#c62828">⚠ duplicate invoice</span>' : '') + (v.opening && v.note ? '<div style="font-size:10px;color:#777">' + esc(v.note) + '</div>' : '') + '</td><td style="text-align:right">' + inr(v.amount) + ret + cred + '</td><td style="text-align:right">' + inr(v.paidAmount) + '</td><td>' + (Number(v.paidAmount) > 0 ? fmtDate(String(v.paidAt || '').slice(0, 10)) + (v.paymentMode ? '<div style="font-size:10px;color:#777">' + esc(v.paymentMode) + (v.paidRef ? ' · ' + esc(v.paidRef) : '') + '</div>' : '') : '—') + '</td><td style="text-align:right;font-weight:800;color:' + (d > 0 ? '#b55a00' : '#1a8c3c') + '">' + (d > 0 ? inr(d) : 'Paid') + '</td>' + acts + '</tr>';
+      return '<tr' + (dup ? ' style="background:#fff3f3"' : '') + '><td>' + dateCell(v, forPrint) + '</td><td>' + esc(v.opening ? (v.invoiceNo || 'Opening balance') : (v.invoiceNo || 'No invoice')) + (dup ? ' <span style="font-size:10px;font-weight:800;color:#c62828">⚠ duplicate invoice</span>' : '') + (v.opening && v.note ? '<div style="font-size:10px;color:#777">' + esc(v.note) + '</div>' : '') + '</td><td style="text-align:right">' + inr(v.amount) + ret + cred + '</td><td style="text-align:right">' + inr(v.paidAmount) + '</td><td>' + (Number(v.paidAmount) > 0 ? fmtDate(String(v.paidAt || '').slice(0, 10)) + (v.paymentMode ? '<div style="font-size:10px;color:#777">' + esc(v.paymentMode) + (v.paidRef ? ' · ' + esc(v.paidRef) : '') + '</div>' : '') : '—') + '</td><td style="text-align:right;font-weight:800;color:' + (d > 0 ? '#b55a00' : '#1a8c3c') + '">' + (d > 0 ? inr(d) : 'Paid') + '</td>' + acts + '</tr>';
     }).join('');
   }
   function tableHtml(title, list, empty, foot, st, forPrint) {

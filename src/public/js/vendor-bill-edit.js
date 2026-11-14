@@ -20,8 +20,9 @@
   function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
   // ── edit form ──
-  window.bmhEditVendorBill = function (id) {
+  window.bmhEditVendorBill = function (id, opts) {
     var v = bills().find(function (r) { return r.id === id; }); if (!v) return;
+    var lockInv = !!(opts && opts.lockInvoice);
     var vendors = Array.from(new Set(bills().map(function (b) { return String(b.vendor || '').trim(); }).filter(Boolean))).sort();
     var stores = []; try { stores = (window.bmhInventoryStoreOptions ? window.bmhInventoryStoreOptions() : (window.BMH_STORE_LOCATIONS || [])) || []; } catch (e) {}
     var onUse = v.billMode === 'on-use' || !!v.usageLinked;
@@ -34,7 +35,7 @@
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:15px;font-weight:900">✏️ Edit vendor bill</div><button type="button" class="btn btn-xs btn-gray" id="vbe-x">✕</button></div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
       + '<label style="' + lab + ';grid-column:1/-1">Vendor<input id="vbe-vendor" list="vbe-vendors" style="' + inp + '" value="' + esc(v.vendor || '') + '"><datalist id="vbe-vendors">' + vendors.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></label>'
-      + '<label style="' + lab + '">Invoice no.<input id="vbe-inv" style="' + inp + '" value="' + esc(v.invoiceNo || '') + '"></label>'
+      + '<label style="' + lab + '">Invoice no.' + (lockInv ? ' <span style="font-weight:600;color:#888">(stays the same)</span>' : '') + '<input id="vbe-inv" style="' + inp + (lockInv ? ';background:#f1f3f6;color:#555' : '') + '" value="' + esc(v.invoiceNo || '') + '"' + (lockInv ? ' readonly' : '') + '></label>'
       + '<label style="' + lab + '">Bill date (date the bill was raised)<input id="vbe-date" type="date" style="' + inp + '" value="' + esc(billDate(v)) + '"></label>'
       + '<label style="' + lab + '">Bill amount ₹<input id="vbe-amt" type="number" min="0" step="0.01" style="' + inp + '" value="' + esc(Number(v.amount || 0)) + '"></label>'
       + '<label style="' + lab + '">Amount already paid ₹<input id="vbe-paid" type="number" min="0" step="0.01" style="' + inp + '" value="' + esc(Number(v.paidAmount || 0)) + '"></label>'
@@ -52,7 +53,7 @@
     g('vbe-onuse').onchange = function () { g('vbe-due').disabled = this.checked; };
     g('vbe-save').onclick = function () {
       var nv = {
-        vendor: String(g('vbe-vendor').value || '').trim(), invoiceNo: String(g('vbe-inv').value || '').trim(), invoiceDate: g('vbe-date').value || '',
+        vendor: String(g('vbe-vendor').value || '').trim(), invoiceNo: lockInv ? v.invoiceNo : String(g('vbe-inv').value || '').trim(), invoiceDate: g('vbe-date').value || '',
         amount: Math.max(0, Number(g('vbe-amt').value) || 0), paidAmount: Math.max(0, Number(g('vbe-paid').value) || 0),
         store: String(g('vbe-store').value || '').trim(), notes: String(g('vbe-notes').value || '').trim()
       };
