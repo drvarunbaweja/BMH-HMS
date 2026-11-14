@@ -117,6 +117,68 @@
     };
   }
 
+  // ── quick bill date (click the date on a bill row) ──
+  window.bmhSetVendorBillDate = function (id) {
+    var v = bills().find(function (r) { return r.id === id; }); if (!v) return;
+    var old = document.getElementById('vbd-ov'); if (old) old.remove();
+    var ov = document.createElement('div'); ov.id = 'vbd-ov';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:4900;background:rgba(10,20,40,.35);display:flex;align-items:center;justify-content:center;padding:12px';
+    ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:14px;max-width:340px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.3)">'
+      + '<div style="font-weight:900;font-size:14px">📅 Bill date</div><div style="font-size:11.5px;color:#555;margin:2px 0 8px">' + esc(v.vendor || '') + ' · ' + esc(v.invoiceNo || '') + ' · ' + inr(v.amount) + '<br>Entered in the computer on ' + esc(String(v.createdAt || '').slice(0, 10)) + '</div>'
+      + '<input type="date" id="vbd-date" value="' + esc(String(v.invoiceDate || '').slice(0, 10)) + '" style="width:100%;padding:8px;border:1px solid #cfd6e2;border-radius:8px;font-size:14px">'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button type="button" class="btn btn-gray btn-sm" id="vbd-c">Cancel</button><button type="button" class="btn btn-gold btn-sm" id="vbd-s">Save</button></div></div>';
+    document.body.appendChild(ov);
+    var inp = document.getElementById('vbd-date'); setTimeout(function () { try { inp.focus(); inp.showPicker && inp.showPicker(); } catch (e) {} }, 50);
+    document.getElementById('vbd-c').onclick = function () { ov.remove(); };
+    ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+    document.getElementById('vbd-s').onclick = function () {
+      var d = inp.value; if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { toast('Choose the date on the bill', 'w'); return; }
+      var at = new Date().toISOString();
+      if (v.invoiceDate !== d) v.edits = (Array.isArray(v.edits) ? v.edits : []).concat([{ at: at, by: who(), changes: ['Bill date: ' + (billDate(v) || '—') + ' → ' + d] }]).slice(-20);
+      v.invoiceDate = d; v.updatedAt = at;
+      try { saveBmhFinancials(); } catch (e) {}
+      try { bmhRenderVendorTables(); } catch (e) {}
+      ov.remove(); toast('Bill date saved ✓', 's');
+    };
+  };
+
+  // ── bill dates are never lost when another computer's copy (without them) is received ──
+  var origApply = window.applyBmhFinancialsSnapshot;
+  if (typeof origApply === 'function') {
+    window.applyBmhFinancialsSnapshot = function () {
+      var keep = {}; bills().forEach(function (b) { if (b && b.id && b.invoiceDate) keep[b.id] = { d: b.invoiceDate, e: b.edits }; });
+      var r = origApply.apply(this, arguments);
+      var filled = 0;
+      bills().forEach(function (b) { var k = b && keep[b.id]; if (k && !b.invoiceDate) { b.invoiceDate = k.d; if (!b.edits && k.e) b.edits = k.e; filled++; } });
+      if (filled) setTimeout(function () { if (window._bmhFinancialsHydrating) return; try { saveBmhFinancials(); } catch (e) {} }, 1500);
+      return r;
+    };
+  }
+
+  // ── Billing → Vendors only for Dr Varun (admin) and TPA Ropar ──
+  function vendorsAllowed() {
+    try {
+      var u = CURRENT_USER || {}; var n = String(u.username || '').toLowerCase();
+      return ['drvarun', 'tpa_rpr', 'tpa.rpr'].indexOf(n) >= 0 || u.name === 'Dr. Varun Baweja' || u.name === 'TPA Executive RPR';
+    } catch (e) { return false; }
+  }
+  window.bmhVendorsAllowed = vendorsAllowed;
+  function applyVendorsAccess() {
+    var ok = vendorsAllowed();
+    Array.prototype.forEach.call(document.querySelectorAll('#pg-billing .ptab[onclick*="\'vendors\'"]'), function (t) { t.style.display = ok ? '' : 'none'; });
+    if (!ok) { var p = document.getElementById('inv-vendor'); if (p) p.style.display = 'none'; }
+  }
+  var origSwitch = window.bmhBillingTabSwitch;
+  if (typeof origSwitch === 'function') {
+    window.bmhBillingTabSwitch = function (el, mode) {
+      if (mode === 'vendors' && !vendorsAllowed()) { toast('Vendor bills are not available for this login', 'w'); mode = 'current'; el = document.querySelector('#pg-billing .ptab'); }
+      var r = origSwitch.call(this, el, mode); applyVendorsAccess(); return r;
+    };
+  }
+  var origNav = window.nav;
+  if (typeof origNav === 'function') window.nav = function () { var r = origNav.apply(this, arguments); try { applyVendorsAccess(); } catch (e) {} return r; };
+  setInterval(function () { try { if (document.getElementById('pg-billing') && document.getElementById('pg-billing').classList.contains('active')) applyVendorsAccess(); } catch (e) {} }, 3000);
+
   // ── each vendor's bills by bill date, oldest first ──
   var origGroups = window.bmhVendorBillGroups;
   if (typeof origGroups === 'function') {
