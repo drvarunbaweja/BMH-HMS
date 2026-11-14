@@ -261,7 +261,10 @@
   function caseValue(r) { return r.override != null ? r.override : r.paid + r.claim; }
   function reconcile(data) {
     var today = todayKey_();
-    var insPatients = {}, campPatients = {};
+    var insPatients = {}, campPatients = {}, srcByPt = {};
+    // named source chosen at reception (PRO / clinic / camp / ECHS …) — the latest one per patient, with its date
+    data.txns.forEach(function (t) { if (t.bmhId && t.refSource) { var d = String(t._day || ''); var o = srcByPt[t.bmhId] || (srcByPt[t.bmhId] = []); o.push({ day: d, src: String(t.refSource) }); } });
+    data.txns.forEach(function (t) { if (t.bmhId && /^camp/i.test(String(t.refSource || ''))) campPatients[t.bmhId] = String(t.refSource); });
     data.txns.forEach(function (t) { if (t.bmhId && /\bcamp\b/i.test(String(t.service || '') + ' ' + String(t.purpose || ''))) campPatients[t.bmhId] = String(t.campName || t.camp || t.referredBy || t.service || 'Camp').trim(); });
     data.txns.forEach(function (t) { if (t.bmhId && isIns((t.mode || '') + ' ' + (t.ins || ''))) insPatients[t.bmhId] = String(t.ins || t.mode || 'ECHS / TPA'); });
     data.pr.forEach(function (r) { if (r.bmhId && String(r.status || '').toLowerCase() !== 'cancelled' && isIns((r.mode || '') + ' ' + (r.ins || ''))) insPatients[r.bmhId] = String(r.ins || r.mode || 'ECHS / TPA'); });
@@ -358,6 +361,8 @@
         if (r.claimStatus !== 'received') { r.claim = ECHS_CATARACT; r.claimPending = ECHS_CATARACT; r.claimStatus = r.claimStatus && r.claimStatus !== 'recorded at billing' ? r.claimStatus : 'pending'; }
         r.cls = 'cashless';
       }
+      var srcs = (srcByPt[r.bmhId] || []).filter(function (x) { return x.day <= shiftDay(r.day, 3); }).sort(function (a, b) { return a.day < b.day ? 1 : -1; });
+      r.source = srcs.length ? srcs[0].src : '';
       var ov = data.amounts && data.amounts[r.id];
       r.override = ov && ov.amount != null && ov.amount !== '' ? Number(ov.amount) : null;
       r.mark = data.marks && data.marks[r.id] || null;
@@ -385,8 +390,10 @@
   }
   var AGENCIES = [['any', 'All patients'], ['echs', 'ECHS'], ['cghs', 'CGHS'], ['tpa', 'TPA / insurance'], ['camp', 'Camp'], ['self', 'Self-paid'], ['none', 'No bill / claim']];
   function agencyOf(r) {
-    var ins = String(r.insurer || '');
-    if (r.cls === 'camp') return 'camp';
+    var ins = String(r.insurer || ''), src = String(r.source || '');
+    if (r.cls === 'camp' || /^camp/i.test(src)) return 'camp';
+    if (/echs/i.test(src) && !r.paid) return 'echs';
+    if (/cghs/i.test(src) && !r.paid) return 'cghs';
     if (/echs/i.test(ins)) return 'echs';
     if (/cghs/i.test(ins)) return 'cghs';
     if (r.cls === 'cashless' || r.cls === 'ins-noclaim' || ins) return 'tpa';
@@ -844,7 +851,7 @@
           return [fmtDay(r.day), ptLink(r.bmhId, r.patient), esc(r.proc).slice(0, 60), status,
             '<span style="color:' + CLS[r.cls][1] + ';font-weight:700">' + CLS[r.cls][0] + '</span>', r.paid ? money(r.paid) : '–', r.claim ? money(r.claim) + (r.echs && !r.claimFromRequest ? '<div style="font-size:9.5px;color:var(--g1)">ECHS rate</div>' : '') : (r.cls === 'ins-noclaim' ? '—' : '–'),
             amtCell, action,
-            esc([r.insurer ? r.insurer + (r.claimStatus ? ' (' + r.claimStatus + ')' : '') : '', r.unpaidBill ? 'Unpaid bill ' + money(r.unpaidBill) : '', r.paidItems.join('; ')].filter(Boolean).join(' · ')).slice(0, 160)];
+            esc([r.source ? 'Source: ' + r.source : '', r.insurer ? r.insurer + (r.claimStatus ? ' (' + r.claimStatus + ')' : '') : '', r.unpaidBill ? 'Unpaid bill ' + money(r.unpaidBill) : '', r.paidItems.join('; ')].filter(Boolean).join(' · ')).slice(0, 160)];
         }), { leftCols: 5, wrap: true }) : '<div style="font-size:12px;color:var(--g1);padding:6px">Nothing in this view.</div>')
         + (list.length > shown.length ? '<div style="font-size:11px;color:var(--g1);margin-top:4px">Showing the latest 300 of ' + num(list.length) + '.</div>' : ''),
         'Each OT entry dated before today is matched to the same patient\'s surgery payments (cash/UPI/card, including advances), ECHS/TPA/cashless claims and unpaid bills, from up to 60 days before to 90 days after the OT date; each payment goes to the nearest OT entry only. ECHS/CGHS cataracts are taken at ₹14,500 each. Click a name to open the patient file. "✓ Mark OT completed" changes only that OT entry\'s status (no stock deduction, no follow-up booking) and can be undone here; "✏️" stores a corrected case amount for this report only — bills are not touched.');
@@ -921,7 +928,7 @@
           + '<td>' + esc(r.proc) + (r.c.eye || r.c.site ? '<div class="s">' + esc(r.c.eye || r.c.site) + '</div>' : '') + '</td><td>' + esc(iol) + '</td>'
           + '<td>' + esc(r.c.surgeon || '') + '</td><td>' + esc(r.centre === 'CHD' ? 'Chandigarh' : r.centre === 'RPR' ? 'Rupnagar' : '') + '</td>'
           + '<td>' + (r.marked ? 'Completed' : r.byDischarge ? 'Discharged' : r.dupOf ? 'Repeat entry' : esc(r.status)) + '</td>'
-          + '<td>' + esc(CLS[r.cls] ? CLS[r.cls][0] : r.cls) + '</td><td>' + esc(agencyLabel(agencyOf(r))) + (r.insurer ? '<div class="s">' + esc(r.insurer) + (r.claimStatus ? ' (' + esc(r.claimStatus) + ')' : '') + '</div>' : '') + (r.campNote ? '<div class="s">' + esc(r.campNote) + '</div>' : '') + (r.c.referredBy || p.referredBy ? '<div class="s">Ref: ' + esc(r.c.referredBy || p.referredBy) + '</div>' : '') + '</td>'
+          + '<td>' + esc(CLS[r.cls] ? CLS[r.cls][0] : r.cls) + '</td><td>' + esc(agencyLabel(agencyOf(r))) + (r.source ? '<div class="s"><b>' + esc(r.source) + '</b></div>' : '') + (r.insurer ? '<div class="s">' + esc(r.insurer) + (r.claimStatus ? ' (' + esc(r.claimStatus) + ')' : '') + '</div>' : '') + (r.campNote ? '<div class="s">' + esc(r.campNote) + '</div>' : '') + (r.c.referredBy || p.referredBy ? '<div class="s">Ref: ' + esc(r.c.referredBy || p.referredBy) + '</div>' : '') + '</td>'
           + '<td class="n">' + (r.paid ? money(r.paid) : '') + '</td><td class="n">' + (r.claim ? money(r.claim) : '') + '</td><td class="n">' + (v ? money(v) : '') + '</td><td class="tick"></td></tr>';
       }).join('');
       return '<table><thead><tr><th>#</th><th>OT date</th><th>Patient · BMSH ID · phone</th><th>Age/Sex</th><th>Procedure</th><th>IOL</th><th>Surgeon</th><th>Centre</th><th>OT status</th><th>Found</th><th>Agency</th><th class="n">Paid</th><th class="n">Claim</th><th class="n">Case amount</th><th>✓ / remarks</th></tr></thead><tbody>'
@@ -939,7 +946,9 @@
     } else {
       AGENCIES.filter(function (a) { return a[0] !== 'any'; }).forEach(function (a) {
         var rows = R.filter(function (r) { return inGroup(r, flt) && agencyOf(r) === a[0]; });
-        if (rows.length) parts.push([a[1] + ' — ' + groupName(flt), rows]);
+        // one sheet per named source (e.g. "Camp - Sarbat Da Bhala", "ECHS Ropar"), then the rest of that agency
+        var bySrc = {}; rows.forEach(function (r) { var k = (a[0] === 'camp' || a[0] === 'echs' || a[0] === 'cghs' || a[0] === 'tpa') && r.source ? r.source : ''; (bySrc[k] = bySrc[k] || []).push(r); });
+        Object.keys(bySrc).sort(function (x, y) { return (x ? 0 : 1) - (y ? 0 : 1) || x.localeCompare(y); }).forEach(function (k) { parts.push([(k ? k + ' (' + a[1] + ')' : a[1] + (Object.keys(bySrc).length > 1 ? ' — source not entered' : '')) + ' — ' + groupName(flt), bySrc[k]]); });
       });
     }
     if (!parts.length) { toast('Nothing to print in this view', 'i'); return; }

@@ -28341,7 +28341,10 @@ async function _registerPatientImpl() {
   patient.refType = refType;
   patient.refName = refName;
   patient.refMobile = refMobile;
-  patient.referredBy = refName || refType || '';
+  const refSource = String(document.getElementById('rc-ref-source')?.value || '').trim();
+  patient.refSource = refSource;
+  patient.referredBy = refName || refSource || refType || '';
+  try { window._bmhRcRefSource = refSource ? { bmhId: String(patient.bmhId || ''), src: refSource, at: Date.now() } : null; } catch (e) {}
   savePatientToFirebase(patient);
   const prevVisits = PATIENTS.filter(function (p) {
     if (!p || isMergedPatientRecord(p)) return false;
@@ -28461,7 +28464,7 @@ async function _registerPatientImpl() {
     balance: patient.balance, checkinAt:patient.checkinAt,purpose,surgeryToday: patient.surgeryToday,purposeUpdatedAt:patient.purposeUpdatedAt,purposeUpdatedBy:patient.purposeUpdatedBy,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
-    refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
+    refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '', refSource: patient.refSource || '',
     queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueAddedAt: patient.queueAddedAt || '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday, queueSource: patient.queueSource || (isPreReg ? '' : 'reception'), otCaseId: patient.otCaseId || null
   });
   if (typeof window.patchPatientFirestore === 'function') {
@@ -28498,7 +28501,8 @@ async function _registerPatientImpl() {
       refType: patient.refType || '',
       refName: patient.refName || '',
       refMobile: patient.refMobile || '',
-      referredBy: patient.referredBy || ''
+      referredBy: patient.referredBy || '',
+      refSource: patient.refSource || ''
     }).catch(() => {});
   }
 
@@ -28615,6 +28619,7 @@ function resetRegistrationForm() {
   const dept=document.getElementById('rc-dept'); if(dept) dept.value='ophtho';
   const payMode=document.getElementById('rc-pay-mode'); if(payMode) payMode.value='Cash';
   const refType=document.getElementById('rc-ref-type'); if(refType) refType.value='';
+  const refSrcSel=document.getElementById('rc-ref-source'); if(refSrcSel) refSrcSel.value='';
   ['rc-bmhid-result','rc-phone-match'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
   const phoneResults=document.getElementById('rc-phone-results'); if(phoneResults) phoneResults.style.display='none';
   const refDetail=document.getElementById('rc-ref-detail'); if(refDetail) refDetail.style.display='none';
@@ -38682,7 +38687,7 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
 
   const nowIso = new Date().toISOString();
   const merged = Object.assign({}, canonical);
-  ['mob','mob2','email','dob','addr','rel','dept','doctor','assignedDoctor','centre','color','purpose','refType','refName','refMobile','referredBy'].forEach(function (key) {
+  ['mob','mob2','email','dob','addr','rel','dept','doctor','assignedDoctor','centre','color','purpose','refType','refName','refMobile','referredBy','refSource'].forEach(function (key) {
     if ((!merged[key] || merged[key] === '—') && duplicate[key]) merged[key] = duplicate[key];
   });
   merged.balance = Math.max(Number(merged.balance || 0), Number(duplicate.balance || 0), 0);
