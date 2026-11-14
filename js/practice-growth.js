@@ -274,10 +274,11 @@
         group: surgeryGroup(proc + ' ' + String(c.procedure || ''), hasRealIol(c), dk), done: otDone(c), marked: otDone(c), status: st, cancelled: st === 'cancelled', eye: eyeOf(c),
         paid: 0, paidItems: [], claim: 0, claimStatus: '', insurer: '', unpaidBill: 0, cls: '' };
     }).filter(function (r) { return r.day; });
-    // Discharge card printed / discharged, OT date passed, not cancelled → counted as operated.
+    // Eye (both centres): only OT entries marked "Completed" count.
+    // OBG: discharge card printed / discharged, OT date passed, not cancelled → counted as operated.
     // A second entry for the same patient, same kind of surgery and same eye within 3 days is the same operation.
     var today0 = todayKey_();
-    rows.forEach(function (r) { if (!r.done && !r.cancelled && r.day < today0 && otDischarged(r.c)) { r.done = true; r.byDischarge = true; } });
+    rows.forEach(function (r) { if (r.dept === 'obg' && !r.done && !r.cancelled && r.day < today0 && otDischarged(r.c)) { r.done = true; r.byDischarge = true; } });
     var seen = {};
     rows.filter(function (r) { return r.done && r.bmhId; }).sort(function (a, b) { return (a.byDischarge ? 1 : 0) - (b.byDischarge ? 1 : 0) || String(a.day).localeCompare(String(b.day)); }).forEach(function (r) {
       var k = r.bmhId + '|' + r.group;
@@ -784,7 +785,7 @@
     }
     // Surgeries
     if (on('surgery')) {
-      var basis = 'Counting: OT entries marked Completed, and past entries whose discharge card was printed (a repeat entry for the same patient, surgery and eye within 3 days is counted once)' + (res.opt.countPaid ? ' + pending entries with a surgery payment' : '') + (res.opt.countCashless ? ' + pending entries with an ECHS/TPA claim' : '') + '.';
+      var basis = 'Counting: OT entries marked Completed; for OBG also past entries whose discharge card was printed (a repeat entry for the same patient and procedure within 3 days is counted once)' + (res.opt.countPaid ? ' + pending entries with a surgery payment' : '') + (res.opt.countCashless ? ' + pending entries with an ECHS/TPA claim' : '') + '.';
       h += section('surgery', '⚕️ Surgeries', matrix(months, M, function (x) { return x.surgGroups; }, { first: 'Surgery' }), basis + ' Change this under Options → Surgery counting.');
     }
     // OT vs bills
