@@ -196,7 +196,7 @@
       + '.fu{background:#fff;color:#111;border:2px solid #222;padding:5px 12px;border-radius:20px;font-weight:700;font-size:10.5pt;display:inline-block}'
       + '.sig-line{border-top:1px solid var(--ink);padding-top:3px;margin-top:9mm;min-width:58mm;display:inline-block}.sig-deg,.sig-sub{font-size:7.6pt;color:var(--muted);max-width:80mm;margin-left:auto}';
     var p = c.patient, aside = '', main = '';
-    aside += '<div class="tag">Patient</div><div class="nm">' + esc(p.name) + '</div><div class="meta">' + esc(p.ageSex) + ' · ' + esc(p.id) + '<br>' + esc(p.date) + (p.centre ? ' · ' + esc(p.centre) : '') + '</div>';
+    aside += '<div class="tag">Patient</div><div class="nm">' + esc(p.name) + '</div><div class="meta">' + esc(p.ageSex) + ' · ' + esc(p.id) + (p.phone ? '<br>☎ ' + esc(p.phone) : '') + '<br>' + esc(p.date) + (p.centre ? ' · ' + esc(p.centre) : '') + '</div>';
     if (c.dept === 'oe') {
       var e = eyeRows(c);
       if (e.showVA) aside += '<h3>Vision</h3><table class="t"><tr><th></th><th>RE</th><th>LE</th></tr>'
@@ -281,7 +281,7 @@
       + '.fu{margin-top:5px;display:inline-block;border:2px solid var(--indigo);border-radius:8px;padding:5px 10px;font-weight:800;font-size:9.6pt}'
       + '.sig{font-size:8pt}.sig-line{border-top:1.5px solid var(--ink);padding-top:3px;margin-top:10mm;font-size:9.5pt}.sig-sub{color:var(--muted)}';
     var p = c.patient, h = header(c);
-    h += '<div class="pt"><div class="nm">' + esc(p.name) + ' <span style="font-weight:600;font-size:10pt;opacity:.85">· ' + esc(p.ageSex) + '</span></div><div class="mt">' + esc(p.id) + '<br>' + esc(p.date) + (p.centre ? ' · ' + esc(p.centre) : '') + '</div></div>';
+    h += '<div class="pt"><div class="nm">' + esc(p.name) + ' <span style="font-weight:600;font-size:10pt;opacity:.85">· ' + esc(p.ageSex) + '</span></div><div class="mt">' + esc(p.id) + (p.phone ? ' · ☎ ' + esc(p.phone) : '') + '<br>' + esc(p.date) + (p.centre ? ' · ' + esc(p.centre) : '') + '</div></div>';
     if (c.dept === 'oe') {
       var e = eyeRows(c);
       var card = function (side, label, code) {
@@ -368,7 +368,7 @@
       + '.bottom{margin-top:auto;padding-top:3mm;display:grid;grid-template-columns:1fr 64mm;gap:6mm;align-items:end}.adv{font-size:9pt;line-height:1.5}.fu{margin-top:6px;font-weight:700;font-size:14pt;display:block}'
       + '.sig{font-size:8pt}.sig-line{border-top:1.5px solid var(--ink);margin-top:10mm;padding-top:3px;font-size:9.5pt}.sig-sub{color:var(--muted)}';
     var p = c.patient, h = header(c);
-    h += '<div class="pt"><div><small>Patient</small><b>' + esc(p.name) + '</b></div><div><small>Age / Sex</small>' + esc(p.ageSex) + '</div><div><small>BMSH ID</small><span class="mono">' + esc(p.id) + '</span></div><div><small>Date</small><span class="mono">' + esc(p.date) + '</span></div></div>';
+    h += '<div class="pt"><div><small>Patient</small><b>' + esc(p.name) + '</b></div><div><small>Age / Sex</small>' + esc(p.ageSex) + '</div><div><small>BMSH ID</small><span class="mono">' + esc(p.id) + (p.phone ? '<br>☎ ' + esc(p.phone) : '') + '</span></div><div><small>Date</small><span class="mono">' + esc(p.date) + '</span></div></div>';
     var cc = listLines(c.complaint);
     if (c.dept === 'oe') {
       if (cc.length || c.findings.length) h += '<div class="sec"><h4>Complaints &amp; findings</h4><div class="cols">' + (cc.length ? '<p><b>Complaints:</b> ' + cc.map(esc).join(' · ') + '</p>' : '<p></p>') + (c.findings.length ? '<p><b>' + esc(c.findingsTitle || 'Findings') + ':</b> ' + c.findings.map(esc).join(' · ') + '</p>' : '') + '</div></div>';

@@ -26972,9 +26972,11 @@ function findReceptionPatientByBmh(value) {
   if (direct) return direct;
   const digits = raw.replace(/\D/g, '');
   if (!digits) return null;
-  return getReceptionLookupPool().find(function (p) {
-    return String(p.bmhId || '').toUpperCase().includes(digits);
-  }) || null;
+  const pool = getReceptionLookupPool();
+  const bare = digits.replace(/^0+/, '');
+  // exact number first (BMSH-3820 or BMSH-003820), then the old "contains" match
+  return pool.find(function (p) { return String(p.bmhId || '').toUpperCase().replace(/^BMSH-0*/, '') === bare; })
+    || pool.find(function (p) { return String(p.bmhId || '').toUpperCase().includes(digits); }) || null;
 }
 function findReceptionPatientsByPhone(value) {
   const digits = normalizeReceptionPhoneDigits(value);
@@ -27036,6 +27038,7 @@ function fetchReceptionPatientsFromFirebase(value) {
   const directIds = new Set();
   if (/^BMSH[-\s]*\d+$/i.test(raw)) directIds.add('BMSH-' + digits);
   if (/^\d{4,9}$/.test(raw)) directIds.add('BMSH-' + digits);
+  if (/^\d{4,6}$/.test(raw)) { directIds.add('BMSH-' + digits.padStart(6, '0')); directIds.add('BMSH-' + (digits.replace(/^0+/, '') || digits)); }
   directIds.forEach(function (id) {
     primaryReads.push(window.FBDB.ref('patients/' + id).once('value').then(function (snap) {
       const row = snap.val();
@@ -27229,10 +27232,14 @@ function lookupByBMHID(val, opts) {
   const byPhone = phoneMatches.length === 1 ? phoneMatches[0] : null;
   const byName = val.length >= 3 ? findReceptionPatientsByName(vLow) : [];
   const single = byId || byPhone;
+  // a bare number of 4–6 digits is an old-style BMSH ID (e.g. 3820 → BMSH-3820): look the exact ID up in all records too
+  const bareIdNumber = /^\d{4,6}$/.test(val.trim());
+  const exactBareHit = !!(bareIdNumber && byId && String(byId.bmhId || '').toUpperCase().replace(/^BMSH-0*/, '') === digits.replace(/^0+/, ''));
   if(single) {
     cancelReceptionRemoteLookup('id');
     prefetchPatientVisitsInBackground(single.bmhId);
-    el.innerHTML = receptionPatientResultHtml(single, { title: '✅ Found — existing patient' });
+    el.innerHTML = receptionPatientResultHtml(single, { title: (bareIdNumber && !exactBareHit && !byPhone) ? '⚠️ Closest match — checking for BMSH-' + digits + '…' : '✅ Found — existing patient' });
+    if (bareIdNumber && !exactBareHit && !opts.skipRemote) scheduleReceptionRemoteLookup(val, 'id');
   } else if(phoneMatches.length > 1) {
     const hits = phoneMatches.slice(0, 8);
     el.innerHTML = `<div style="background:#fff;border:1.5px solid var(--orange);border-radius:8px;overflow:hidden">
@@ -27249,7 +27256,7 @@ function lookupByBMHID(val, opts) {
     if (!opts.skipRemote) scheduleReceptionRemoteLookup(val, 'name');
   } else {
     el.innerHTML = val.length >= 3 ? `<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">${!opts.skipRemote && window.FBDB ? 'Searching all patient records...' : 'No existing patient found — proceed with new registration below'}</div>` : '';
-    if (!opts.skipRemote && (digits.length >= 7 || /^BMSH/i.test(v) || (vLow.length >= 3 && /[a-z]/i.test(vLow)))) scheduleReceptionRemoteLookup(val, (vLow.length >= 3 && /[a-z]/i.test(vLow) && !/^BMSH/i.test(v)) ? 'name' : 'id');
+    if (!opts.skipRemote && (digits.length >= 7 || bareIdNumber || /^BMSH/i.test(v) || (vLow.length >= 3 && /[a-z]/i.test(vLow)))) scheduleReceptionRemoteLookup(val, (vLow.length >= 3 && /[a-z]/i.test(vLow) && !/^BMSH/i.test(v)) ? 'name' : 'id');
   }
 }
 
@@ -40588,7 +40595,7 @@ window.printUnifiedRx = function(deptId) {
   const ptIdRaw = cpt.bmhId || document.getElementById(deptId+'-rx-ptid')?.textContent   || document.getElementById('ophtho-pt-uid')?.textContent || '—';
   const ptId    = formatBmhIdForDisplay(ptIdRaw);
   const ptAge   = document.getElementById(deptId+'-rx-agesex')?.textContent || ((cpt.age != null && cpt.sex) ? `${cpt.age}Y / ${cpt.sex}` : '—');
-  const ptMob   = cpt.mob || PATIENTS?.find(p=>p.bmhId===ptIdRaw)?.mob || '';
+  const ptMob   = cpt.mob || cpt.mobile || cpt.phone || (function () { const hit = PATIENTS?.find(p=>p.bmhId===ptIdRaw) || {}; return hit.mob || hit.mobile || hit.phone || ''; })() || '';
   const patientInvestigationOrders = (Array.isArray(cpt.investigationOrders) ? cpt.investigationOrders : INVESTIGATION_ORDERS).filter(o => !o.done && (!o.bmhId || o.bmhId === ptIdRaw));
   const patientInvestigationPrintRows = (function () {
     const rows = [];
@@ -41440,7 +41447,7 @@ ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid 
         dept: deptId,
         lang: rxPlainLang,
         headerSrc: lhImgSrc,
-        patient: { name: ptName, id: ptId, ageSex: ptAge, date: today, centre: '' },
+        patient: { name: ptName, id: ptId, ageSex: ptAge, date: today, centre: '', phone: String(ptMob || '').trim() },
         doctor: { name: doctorName, degrees: doctorDegrees, spec: doctorSpec, reg: doctorReg },
         complaint: (deptId === 'oe' && incCC && cc) ? cc : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint : (deptId === 'skin' && skinChief) ? skinChief : (deptId === 'psych' && psychChief) ? psychChief : '',
         findings: deptId === 'oe' && incPos && typeof buildOphthoPositiveFindingsList === 'function' ? (buildOphthoPositiveFindingsList() || [])
