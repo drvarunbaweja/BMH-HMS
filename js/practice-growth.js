@@ -362,7 +362,7 @@
         r.cls = 'cashless';
       }
       var srcs = (srcByPt[r.bmhId] || []).filter(function (x) { return x.day <= shiftDay(r.day, 3); }).sort(function (a, b) { return a.day < b.day ? 1 : -1; });
-      r.source = srcs.length ? srcs[0].src : '';
+      r.source = srcs.length ? srcs[0].src : String(ptInfo(r.bmhId).refSource || '');
       var ov = data.amounts && data.amounts[r.id];
       r.override = ov && ov.amount != null && ov.amount !== '' ? Number(ov.amount) : null;
       r.mark = data.marks && data.marks[r.id] || null;

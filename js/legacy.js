@@ -52072,7 +52072,8 @@ function openEditPatientModal(bmhId) {
   setVal('upd-email', p.email||'');
   setVal('upd-addr', p.address||p.addr||'');
   setVal('upd-rel', p.relation||p.rel||'');
-  setVal('upd-ref-name', p.refName||p.referredBy||'');
+  setVal('upd-ref-name', p.refName || (p.referredBy && p.referredBy !== p.refSource ? p.referredBy : '') || '');
+  if (typeof window.bmhRefSourceFill === 'function') window.bmhRefSourceFill('upd-ref-source', p.refSource || '');
   setVal('upd-fee', p.consultationFee != null ? p.consultationFee : (getReceptionConsultationRate(p.centre || CURRENT_USER?.centre || 'CHD') || 0));
   setVal('upd-advance-amt', p.advance != null ? p.advance : '');
   setVal('upd-advance-purpose', p.advancePurpose || '');
@@ -52132,7 +52133,8 @@ async function saveUpdatedPatientDetails() {
     relation: normalizeReceptionFieldValue('upd-rel', document.getElementById('upd-rel')?.value?.trim()||''),
     rel: normalizeReceptionFieldValue('upd-rel', document.getElementById('upd-rel')?.value?.trim()||''),
     refName: refName,
-    referredBy: refName || p.referredBy || '',
+    refSource: (function () { var el = document.getElementById('upd-ref-source'); if (!el) return p.refSource || ''; var v = String(el.value || ''); return /^__/.test(v) ? (p.refSource || '') : v; })(),
+    referredBy: refName || (function () { var el = document.getElementById('upd-ref-source'); var v = el ? String(el.value || '') : ''; return v && !/^__/.test(v) ? v : ''; })() || (p.referredBy && p.referredBy !== p.refSource ? p.referredBy : '') || '',
     consultationFee: noFee ? 0 : consultationFee,
     consultationNoFee: noFee,
     ins: isInsuranceLikeMode(payMode || insName) ? (insName || payMode) : '',
