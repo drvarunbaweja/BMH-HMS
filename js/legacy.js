@@ -5933,12 +5933,24 @@ function toggleRxPostSurgeryNote() {
 }
 
 /** Diagnosis lines for prescription print — Ophthalmology uses numbered rows; other depts use *-dx-list */
+// Previous diagnoses still marked "Carry forward" (not resolved) print together with the ones added this visit.
+function bmhMergeCarriedDiagnosisLines(deptKey, lines) {
+  const carried = getDeptDxLedger(window.CURRENT_PATIENT || {}, deptKey).filter(function (x) { return !x.resolved; }).map(function (x) { return x.text; });
+  const seen = new Set();
+  const merged = [];
+  [].concat(carried, lines || []).forEach(function (t) {
+    const clean = String(t || '').trim();
+    const k = clean.toLowerCase().replace(/\s+/g, ' ');
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    merged.push(clean);
+  });
+  return merged;
+}
 function collectDeptDiagnosesForPrint(deptId) {
   if (deptId === 'oe') {
     const pack = collectOphthoDiagnosesForPrint();
-    if (!(pack.lines || []).length) {
-      pack.lines = getDeptDxLedger(window.CURRENT_PATIENT || {}, 'ophtho').filter(function (x) { return !x.resolved; }).map(function (x) { return x.text; });
-    }
+    pack.lines = bmhMergeCarriedDiagnosisLines('ophtho', pack.lines || []);
     return pack;
   }
   if (deptId === 'obg') {
@@ -5958,9 +5970,8 @@ function collectDeptDiagnosesForPrint(deptId) {
   }
   const listEl = document.getElementById(deptId + '-dx-list');
   const lines = listEl ? [...listEl.querySelectorAll('.dx-inp')].map(e => e.value.trim()).filter(Boolean) : [];
-  if (lines.length) return { lines, notes: '' };
   const deptMap = { obg: 'obg', psych: 'psych', skin: 'skin' };
-  return { lines: getDeptDxLedger(window.CURRENT_PATIENT || {}, deptMap[deptId] || deptId).filter(function (x) { return !x.resolved; }).map(function (x) { return x.text; }), notes: '' };
+  return { lines: bmhMergeCarriedDiagnosisLines(deptMap[deptId] || deptId, lines), notes: '' };
 }
 
 function getVisitDiagnosisTextForDept(visit, dept) {
