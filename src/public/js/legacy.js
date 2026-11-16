@@ -29251,6 +29251,11 @@ function parseIolSummary(iol) {
   if (powerMatch) type = raw.replace(powerMatch[0], '').replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim();
   return { display: raw, type: type || raw, power: power };
 }
+// second / third procedure recorded on the same OT entry (see ot-extra-procs.js)
+function bmhOtExtraProcText(c) {
+  const list = Array.isArray(c && c.extraProcedures) ? c.extraProcedures.map(function (x) { return String(x || '').trim(); }).filter(Boolean) : [];
+  return list.length ? ' + ' + list.map(function (x) { return x.replace(/</g, '&lt;'); }).join(' + ') : '';
+}
 function normalizeOTCaseRecord(c) {
   const src = c || {};
   const bmhId = src.bmhId || src.bmshId || src.bmshID || src.patientId || src.patient_id || src.uid || src.uhid || '';
@@ -30204,7 +30209,7 @@ function otCaseCard(c, sno) {
           ${c.admitToIpd ? '<span class="badge bd-purple" style="font-size:9px">🛏️ Admitted</span>' : ''}
           ${priorityBadge}
         </div>
-        <div style="font-size:11px;color:var(--tx3);margin-top:3px;font-weight:600">${c.procedure}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:3px;font-weight:600">${c.procedure}${bmhOtExtraProcText(c)}</div>
         <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${c.dx}</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--g1);margin-top:4px">
           <span>👨‍⚕️ ${c.surgeon}</span>
@@ -30291,7 +30296,7 @@ function openOTCase(id) {
       <span class="badge" style="background:${c.status==='completed'?'var(--green-lt)':c.status==='in-progress'?'var(--blue-lt)':'var(--g5)'};color:${statusColor}">${c.status.replace('-',' ').toUpperCase()}</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11.5px;margin-bottom:12px">
-      ${[['Age/Sex',`${c.age}Y / ${c.sex}`],['Procedure',c.procedure],['OT Date',formatDateIN(c.date)],['Surgeon',c.surgeon],['Room',c.room],['Time',c.scheduledTime],['Anaesthesia',c.anaes],['IOL/Implant',c.iol],['Priority',c.priority.toUpperCase()]].map(([l,v])=>`<div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-weight:700;margin-top:1px">${v}</div></div>`).join('')}
+      ${[['Age/Sex',`${c.age}Y / ${c.sex}`],['Procedure',c.procedure + bmhOtExtraProcText(c)],['OT Date',formatDateIN(c.date)],['Surgeon',c.surgeon],['Room',c.room],['Time',c.scheduledTime],['Anaesthesia',c.anaes],['IOL/Implant',c.iol],['Priority',c.priority.toUpperCase()]].map(([l,v])=>`<div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-weight:700;margin-top:1px">${v}</div></div>`).join('')}
     </div>
     <div style="background:var(--g6);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
       <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Diagnosis</div>

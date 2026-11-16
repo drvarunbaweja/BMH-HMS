@@ -483,6 +483,13 @@
       var mm = M[r.day.slice(0, 7)];
       mm.surg++; if (r.done) mm.surgDone++; mm.byDept[r.dept].surg++;
       mm.surgGroups[r.group] = (mm.surgGroups[r.group] || 0) + 1;
+      // additional procedures recorded on the same OT entry are counted too
+      (Array.isArray(r.c.extraProcedures) ? r.c.extraProcedures : []).forEach(function (x) {
+        x = String(x || '').trim(); if (!x) return;
+        var g2 = surgeryGroup(x, false, r.dept);
+        mm.surg++; if (r.done) mm.surgDone++; mm.byDept[r.dept].surg++;
+        mm.surgGroups[g2] = (mm.surgGroups[g2] || 0) + 1;
+      });
       if (r.group === 'Cataract (IOL)' || hasRealIol(r.c)) {
         var io = iolName(r.c, data.catalog);
         var nm = io ? io.name : 'IOL not recorded';
