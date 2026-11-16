@@ -25,7 +25,10 @@ const firebaseConfig = {
 // ── Initialise ───────────────────────────────────────────────────────────────
 // The compat SDK (index.html inline script) may have already initialised the
 // default app before this module runs.  Re-use it to share the same Auth instance.
-const app  = getApps().length ? getApp() : initializeApp(firebaseConfig)
+// Named app ('bmh-modular'): keeps this module's Firebase Auth state separate from the page's compat SDK,
+// so the silent sign-in in public/js/fb-signin.js (v123) can never be picked up here as a Firebase-Auth login.
+const MODULAR_APP = 'bmh-modular'
+const app  = getApps().some(a => a.name === MODULAR_APP) ? getApp(MODULAR_APP) : initializeApp(firebaseConfig, MODULAR_APP)
 const auth = getAuth(app)
 const rtdb = getDatabase(app)   // Realtime DB — only used by migration script
 
