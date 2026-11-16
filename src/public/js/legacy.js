@@ -28260,7 +28260,7 @@ async function _registerPatientImpl() {
     queueRemoved: false,
     queueRemovedAt: null,
     queueRemovedBy: '',
-    queueAddedAt: currentIso,
+    queueAddedAt: (function () { try { if (existingPt && !existingPt.queueRemoved && isQueuePreCheckinPatient(existingPt)) { var st = getPatientQueueStamp(existingPt, Date.now()); if (st) return new Date(st).toISOString(); } } catch (e) {} return currentIso; })(),
     queueDate: queueDateToday,
     visitDate: queueDateToday,
     queueSource: 'reception',
@@ -51292,8 +51292,11 @@ function getPatientQueueStamp(p, now, opts) {
 function getPatientQueueWaitMinutes(p, now) {
   if (isQueuePreCheckinPatient(p)) return 0;
   const refNow = Number.isFinite(now) ? now : Date.now();
-  const stamp = getPatientQueueStamp(p, refNow);
+  let stamp = getPatientQueueStamp(p, refNow);
   if (!stamp) return 0;
+  // waiting time counts from the check-in when that was later than the queue entry (the queue position does not change)
+  const checkinStamp = queueRawStamp(p?.checkinAt);
+  if (checkinStamp > stamp && checkinStamp <= refNow && localDateKey(checkinStamp) === localDateKey(refNow)) stamp = checkinStamp;
   return Math.max(0, Math.floor((refNow - stamp) / 60000));
 }
 function formatQueueWaitMinutes(waitMin) {
@@ -51945,7 +51948,10 @@ function checkInPatient(bmhId) {
     saveTransactionToFirebase && saveTransactionToFirebase(txn);
   }
   const checkedInDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.seenByDept=clearPatientSeenStateForDept(p, checkedInDept); p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=nowIso; p.queueSource='reception'; p.updatedAt=nowIso; p.purpose=checkedInPurpose; p.purposeUpdatedAt=nowIso; p.purposeUpdatedBy=CURRENT_USER?.name||'Reception';
+  // keep the place in the queue the patient was entered at today (Need to Check In → checked in stays at the same number)
+  const keptQueueStamp = getPatientQueueStamp(p, Date.now());
+  const queueAddedIso = keptQueueStamp ? new Date(keptQueueStamp).toISOString() : nowIso;
+  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.seenByDept=clearPatientSeenStateForDept(p, checkedInDept); p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=queueAddedIso; p.queueSource='reception'; p.updatedAt=nowIso; p.purpose=checkedInPurpose; p.purposeUpdatedAt=nowIso; p.purposeUpdatedBy=CURRENT_USER?.name||'Reception';
   if (noFeeCheckIn) {
     p.consultationNoFee=true; p.consultationFee=0; p.consultationFeeType='no-fee'; p.consultationFeeLabel='No Fee Consultation'; p.consultationPaymentMode='No Fee';
   } else if (!alreadyPaidToday) {
@@ -51960,7 +51966,7 @@ function checkInPatient(bmhId) {
       return Object.assign({}, entry, { purpose: checkedInPurpose, preRegistered: false, status: 'waiting', seen: false, seenAt: '', updatedAt: nowIso });
     });
   }
-  const patch = {status:'waiting',preRegistered:false,seen:false,seenAt:null,seenByDept:sanitizeFirebaseValue(p.seenByDept || {}),checkinAt:p.checkinAt,queueAddedAt:nowIso,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso,purpose:checkedInPurpose,purposeUpdatedAt:nowIso,purposeUpdatedBy:p.purposeUpdatedBy,consultationNoFee:!!p.consultationNoFee,consultationFee:Number(p.consultationFee || 0),consultationFeeType:p.consultationFeeType,consultationFeeLabel:p.consultationFeeLabel,consultationPaymentMode:p.consultationPaymentMode,deptQueueEntries:sanitizeFirebaseValue(p.deptQueueEntries || [])};
+  const patch = {status:'waiting',preRegistered:false,seen:false,seenAt:null,seenByDept:sanitizeFirebaseValue(p.seenByDept || {}),checkinAt:p.checkinAt,queueAddedAt:queueAddedIso,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso,purpose:checkedInPurpose,purposeUpdatedAt:nowIso,purposeUpdatedBy:p.purposeUpdatedBy,consultationNoFee:!!p.consultationNoFee,consultationFee:Number(p.consultationFee || 0),consultationFeeType:p.consultationFeeType,consultationFeeLabel:p.consultationFeeLabel,consultationPaymentMode:p.consultationPaymentMode,deptQueueEntries:sanitizeFirebaseValue(p.deptQueueEntries || [])};
   fbUpdate && fbUpdate('patients/'+bmhId, patch).catch(function () {});
   if (typeof window.patchPatientFirestore === 'function') window.patchPatientFirestore(bmhId, patch).catch(function () {});
   rememberPendingLocalPatientQueueWrite && rememberPendingLocalPatientQueueWrite(p);
