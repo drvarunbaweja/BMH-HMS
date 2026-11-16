@@ -35,8 +35,10 @@
       }).catch(function () {});
     } catch (e) {}
   }
-  function fill(keep) {
-    var sel = document.getElementById('rc-ref-source'); if (!sel) return;
+  var IDS = ['rc-ref-source', 'upd-ref-source'];   // reception form, and the queue's Edit patient box
+  function fill(keep, id) {
+    if (!id) { IDS.forEach(function (x) { fill(x === 'rc-ref-source' ? keep : null, x); }); return; }
+    var sel = document.getElementById(id); if (!sel) return;
     var cur = keep != null ? keep : sel.value;
     var items = current().slice();
     if (cur && items.map(function (x) { return x.toLowerCase(); }).indexOf(cur.toLowerCase()) < 0) items.push(cur);
@@ -48,18 +50,18 @@
     sel.dataset.prev = sel.value;
   }
   document.addEventListener('change', function (e) {
-    var sel = e.target; if (!sel || sel.id !== 'rc-ref-source') return;
+    var sel = e.target; if (!sel || IDS.indexOf(sel.id) < 0) return;
     if (sel.value === '__add') {
       var name = (window.prompt('New source name (e.g. "Camp - Sarbat Da Bhala", "ECHS Nalagarh", "PRO - Ramesh"):', '') || '').replace(/\s+/g, ' ').trim();
       if (!name) { sel.value = sel.dataset.prev || ''; return; }
-      save(current().concat([name])); fill(name); toast('Source added ✓', 's'); return;
+      save(current().concat([name])); fill(name, sel.id); toast('Source added ✓', 's'); return;
     }
     if (sel.value === '__del') {
       var items = current();
       var pick = (window.prompt('Remove which source? Type its number:\n' + items.map(function (x, i) { return (i + 1) + '. ' + x; }).join('\n'), '') || '').trim();
       var i = Number(pick) - 1;
       if (items[i] && window.confirm('Remove "' + items[i] + '" from the list? (Patients already marked with it keep it.)')) { save(items.filter(function (_, j) { return j !== i; })); toast('Source removed', 's'); }
-      fill(sel.dataset.prev || ''); return;
+      fill(sel.dataset.prev || '', sel.id); return;
     }
     sel.dataset.prev = sel.value;
   }, true);
@@ -72,7 +74,7 @@
       try {
         var all = (typeof getAllKnownPatientRecords === 'function' ? getAllKnownPatientRecords() : (window.PATIENTS || []));
         var p = all.filter(function (x) { return x && String(x.bmhId || '') === String(bmhId || ''); })[0];
-        fill(p && p.refSource ? p.refSource : '');
+        fill(p && p.refSource ? p.refSource : '', 'rc-ref-source');
       } catch (e) {}
       return r;
     };
@@ -88,7 +90,8 @@
       return origSave.apply(this, arguments);
     };
   }
-  document.addEventListener('mousedown', function (e) { if (e.target && e.target.id === 'rc-ref-source') fill(); }, true);
+  document.addEventListener('mousedown', function (e) { if (e.target && IDS.indexOf(e.target.id) >= 0) fill(null, e.target.id); }, true);
+  window.bmhRefSourceFill = function (id, value) { try { fill(value || '', id); } catch (e) {} };
   function boot() { fill(); load(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   var tries = 0, iv = setInterval(function () { if (window.FBDB || ++tries > 30) { clearInterval(iv); load(); } }, 2000);
