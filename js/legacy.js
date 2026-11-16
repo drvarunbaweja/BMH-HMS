@@ -52198,6 +52198,10 @@ async function saveUpdatedPatientDetails() {
       if (txn.bmhId !== bid || txn.collected === false) return;
       if (localDateKey(txn.date) !== today) return;
       if (!/consult|follow-up/i.test(String(txn.service || txn.for || ''))) return;
+      // only the reception consultation receipt — never a bill payment, balance payment, advance or anything from Billing
+      if (txn.billId || txn.billNo || txn.payRequestId || (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length)) return;
+      if (/billing|due-payment|advance|refund/i.test(String(txn.type || '')) || String(txn.source || '').toLowerCase() === 'billing') return;
+      if (Number(txn.amount || 0) === (noFee ? 0 : consultationFee) && !!txn.noFee === !!noFee) return;
       txn.amount = noFee ? 0 : consultationFee;
       txn.noFee = noFee;
       txn.service = String(txn.service || txn.for || '').replace(/\s*\(no fee\)\s*/ig, '').trim() + (noFee ? ' (no fee)' : '');
