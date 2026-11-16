@@ -12,7 +12,7 @@
   try { if (localStorage.getItem('bmh_report_pins_off') === '1') return; } catch (e) {}
   var PATH = 'security/reportPins', ITER = 120000, FIN_MS = 8 * 3600000, INV_MS = 30 * 60000;
   var SK_FIN = 'bmh_rp_fin', SK_INV = 'bmh_rp_inv';
-  var FIN_TABS = ['rep-daily', 'rep-financial', 'rep-stats', 'rep-growth'];
+  var FIN_TABS = ['rep-daily', 'rep-financial', 'rep-stats', 'rep-growth', 'rep-referrals'];
   function me() { try { return CURRENT_USER || null; } catch (e) { return window.CURRENT_USER || null; } }
   function uname() { var u = me(); return String(u && u.username || '').toLowerCase().split('@')[0]; }
   function isOwner() { var u = me(); return !!(u && (u.isAdmin === true || String(u.role || '').toLowerCase() === 'admin') && uname() === 'drvarun'); }
