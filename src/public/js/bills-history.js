@@ -341,14 +341,17 @@
   function renderMulti() {
     var box = document.getElementById('bmh-bill-pt-list-hist'); if (!box) return;
     if (window._bmhBillingTab !== 'search') return;
+    // the history card has its own copy of the filter boxes (same ids as the hidden ones above) — read those
+    var card = (box.closest && box.closest('.card')) || document;
+    var $ = function (id) { return (card.querySelector ? card.querySelector('#' + id) : null) || document.getElementById(id); };
     var hd = box.parentNode && box.parentNode.querySelector('.card-sub'); if (hd) hd.textContent = 'Patients with bills / receipts — click a patient for full billing history';
-    var sc = document.getElementById('bmh-bill-patient-scope');
-    if (sc && !S.scopeSet) { S.scopeSet = true; if (sc.value === 'focus' && !window._bmhBillFocusPatient) sc.value = 'date'; var df = document.getElementById('bmh-bill-date-filter'); if (df && !df.value) df.value = today(); }
+    var sc = $('bmh-bill-patient-scope');
+    if (sc && !S.scopeSet) { S.scopeSet = true; if (sc.value === 'focus' && !window._bmhBillFocusPatient) sc.value = 'date'; var df = $('bmh-bill-date-filter'); if (df && !df.value) df.value = today(); }
     var scope = (sc || {}).value || 'date';
-    var q = String((document.getElementById('bmh-bill-patient-search') || {}).value || '').trim().toLowerCase();
-    var one = (document.getElementById('bmh-bill-date-filter') || {}).value || today();
-    var from = (document.getElementById('bmh-bill-date-from') || {}).value || '';
-    var to = (document.getElementById('bmh-bill-date-to') || {}).value || '';
+    var q = String(($('bmh-bill-patient-search') || {}).value || '').trim().toLowerCase();
+    var one = ($('bmh-bill-date-filter') || {}).value || today();
+    var from = ($('bmh-bill-date-from') || {}).value || '';
+    var to = ($('bmh-bill-date-to') || {}).value || '';
     if (!S.days) { box.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Loading billing records…</div>'; ensureLoaded().then(renderMulti).catch(function () { box.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Could not load billing records.</div>'; }); return; }
     var list = buildEntries();
     if (scope === 'date') list = list.filter(function (e) { return dayOf(e.at) === one; });
@@ -388,6 +391,12 @@
     window.bmhBillHistoryPrintPatient = printPatient;
     var origRec = window.bmhRecordBillingCollection;
     window.bmhRecordBillingCollection = function (savedBill) { var r = origRec.apply(this, arguments); keepCopy(savedBill); return r; };
+    // choosing From / To dates switches that card to "Date range"
+    document.addEventListener('change', function (e) {
+      var t = e.target; if (!t || (t.id !== 'bmh-bill-date-from' && t.id !== 'bmh-bill-date-to')) return;
+      var card = t.closest && t.closest('.card'); var sc = card && card.querySelector('#bmh-bill-patient-scope');
+      if (sc && t.value && sc.value !== 'range') sc.value = 'range';
+    }, true);
     var origList = window.bmhRenderBillPatientList;
     if (typeof origList === 'function') window.bmhRenderBillPatientList = function () { var r = origList.apply(this, arguments); try { renderMulti(); } catch (e) {} return r; };
     var inp = document.getElementById('bmh-bill-history-search');
