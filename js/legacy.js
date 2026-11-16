@@ -34476,8 +34476,12 @@ function getReferralReportRows() {
     return inRange(p?.updatedAt || p?.createdAt || p?.registeredAt || p?.checkinAt || p?.queueDate || p?.date);
   }).map(function (p) {
     const bmhId = p.bmhId;
-    const txns = (TRANSACTIONS || []).filter(function (t) {
-      return t.bmhId === bmhId && (!centreFilter || normalizeAppointmentCentreValue(t.centre || p.centre || centreFilter) === centreFilter);
+    // payments of this patient inside the report's dates — from the full billing record when it has been loaded
+    const txns = (Array.isArray(window._bmhReferralTxns) ? window._bmhReferralTxns : (TRANSACTIONS || [])).filter(function (t) {
+      if (t.bmhId !== bmhId || t.collected === false) return false;
+      if (t.type === 'advance-adjustment' || t.source === 'advance-adjustment') return false;
+      if ((fromVal || toVal) && !inRange(t._day || t.date || t.createdAt)) return false;
+      return (!centreFilter || normalizeAppointmentCentreValue(t.centre || p.centre || centreFilter) === centreFilter);
     });
     const surgeryTxns = txns.filter(function (t) {
       return isLikelySurgeryChargeLabel(t.service || t.for || t.desc || '');
@@ -34496,6 +34500,7 @@ function getReferralReportRows() {
       deptLabel: ({ ophtho:'Ophthalmology', obg:'OBG', psych:'Neuropsychiatry', skin:'Skin' })[p.dept] || p.dept || 'General',
       doctor: p.assignedDoctor || p.doctor || '—',
       referredBy: getReferralSourceName(p),
+      source: String(p.refSource || '').trim(),
       date: formatDateDDMMYYYY(p.updatedAt || p.createdAt || p.registeredAt || p.checkinAt || p.queueDate || p.date || ''),
       surgeryCharges: surgeryCharges,
       totalCharges: totalCharges,
@@ -34547,7 +34552,7 @@ function buildReferralReportHtml(rows) {
     + '<style>body{font-family:Arial,sans-serif;margin:18px;color:#111} h1{font-size:18px;margin:0 0 6px} .sub{font-size:11px;color:#555;margin-bottom:12px} .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px} .card{border:1px solid #ddd;border-radius:10px;padding:10px;background:#fafafa} .label{font-size:10px;font-weight:700;text-transform:uppercase;color:#666} .val{font-size:18px;font-weight:900;margin-top:2px} table{width:100%;border-collapse:collapse;font-size:11px} th,td{border:1px solid #ddd;padding:6px;vertical-align:top;text-align:left} th{background:#f3f4f7} .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800}.pill.pending{background:#fff2cc;color:#8a5a00}.pill.paid{background:#dff5e2;color:#146c2e} @page{size:A4 landscape;margin:10mm}</style></head><body>'
     + '<h1>' + esc(title) + '</h1>'
     + '<div class="sub">Date range: ' + esc((fromVal ? formatDateDDMMYYYY(fromVal) : 'Beginning') + ' to ' + (toVal ? formatDateDDMMYYYY(toVal) : 'Today')) + ' · Department: ' + esc(deptFilter || 'All') + '</div>'
-    + '<div class="cards"><div class="card"><div class="label">Referred Patients</div><div class="val">' + rows.length + '</div></div><div class="card"><div class="label">Surgery Charges</div><div class="val">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div><div class="card"><div class="label">Total Charges</div><div class="val">₹' + totalOverall.toLocaleString('en-IN') + '</div></div></div>'
+    + '<div class="cards"><div class="card"><div class="label">Referred Patients</div><div class="val">' + rows.length + '</div></div><div class="card"><div class="label">Surgery collected</div><div class="val">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div><div class="card"><div class="label">Total collected</div><div class="val">₹' + totalOverall.toLocaleString('en-IN') + '</div></div></div>'
     + (summaryRows.length ? '<table style="margin-bottom:14px"><thead><tr><th>Referrer</th><th>Patients</th><th>Surgery Revenue ₹</th><th>Total Revenue ₹</th><th>Incentive Status</th><th>Paid Incentive ₹</th><th>Payment Details</th></tr></thead><tbody>'
       + summaryRows.map(function (row) {
         const paymentText = row.payments.length ? row.payments.map(function (entry) {
@@ -34555,16 +34560,26 @@ function buildReferralReportHtml(rows) {
         }).join('<br>') : '—';
         return '<tr><td style="font-weight:800">' + esc(row.referrer) + '</td><td>' + row.patients.length + '</td><td>₹' + row.surgeryCharges.toLocaleString('en-IN') + '</td><td>₹' + row.totalCharges.toLocaleString('en-IN') + '</td><td><span class="pill ' + (row.payoutStatus === 'Paid' ? 'paid' : 'pending') + '">' + esc(row.payoutStatus) + '</span></td><td>₹' + row.paidAmount.toLocaleString('en-IN') + '</td><td>' + paymentText + '</td></tr>';
       }).join('') + '</tbody></table>' : '')
-    + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Dept</th><th>Doctor</th><th>Date</th><th>Surgery Charges ₹</th><th>Total Charges ₹</th></tr></thead><tbody>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Clinic / source</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Dept</th><th>Doctor</th><th>Date</th><th>Surgery collected ₹</th><th>Total collected ₹</th></tr></thead><tbody>'
       + rows.map(function (row, idx) {
-        return '<tr><td>' + (idx + 1) + '</td><td>' + esc(row.referredBy) + '</td><td>' + esc(row.patient) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.bmhId) + '</td><td>' + esc(row.deptLabel) + '</td><td>' + esc(row.doctor) + '</td><td>' + esc(row.date || '—') + '</td><td>₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td>₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
+        return '<tr><td>' + (idx + 1) + '</td><td>' + esc(row.referredBy) + '</td><td>' + esc(row.source && row.source !== row.referredBy ? row.source : '') + '</td><td>' + esc(row.patient) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.bmhId) + '</td><td>' + esc(row.deptLabel) + '</td><td>' + esc(row.doctor) + '</td><td>' + esc(row.date || '—') + '</td><td>₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td>₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
       }).join('') + '</tbody></table>' : '<div style="padding:18px;border:1px dashed #ccc;border-radius:10px;color:#666">No referrals found for the selected filters.</div>')
     + '</body></html>';
 }
-function generateReferralReport() {
+// Amounts come from the full billing record (this computer's saved copy of past days + today), loaded once per report.
+function bmhReferralLoadTxns() {
+  if (typeof window.bmhBillHistoryAllTxns !== 'function') return Promise.resolve(false);
+  return window.bmhBillHistoryAllTxns().then(function (rows) { if (Array.isArray(rows) && rows.length) { window._bmhReferralTxns = rows; return true; } return false; }).catch(function () { return false; });
+}
+function generateReferralReport(skipLoad) {
   populateReferralDoctorDatalist();
   const el = document.getElementById('rep-referral-result');
   if (!el) return;
+  if (skipLoad !== true) {
+    if (!el.innerHTML.trim()) el.innerHTML = '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px">Loading billing records for the amounts…</div>';
+    bmhReferralLoadTxns().then(function () { generateReferralReport(true); });
+    if (!Array.isArray(window._bmhReferralTxns)) return;
+  }
   const rows = getReferralReportRows();
   const summaryRows = getReferralReportSummary(rows);
   const totalSurgery = rows.reduce(function (sum, row) { return sum + (Number(row.surgeryCharges) || 0); }, 0);
@@ -34573,8 +34588,8 @@ function generateReferralReport() {
     + '<div class="card-hd"><div><div class="card-title">👨‍⚕️ Referral Report</div><div class="card-sub">' + rows.length + ' patients matched your filters</div></div><button class="btn btn-gold btn-xs" type="button" onclick="printReferralReportCurrent()">🖨️ Print</button></div>'
     + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">'
     + '<div style="background:var(--blue-lt);border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--blue)">Referred Patients</div><div style="font-size:22px;font-weight:900;color:var(--blue)">' + rows.length + '</div></div>'
-    + '<div style="background:var(--green-lt);border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--green)">Surgery Charges</div><div style="font-size:22px;font-weight:900;color:var(--green)">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div>'
-    + '<div style="background:var(--gold-lt,var(--orange-lt));border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--orange)">Total Charges</div><div style="font-size:22px;font-weight:900;color:var(--orange)">₹' + totalOverall.toLocaleString('en-IN') + '</div></div>'
+    + '<div style="background:var(--green-lt);border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--green)">Surgery collected</div><div style="font-size:22px;font-weight:900;color:var(--green)">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div>'
+    + '<div style="background:var(--gold-lt,var(--orange-lt));border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--orange)">Total collected</div><div style="font-size:22px;font-weight:900;color:var(--orange)">₹' + totalOverall.toLocaleString('en-IN') + '</div></div>'
     + '</div>'
     + (summaryRows.length ? '<div style="display:grid;gap:12px;margin-bottom:14px">'
       + summaryRows.map(function (group) {
@@ -34599,9 +34614,9 @@ function generateReferralReport() {
           + paymentList
           + '</div>';
       }).join('') + '</div>' : '')
-    + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Department</th><th>Doctor</th><th>Date</th><th>Surgery Charges ₹</th><th>Total Charges ₹</th></tr></thead><tbody>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Clinic / source</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Department</th><th>Doctor</th><th>Date</th><th>Surgery collected ₹</th><th>Total collected ₹</th></tr></thead><tbody>'
       + rows.map(function (row, idx) {
-        return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:800">' + row.referredBy + '</td><td style="font-weight:800">' + row.patient + '</td><td>' + (row.mobile || '—') + '</td><td style="font-family:var(--mono);font-size:10px">' + row.bmhId + '</td><td>' + row.deptLabel + '</td><td>' + row.doctor + '</td><td>' + (row.date || '—') + '</td><td style="font-weight:900">₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td style="font-weight:900">₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
+        return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:800">' + row.referredBy + '</td><td>' + (row.source && row.source !== row.referredBy ? escapeHtmlConsent(row.source) : '') + '</td><td style="font-weight:800">' + row.patient + '</td><td>' + (row.mobile || '—') + '</td><td style="font-family:var(--mono);font-size:10px">' + row.bmhId + '</td><td>' + row.deptLabel + '</td><td>' + row.doctor + '</td><td>' + (row.date || '—') + '</td><td style="font-weight:900">₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td style="font-weight:900">₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
       }).join('') + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:var(--g1)">No referral records found for the selected filters.</div>')
     + '</div>';
 }

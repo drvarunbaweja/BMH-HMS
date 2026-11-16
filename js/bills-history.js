@@ -383,6 +383,8 @@
     window.bmhSearchBillHistory = function (q, mode) { return search(q, mode === 'list'); };
     window.bmhBillHistoryPatient = function (id) { if (!id) return; ensureLoaded().then(function () { patientView(id); var el = resultEl(); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); };
     window.bmhBillHistoryReprint = reprint;
+    // every payment record on file (uses this computer's saved copy of past days) — read-only, for reports
+    window.bmhBillHistoryAllTxns = function () { return ensureLoaded().then(function () { return allTxns(); }); };
     window.bmhBillHistoryPrintPatient = printPatient;
     var origRec = window.bmhRecordBillingCollection;
     window.bmhRecordBillingCollection = function (savedBill) { var r = origRec.apply(this, arguments); keepCopy(savedBill); return r; };
