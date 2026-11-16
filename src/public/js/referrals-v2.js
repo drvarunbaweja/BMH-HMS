@@ -2,8 +2,9 @@
  * Reports → Referrals (shown only after the 6-digit reports PIN): each referrer with the patients they referred indented
  * under them, a tick box per patient (saved for everyone at referralTicks/), and for each patient only the surgeries and
  * investigations with their cost (consultations / follow-ups left out). The old incentive-payment boxes are removed.
- * Settings → Referrers: every referral name already used at reception, with address, phone, e-mail and alternate mobile
- * (saved at referrerDirectory/).
+ * Settings → Referrers: the list of referrer names (names already used at reception are included) — add, edit (name too)
+ * or remove, with address, phone, e-mail and alternate mobile (saved at referrerDirectory/; removing only marks it removed).
+ * Reception's "Referred by" name box and the queue's Edit box offer these names.
  * Off switch (this browser): localStorage.setItem('bmh_referrals_v2_off','1') then reload.
  */
 (function () {
@@ -129,35 +130,92 @@
     loadShared().then(function () { try { safePrint(printHtml(rowsWithItems())); } catch (e) { toast('Could not print', 'w'); } });
   };
 
-  // ── Settings → Referrers ──
+  // ── Settings → Referrers: the master list of referrer names (add / edit / remove) — reception picks from it ──
+  // A removed name is only marked removed (deleted:true) — nothing is erased, and past patients keep the name they had.
+  function live(d) { return d && d.name && !d.deleted; }
   function allNames() {
-    var s = {}; try { getReferralDoctorOptions().forEach(function (n) { s[n.toLowerCase()] = n; }); } catch (e) {}
-    try { var l = JSON.parse(localStorage.getItem('bmh_ref_sources_v1') || '[]'); (l || []).forEach(function (n) { if (n) s[String(n).toLowerCase()] = n; }); } catch (e) {}
-    SOURCES.forEach(function (n) { if (n) s[String(n).toLowerCase()] = n; });
-    Object.keys(DIR).forEach(function (k) { var d = DIR[k]; if (d && d.name) s[String(d.name).toLowerCase()] = d.name; });
+    var s = {}, gone = {};
+    Object.keys(DIR).forEach(function (k) { var d = DIR[k]; if (d && d.deleted) gone[k] = 1; });
+    var add = function (n) { n = String(n || '').trim(); if (n && !gone[key(n)]) s[n.toLowerCase()] = n; };
+    try { getReferralDoctorOptions().forEach(add); } catch (e) {}
+    Object.keys(DIR).forEach(function (k) { var d = DIR[k]; if (live(d)) s[String(d.name).toLowerCase()] = d.name; });
     return Object.keys(s).map(function (k) { return s[k]; }).sort(function (a, b) { return a.localeCompare(b); });
+  }
+  window.bmhReferrerNames = allNames;
+  function inp(cls, v, ph, type) { return '<input type="' + (type || 'text') + '" class="' + cls + '" value="' + esc(v || '') + '" placeholder="' + ph + '" style="width:100%;font-size:12px;padding:5px 7px">'; }
+  function rowHtml(n, d) {
+    d = d || {};
+    return '<tr data-name="' + esc(n) + '"><td>' + inp('rd-name', n, 'Name') + '</td><td>' + inp('rd-addr', d.address, 'Address') + '</td><td>' + inp('rd-ph', d.phone, 'Phone', 'tel') + '</td><td>' + inp('rd-em', d.email, 'E-mail', 'email') + '</td><td>' + inp('rd-ph2', d.phone2, 'Alternate mobile', 'tel') + '</td>'
+      + '<td style="white-space:nowrap"><button type="button" class="btn btn-xs btn-gold" onclick="bmhSaveReferrerRow(this)">Save</button> '
+      + '<button type="button" class="btn btn-xs btn-outline" title="Remove from the list" onclick="bmhRemoveReferrerRow(this)">🗑</button></td></tr>';
   }
   window.bmhRenderReferrerDirectory = function () {
     var box = document.getElementById('set-referrers-body'); if (!box) return;
-    box.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Loading…</div>';
+    if (!box.innerHTML) box.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Loading…</div>';
     loadShared().then(function () {
       var q = String((document.getElementById('set-ref-q') || {}).value || '').toLowerCase();
       var names = allNames().filter(function (n) { return !q || n.toLowerCase().indexOf(q) >= 0; });
-      var inp = function (cls, v, ph, type) { return '<input type="' + (type || 'text') + '" class="' + cls + '" value="' + esc(v || '') + '" placeholder="' + ph + '" style="width:100%;font-size:12px;padding:5px 7px">'; };
-      box.innerHTML = '<div style="overflow:auto"><table style="min-width:980px"><thead><tr><th style="width:190px">Name</th><th>Address</th><th style="width:140px">Phone</th><th style="width:190px">E-mail</th><th style="width:140px">Alternate mobile</th><th style="width:70px"></th></tr></thead><tbody>'
-        + (names.length ? names.map(function (n) {
-          var d = DIR[key(n)] || {};
-          return '<tr data-name="' + esc(n) + '"><td style="font-weight:800">' + esc(n) + '</td><td>' + inp('rd-addr', d.address, 'Address') + '</td><td>' + inp('rd-ph', d.phone, 'Phone', 'tel') + '</td><td>' + inp('rd-em', d.email, 'E-mail', 'email') + '</td><td>' + inp('rd-ph2', d.phone2, 'Alternate mobile', 'tel') + '</td>'
-            + '<td><button type="button" class="btn btn-xs btn-gold" onclick="bmhSaveReferrerRow(this)">Save</button></td></tr>';
-        }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--g1);padding:14px">No referral names yet</td></tr>') + '</tbody></table></div>';
+      box.innerHTML = '<div style="padding:8px 2px"><button type="button" class="btn btn-sm btn-gold" onclick="bmhAddReferrerRow()">➕ Add referrer</button>'
+        + ' <span style="font-size:11px;color:var(--g1);margin-left:6px">These names are offered at reception (Referred by → name). Edit any box, then Save on that row.</span></div>'
+        + '<div style="overflow:auto"><table style="min-width:1040px"><thead><tr><th style="width:200px">Name</th><th>Address</th><th style="width:140px">Phone</th><th style="width:190px">E-mail</th><th style="width:140px">Alternate mobile</th><th style="width:96px"></th></tr></thead><tbody id="set-ref-tbody">'
+        + (names.length ? names.map(function (n) { return rowHtml(n, DIR[key(n)]); }).join('') : '<tr class="rd-empty"><td colspan="6" style="text-align:center;color:var(--g1);padding:14px">No referral names yet</td></tr>') + '</tbody></table></div>';
     });
   };
+  window.bmhAddReferrerRow = function () {
+    var tb = document.getElementById('set-ref-tbody'); if (!tb) return;
+    var e = tb.querySelector('.rd-empty'); if (e) e.remove();
+    tb.insertAdjacentHTML('afterbegin', rowHtml('', {}));
+    var f = tb.querySelector('tr .rd-name'); if (f) f.focus();
+  };
   window.bmhSaveReferrerRow = function (btn) {
-    var tr = btn.closest('tr'), name = tr.getAttribute('data-name'), g = function (c) { return String(tr.querySelector('.' + c).value || '').trim(); };
+    var tr = btn.closest('tr'), old = tr.getAttribute('data-name') || '', g = function (c) { return String(tr.querySelector('.' + c).value || '').replace(/\s+/g, ' ').trim(); };
+    var name = g('rd-name');
+    if (!name) { toast('Enter the name first', 'w'); return; }
+    var renamed = old && key(old) !== key(name);
+    if ((!old || renamed) && live(DIR[key(name)])) { toast('"' + name + '" is already in the list', 'w'); return; }
     var rec = { name: name, address: g('rd-addr'), phone: g('rd-ph'), email: g('rd-em'), phone2: g('rd-ph2'), updatedAt: new Date().toISOString(), updatedBy: me().name || '' };
+    if (renamed) rec.formerName = old;
     var r = ref('referrerDirectory/' + key(name)); if (!r) { toast('Not connected', 'w'); return; }
     btn.disabled = true;
-    r.set(rec).then(function () { DIR[key(name)] = rec; btn.textContent = '✓ Saved'; setTimeout(function () { btn.textContent = 'Save'; btn.disabled = false; }, 1500); })
-      .catch(function () { btn.disabled = false; toast('Could not save', 'w'); });
+    var jobs = [r.set(rec)];
+    if (renamed) jobs.push(ref('referrerDirectory/' + key(old)).set({ name: old, deleted: true, renamedTo: name, deletedAt: rec.updatedAt, deletedBy: rec.updatedBy }));
+    Promise.all(jobs).then(function () {
+      DIR[key(name)] = rec; if (renamed) DIR[key(old)] = { name: old, deleted: true, renamedTo: name };
+      tr.setAttribute('data-name', name); fillList();
+      btn.textContent = '✓ Saved'; setTimeout(function () { btn.textContent = 'Save'; btn.disabled = false; }, 1500);
+      if (renamed) toast('Renamed. Patients already saved under "' + old + '" keep that name.', 's');
+    }).catch(function () { btn.disabled = false; toast('Could not save', 'w'); });
   };
+  window.bmhRemoveReferrerRow = function (btn) {
+    var tr = btn.closest('tr'), name = tr.getAttribute('data-name') || '';
+    if (!name) { tr.remove(); return; }
+    if (!window.confirm('Remove "' + name + '" from the referrer list?\nIt will no longer be offered at reception. Patients already saved with this name keep it.')) return;
+    var r = ref('referrerDirectory/' + key(name)); if (!r) { toast('Not connected', 'w'); return; }
+    var rec = Object.assign({}, DIR[key(name)] || {}, { name: name, deleted: true, deletedAt: new Date().toISOString(), deletedBy: me().name || '' });
+    r.set(rec).then(function () { DIR[key(name)] = rec; tr.remove(); fillList(); toast('Removed from the list', 's'); }).catch(function () { toast('Could not remove', 'w'); });
+  };
+
+  // ── reception (Referred by → name) and the queue's Edit box pick from this list ──
+  var NAME_IDS = ['rc-ref-name', 'upd-ref-name'];
+  function fillList() {
+    var dl = document.getElementById('bmh-referrer-names');
+    if (!dl) { dl = document.createElement('datalist'); dl.id = 'bmh-referrer-names'; document.body.appendChild(dl); }
+    dl.innerHTML = allNames().map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join('');
+    NAME_IDS.forEach(function (id) { var el = document.getElementById(id); if (el && el.getAttribute('list') !== 'bmh-referrer-names') { el.setAttribute('list', 'bmh-referrer-names'); el.setAttribute('autocomplete', 'off'); } });
+  }
+  window.bmhReferrerListFill = fillList;
+  document.addEventListener('change', function (e) {
+    var t = e.target; if (!t || t.id !== 'rc-ref-name') return;
+    var d = DIR[key(t.value)], mob = document.getElementById('rc-ref-mobile');
+    if (live(d) && mob && !mob.value && (d.phone || d.phone2)) mob.value = d.phone || d.phone2;
+  }, true);
+  document.addEventListener('focusin', function (e) { if (e.target && NAME_IDS.indexOf(e.target.id) >= 0) fillList(); }, true);
+  var tries = 0, iv = setInterval(function () {
+    if (window.FBDB || ++tries > 30) {
+      clearInterval(iv);
+      var r = ref('referrerDirectory');
+      if (r && r.on) { try { r.on('value', function (s) { DIR = s.val() || {}; fillList(); }, function () {}); } catch (e) {} }
+      fillList();
+    }
+  }, 2000);
 })();
