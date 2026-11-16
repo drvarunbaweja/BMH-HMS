@@ -352,6 +352,11 @@
     var one = ($('bmh-bill-date-filter') || {}).value || today();
     var from = ($('bmh-bill-date-from') || {}).value || '';
     var to = ($('bmh-bill-date-to') || {}).value || '';
+    // a date range (or all patients) lists money across days: only after the 6-digit report PIN (Reports)
+    if ((scope === 'range' || scope === 'all') && !(typeof window.bmhReportFinUnlocked === 'function' && window.bmhReportFinUnlocked())) {
+      box.innerHTML = '';
+      return;
+    }
     if (!S.days) { box.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Loading billing records…</div>'; ensureLoaded().then(renderMulti).catch(function () { box.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Could not load billing records.</div>'; }); return; }
     var list = buildEntries();
     if (scope === 'date') list = list.filter(function (e) { return dayOf(e.at) === one; });
