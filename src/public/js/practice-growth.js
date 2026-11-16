@@ -52,7 +52,9 @@
     if (!u) return false;
     var uname = String(u.username || '').toLowerCase().split('@')[0];
     var admin = u.isAdmin === true || String(u.role || '').toLowerCase() === 'admin';
-    return admin && (uname === 'drvarun' || /varun/i.test(String(u.name || '')));
+    if (!(admin && (uname === 'drvarun' || /varun/i.test(String(u.name || ''))))) return false;
+    // hidden until the 6-digit reports PIN has been entered (report-pins.js)
+    return typeof window.bmhReportFinUnlocked === 'function' ? !!window.bmhReportFinUnlocked() : true;
   }
 
   // ── classification of money received ─────────────────────────────────────
@@ -1514,7 +1516,8 @@
 
   window.bmhPracticeGrowth = {
     generate: generate, refresh: refresh, preset: preset, print: printReport,
-    opened: opened, lock: lockNow, unlock: unlock, setPin: setPin, changePin: changePin, cancelChange: function () { G.changingPin = false; if (isUnlocked()) showMain(); else lockNow(); },
+    opened: opened, lock: lockNow, unlock: unlock,
+    grant: function (ms) { G.unlockedUntil = Date.now() + Math.max(60000, Number(ms) || UNLOCK_MS); }, setPin: setPin, changePin: changePin, cancelChange: function () { G.changingPin = false; if (isUnlocked()) showMain(); else lockNow(); },
     markDone: markDone, undoDone: undoDone, editAmount: editAmount, saveAmount: saveAmount,
     csv: function () { if (G.last) csv(G.last); else { try { showToast('Show the report first', 'i'); } catch (e) {} } },
     otFilter: function (k) { G.otFilter = k; draw(); },
