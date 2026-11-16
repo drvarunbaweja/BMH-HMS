@@ -19527,7 +19527,8 @@ function _renderStockListNow() {
       const bucket = stores[store] || { total: 0 };
       const active = store === activeStore;
       return `<button type="button" class="btn btn-sm ${active ? 'btn-blue' : 'btn-outline'}" style="white-space:nowrap;flex:0 0 auto" onclick="bmhSelectInventoryStockStore(${bmhInventoryJsString(dk)},${bmhInventoryJsString(store)})">${escapeHtmlConsent(store)} (${Number(bucket.total || 0)})</button>`
-        + (active && typeof window.bmhMoveStoreToDept === 'function' && window.CURRENT_USER && CURRENT_USER.isAdmin ? `<button type="button" class="btn btn-sm btn-outline" style="white-space:nowrap;flex:0 0 auto" title="Move this store and all its stock to another heading" onclick="bmhMoveStoreToDept(${bmhInventoryJsString(store)})">🏷 Move to heading</button>` : '');
+        + (active && typeof window.bmhMoveStoreToDept === 'function' && window.CURRENT_USER && CURRENT_USER.isAdmin ? `<button type="button" class="btn btn-sm btn-outline" style="white-space:nowrap;flex:0 0 auto" title="Move this store and all its stock to another heading" onclick="bmhMoveStoreToDept(${bmhInventoryJsString(store)})">🏷 Move to heading</button>` : '')
+        + (active && typeof window.bmhDeleteStockSubheading === 'function' && window.CURRENT_USER && CURRENT_USER.isAdmin ? `<button type="button" class="btn btn-sm btn-outline" style="white-space:nowrap;flex:0 0 auto;color:#c0392b;border-color:#e6b0aa" title="Delete this sub-heading from this main heading only" onclick="bmhDeleteStockSubheading(${bmhInventoryJsString(dk)},${bmhInventoryJsString(store)})">🗑 Delete sub-heading</button>` : '');
     }).join('');
     let storeDetailHtml = '<div style="font-size:11px;color:var(--g1);padding:10px 0">Select a store to view its categories and stock items.</div>';
     if (activeStore && stores[activeStore]) {
