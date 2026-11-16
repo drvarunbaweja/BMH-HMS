@@ -36771,7 +36771,10 @@ ${Object.keys(groups).map(function (key) {
     const abn = flag === 'HIGH' || flag === 'LOW' ? String(row.abnormalNote || '').trim() : '';
     const subParts = [pblur, abn].filter(Boolean);
     const sub = subParts.length ? '<div style="margin-top:3px;font-size:9px;color:#6b7280;line-height:1.35">' + escapeHtmlConsent(subParts.join(' — ')) + '</div>' : '';
-    return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + sub + '</td><td class="' + cls + '">' + escapeHtmlConsent(row.val || '—') + '</td><td>' + escapeHtmlConsent(row.unit || '') + '</td><td>' + escapeHtmlConsent(row.range || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(flag || '—') + '</td></tr>';
+    // Only an out-of-range value is bold; the range is italic; the flag says only High / Low.
+    const outOfRange = flag === 'HIGH' || flag === 'LOW';
+    const valStyle = 'font-weight:' + (outOfRange ? '900' : '400') + ';color:#111';
+    return '<tr><td style="font-weight:400">' + escapeHtmlConsent(row.name || '') + sub + '</td><td style="' + valStyle + '">' + escapeHtmlConsent(row.val || '—') + '</td><td style="font-weight:400">' + escapeHtmlConsent(row.unit || '') + '</td><td style="font-style:italic;font-weight:400">' + escapeHtmlConsent(row.range || '') + '</td><td style="' + valStyle + '">' + (outOfRange ? (flag === 'HIGH' ? 'High' : 'Low') : '') + '</td></tr>';
   }).join('') + '</tbody></table>';
 }).join('')}
 <div class="signs">
