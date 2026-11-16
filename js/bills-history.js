@@ -104,7 +104,18 @@
       var t0 = ts[0]; var full = saved[key] || null;
       if (full && full.status === 'void') { delete saved[key]; return; }
       var paid = ts.reduce(function (s, t) { return s + (t.type === 'advance-adjustment' || t.source === 'advance-adjustment' ? 0 : Number(t.amount || 0)); }, 0);
-      out.push({ kind: 'bill', key: 'B:' + key, at: (full && full.createdAt) || t0.createdAt || t0.date, bmhId: t0.bmhId || (full && full.bmhId) || '', name: t0.patient || (full && full.patientName) || '', centre: t0.centre || '', dept: t0.dept || '', amount: full ? Number(full.netPayable || paid) : paid, paid: paid, mode: ts.map(function (t) { return t.mode; }).filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' + '), label: billLabel(ts, full), no: t0.billNo || (full && full.billNo) || key, billId: key, txns: ts, full: full });
+      // balance payments made later: each is its own receipt, on the day it was paid (the bill keeps its total paid / due)
+      var laterBy = {};
+      ts.forEach(function (t) { if (t.type === 'due-payment') { var g = String(t.duePaymentId || t.id); (laterBy[g] = laterBy[g] || []).push(t); } });
+      var paidLater = 0, billNoX = (full && full.billNo) || t0.billNo || key, billAmt = full ? Number(full.netPayable || paid) : paid;
+      var laterList = Object.keys(laterBy).map(function (g) { var l = laterBy[g]; return { id: g, txns: l, at: l[0].createdAt || l[0].date || l[0]._day, amount: l.reduce(function (s, t) { return s + Number(t.amount || 0); }, 0) }; }).sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+      var running = paid - laterList.reduce(function (s, x) { return s + x.amount; }, 0);
+      laterList.forEach(function (x) {
+        paidLater += x.amount; x.before = Math.max(0, billAmt - running); running += x.amount; x.after = Math.max(0, billAmt - running);
+        var m = x.txns.map(function (t) { return t.mode; }).filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' + ');
+        out.push({ kind: 'receipt', balance: true, key: 'D:' + x.id, at: x.at, bmhId: t0.bmhId || (full && full.bmhId) || '', name: t0.patient || (full && full.patientName) || '', centre: x.txns[0].centre || t0.centre || '', dept: x.txns[0].dept || t0.dept || '', amount: x.amount, mode: m, label: 'Balance payment · Bill ' + billNoX + (x.after > 0 ? ' · ' + money(x.after) + ' still due' : ' · dues cleared'), no: x.id, txns: x.txns, type: 'due-payment', billKey: 'B:' + key, billNo: billNoX, before: x.before, after: x.after });
+      });
+      out.push({ kind: 'bill', paidLater: paidLater, later: laterList, key: 'B:' + key, at: (full && full.createdAt) || t0.createdAt || t0.date, bmhId: t0.bmhId || (full && full.bmhId) || '', name: t0.patient || (full && full.patientName) || '', centre: t0.centre || '', dept: t0.dept || '', amount: full ? Number(full.netPayable || paid) : paid, paid: paid, mode: ts.map(function (t) { return t.mode; }).filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' + '), label: billLabel(ts, full), no: t0.billNo || (full && full.billNo) || key, billId: key, txns: ts, full: full });
       delete saved[key];
     });
     // Saved bills with no payment record (e.g. fully TPA / unpaid)
@@ -121,7 +132,7 @@
     if (!names.length) ts.forEach(function (t) { if (t.service && names.indexOf(t.service) === -1) names.push(t.service); });
     return names.filter(Boolean).join(', ') || 'Bill';
   }
-  function cash(e) { return e.adj ? 0 : (e.kind === 'bill' ? e.paid : e.amount); }
+  function cash(e) { return e.adj ? 0 : (e.kind === 'bill' ? e.paid - (e.paidLater || 0) : e.amount); }
   function billObject(e) {
     if (e.full) return e.full;
     var items = []; var seen = {};
@@ -188,6 +199,8 @@
       + '<div style="font-weight:900;color:var(--bmh-blue)">' + money(e.amount) + '<div style="font-size:9.5px;font-weight:400;color:var(--g1)">' + esc(e.mode) + '</div>' + due + '</div>'
       + '<div style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">'
       + (e.kind === 'bill' ? '<button type="button" class="btn btn-blue btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'bill\')">🖨 Bill</button>' : '')
+      + (e.kind === 'bill' && ((e.later || []).length || e.amount > e.paid) ? '<button type="button" class="btn btn-outline btn-sm" title="Bill with every payment, its date, and the balance" onclick="bmhBillHistoryStatement(\'' + k + '\')">📄 Statement</button>' : '')
+      + (e.balance && e.billKey ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryStatement(\'' + jsArg(e.billKey) + '\')">📄 Statement</button>' : '')
       + ((e.kind === 'bill' ? e.paid : (e.adj ? 0 : e.amount)) !== 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'receipt\')">🧾 Receipt</button>' : '')
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryPatient(\'' + jsArg(e.bmhId) + '\')">History</button>'
       + (e.kind === 'bill' && isAdmin() ? '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" title="Delete this bill (admin)" onclick="bmhBillHistoryVoid(\'' + k + '\')">🗑 Delete</button>' : '')
@@ -264,12 +277,48 @@
     var e = findEntry(key); if (!e) { toast('Record not found', 'w'); return; }
     if (e.kind === 'bill') {
       var b = billObject(e);
-      if (what === 'receipt') { try { bmhPrintReceiptFromBill(Object.assign({}, b, { amountReceived: e.paid, patientPays: e.paid })); } catch (x) { toast('Could not print receipt', 'w'); } return; }
+      if (what === 'receipt') { var first = e.paid - (e.paidLater || 0); try { bmhPrintReceiptFromBill(Object.assign({}, b, { amountReceived: first, patientPays: first })); } catch (x) { toast('Could not print receipt', 'w'); } return; }
       try { bmhPrintSavedBill(b); } catch (x) { toast('Could not print bill', 'w'); }
+      return;
+    }
+    if (e.balance) {
+      try {
+        printPaymentReceipt({ id: e.no, bmhId: e.bmhId, patient: e.name, amount: e.amount, date: e.at, mode: e.mode, dept: e.dept, centre: e.centre,
+          paymentRef: e.txns.map(function (t) { return t.paymentRef; }).filter(Boolean).join(', '), service: 'Balance payment',
+          for: 'Balance payment against bill ' + e.billNo + ' · Previous balance ' + money(e.before) + ' · Paid now ' + money(e.amount) + ' · ' + (e.after > 0 ? 'Still due ' + money(e.after) : 'All dues cleared') });
+      } catch (x) { toast('Could not print receipt', 'w'); }
       return;
     }
     try { printPaymentReceipt(Object.assign({}, e.txns[0])); } catch (x) { toast('Could not print receipt', 'w'); }
   }
+  // Reconciled bill: what was billed, every payment with its date, and the balance
+  function statement(key) {
+    var e = findEntry(key); if (!e || e.kind !== 'bill') { toast('Bill not found', 'w'); return; }
+    var b = billObject(e), p = patientInfo(e.bmhId);
+    var items = (Array.isArray(b.items) ? b.items : Object.values(b.items || {})).filter(function (i) { return i && !/^balance payment/i.test(String(i.desc || '')); });
+    var first = e.paid - (e.paidLater || 0);
+    var firstModes = e.txns.filter(function (t) { return t.type !== 'due-payment' && !(t.type === 'advance-adjustment' || t.source === 'advance-adjustment'); }).map(function (t) { return t.mode; }).filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' + ');
+    var adv = e.txns.filter(function (t) { return t.type === 'advance-adjustment' || t.source === 'advance-adjustment'; }).reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
+    var pays = []; if (first) pays.push({ at: e.at, what: 'Paid with the bill', no: e.no, mode: firstModes || e.mode, amount: first });
+    if (adv) pays.push({ at: e.at, what: 'Advance adjusted', no: e.no, mode: 'Advance', amount: adv });
+    (e.later || []).forEach(function (x) { pays.push({ at: x.at, what: 'Balance payment', no: x.id, mode: x.txns.map(function (t) { return t.mode; }).filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' + '), amount: x.amount }); });
+    var paidAll = pays.reduce(function (s, x) { return s + x.amount; }, 0), bal = Math.max(0, e.amount - paidAll);
+    var lastAt = pays.length ? pays[pays.length - 1].at : '';
+    var hosp = 'Baweja Multispeciality Hospital';
+    try { if (typeof getHospitalDetailValue === 'function') hosp = getHospitalDetailValue('Hospital Name', hosp); } catch (x) {}
+    var w = window.open('', '_blank', 'width=900,height=760'); if (!w) { toast('Allow pop-ups to print', 'w'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Bill statement — ' + esc(e.no) + '</title><style>@page{size:A4;margin:12mm}body{font-family:Arial,sans-serif;color:#111;font-size:12px}h1{font-size:17px;margin:0;color:#1A3C6E}h3{font-size:12.5px;margin:14px 0 4px}.hd{display:flex;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:6px;margin-bottom:8px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#eef2f7;font-size:11px}.r{text-align:right;white-space:nowrap}tfoot td{font-weight:800;background:#f6f6f6}.bal{margin-top:12px;padding:10px 12px;border:2px solid ' + (bal > 0 ? '#b00' : '#1a8c3c') + ';border-radius:8px;font-size:14px;font-weight:900;color:' + (bal > 0 ? '#b00' : '#1a8c3c') + '}</style></head><body>'
+      + '<div class="hd"><div><h1>' + esc(hosp) + '</h1><div>Bill statement (payments reconciled)</div></div><div style="text-align:right">Bill no. <b>' + esc(e.no) + '</b><br>Bill date ' + esc(fmtDate(e.at)) + '<br>Printed ' + esc(fmtDate(Date.now())) + '</div></div>'
+      + '<p><b>' + esc(e.name) + '</b> · ' + esc(e.bmhId) + (p.mob ? ' · ' + esc(p.mob) : '') + (e.dept ? ' · ' + esc(deptLabel(e.dept)) : '') + '</p>'
+      + '<h3>Billed</h3><table><thead><tr><th>#</th><th>Item</th><th class="r">Amount</th></tr></thead><tbody>' + items.map(function (i, n) { return '<tr><td>' + (n + 1) + '</td><td>' + esc(i.desc || i.name || 'Charge') + '</td><td class="r">' + money(i.amount != null ? i.amount : i.rate) + '</td></tr>'; }).join('') + '</tbody><tfoot><tr><td colspan="2" class="r">Bill total (payable)</td><td class="r">' + money(e.amount) + '</td></tr></tfoot></table>'
+      + '<h3>Payments</h3><table><thead><tr><th>#</th><th>Date</th><th>Time</th><th>Payment</th><th>Receipt no.</th><th>Mode</th><th class="r">Amount</th><th class="r">Balance after</th></tr></thead><tbody>'
+      + (function () { var run = e.amount; return pays.map(function (x, n) { run = Math.max(0, run - x.amount); return '<tr><td>' + (n + 1) + '</td><td>' + esc(fmtDate(x.at)) + '</td><td>' + esc(fmtTime(x.at)) + '</td><td>' + esc(x.what) + '</td><td>' + esc(x.no) + '</td><td>' + esc(x.mode || '') + '</td><td class="r">' + money(x.amount) + '</td><td class="r">' + money(run) + '</td></tr>'; }).join(''); })()
+      + (pays.length ? '' : '<tr><td colspan="8" style="text-align:center;color:#777">No payment received</td></tr>') + '</tbody><tfoot><tr><td colspan="6" class="r">Total paid</td><td class="r">' + money(paidAll) + '</td><td></td></tr></tfoot></table>'
+      + '<div class="bal">' + (bal > 0 ? 'Balance due: ' + money(bal) : 'All dues cleared' + (lastAt ? ' on ' + esc(fmtDate(lastAt)) : '')) + '</div>'
+      + '</body></html>');
+    w.document.close(); setTimeout(function () { try { w.focus(); w.print(); } catch (x) {} }, 400);
+  }
+  window.bmhBillHistoryStatement = statement;
 
   function printPatient(bmhId) {
     var list = buildEntries().filter(function (e) { return String(e.bmhId) === String(bmhId); });

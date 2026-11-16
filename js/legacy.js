@@ -36774,7 +36774,7 @@ ${Object.keys(groups).map(function (key) {
     // Only an out-of-range value is bold; the range is italic; the flag says only High / Low.
     const outOfRange = flag === 'HIGH' || flag === 'LOW';
     const valStyle = 'font-weight:' + (outOfRange ? '900' : '400') + ';color:#111';
-    return '<tr><td style="font-weight:400">' + escapeHtmlConsent(row.name || '') + sub + '</td><td style="' + valStyle + '">' + escapeHtmlConsent(row.val || '—') + '</td><td style="font-weight:400">' + escapeHtmlConsent(row.unit || '') + '</td><td style="font-style:italic;font-weight:400">' + escapeHtmlConsent(row.range || '') + '</td><td style="' + valStyle + '">' + (outOfRange ? (flag === 'HIGH' ? 'High' : 'Low') : '') + '</td></tr>';
+    return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + sub + '</td><td style="' + valStyle + '">' + escapeHtmlConsent(row.val || '—') + '</td><td style="font-weight:400">' + escapeHtmlConsent(row.unit || '') + '</td><td style="font-style:italic;font-weight:400">' + escapeHtmlConsent(row.range || '') + '</td><td style="' + valStyle + '">' + (outOfRange ? (flag === 'HIGH' ? 'High' : 'Low') : '') + '</td></tr>';
   }).join('') + '</tbody></table>';
 }).join('')}
 <div class="signs">

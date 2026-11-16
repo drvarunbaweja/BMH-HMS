@@ -221,7 +221,7 @@
       try {
         printPaymentReceipt({ id: payId, bmhId: id, patient: p.name || '', amount: total, date: at, mode: parts.map(function (x) { return x.mode + (parts.length > 1 ? ' ' + rs(x.amount) : ''); }).join(' + '),
           paymentRef: parts.map(function (x) { return x.ref; }).filter(Boolean).join(', '), service: 'Balance payment',
-          for: 'Balance payment against bill ' + billNos + ' · Previous balance ' + rs(bal) + ' · Paid now ' + rs(total) + ' · Remaining ' + rs(Math.max(0, bal - total)) });
+          for: 'Balance payment against bill ' + billNos + ' · Previous balance ' + rs(bal) + ' · Paid now ' + rs(total) + ' · ' + (bal - total > 0 ? 'Still due ' + rs(bal - total) : 'All dues cleared') });
       } catch (e) { console.warn('[dues] receipt', e); }
     }
   }
