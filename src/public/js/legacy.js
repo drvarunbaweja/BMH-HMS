@@ -52169,6 +52169,14 @@ async function saveUpdatedPatientDetails() {
     advancePurpose: advancePurpose || (advanceAmt > 0 ? 'Advance on account' : ''),
     updatedAt: nowIso
   };
+  // Billing is changed only by reception, and only when the fee / no-fee / payment fields were really changed in this box.
+  // From a doctor's queue (or any non-reception login) the Edit box changes the patient's particulars only.
+  const bmhEditRole = String(CURRENT_USER?.role || '').toLowerCase();
+  const bmhEditIsReception = /recept|tpa|billing|front|cash/.test(bmhEditRole);
+  const bmhEditBillingChanged = (Number(p.consultationFee || 0) !== Number(noFee ? 0 : consultationFee)) || (!!p.consultationNoFee !== !!noFee)
+    || (String(p.ins || '') !== String(updates.ins || '')) || (String(p.policy || '') !== String(policyNo || '')) || (Number(p.claimedAmount || 0) !== Number(updates.claimedAmount || 0));
+  const bmhEditBillingSync = bmhEditIsReception && bmhEditBillingChanged;
+  if (!bmhEditIsReception) ['consultationFee', 'consultationNoFee', 'ins', 'policy', 'claimedAmount', 'advance', 'advancePurpose'].forEach(function (k) { delete updates[k]; });
   // Update initials too
   updates.initials = computePatientInitials(updates.name);
   Object.assign(p, updates);
@@ -52182,7 +52190,7 @@ async function saveUpdatedPatientDetails() {
   window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
   rebuildPatientsArrayFromGlobalCache();
   savePatientToFirebase && savePatientToFirebase(p);
-  try {
+  if (bmhEditBillingSync) try {
     const today = localDateKey(new Date());
     const chargeRows = window.BMH_PATIENT_CHARGES[bid] || [];
     chargeRows.forEach(function (row) {
@@ -52210,7 +52218,7 @@ async function saveUpdatedPatientDetails() {
     saveBmhFinancials && saveBmhFinancials();
     bmhSyncPatientRunningBalance && bmhSyncPatientRunningBalance(bid);
   } catch (e) { console.warn('reception detail financial sync failed', e); }
-  if (isInsuranceLikeMode(payMode || insName)) {
+  if (bmhEditBillingSync && isInsuranceLikeMode(payMode || insName)) {
     const existingClaim = (PAY_REQUESTS || []).find(function (r) {
       return r.bmhId === bid && isInsuranceLikeMode(r.mode || r.ins || '');
     });
