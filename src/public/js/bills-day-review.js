@@ -116,12 +116,23 @@
         var d0 = dayOf(e.at); if (d0) days[d0] = 1;
       }
     });
+    // a deleted bill that had replaced an older bill in the dues ledger: the older one shows again (restore hides it again);
+    // and its TPA claim goes with it
+    var deps = [];
+    entries.forEach(function (e) {
+      if (e.kind !== 'bill' || !e.billId) return;
+      var bid = sk(e.billId);
+      try { (window.PAY_REQUESTS || []).forEach(function (r) { if (r && r.id && String(r.billId || '') === String(e.billId) && /insur|tpa|cashless/i.test(String(r.mode || r.ins || ''))) paths['payRequests/' + sk(r.id)] = 1; }); } catch (x) {}
+      if (!e.bmhId) return;
+      var r0 = ref('patientDues/' + sk(e.bmhId) + '/items');
+      if (r0) deps.push(r0.once('value').then(function (s) { var it = s.val() || {}; Object.keys(it).forEach(function (k) { if (it[k] && sk(it[k].supersededBy) === bid) paths['patientDues/' + sk(e.bmhId) + '/items/' + k + '/supersededBy'] = 1; }); }).catch(function () {}));
+    });
     // a balance payment that also paid other bills goes as a whole (all its payment rows)
-    return Promise.all(pays.map(function (p) {
+    return Promise.all(deps.concat(pays.map(function (p) {
       var pth = 'patientDues/' + sk(p.bmhId) + '/payments/' + sk(p.id); paths[pth] = 1;
       var r = ref(pth); if (!r) return null;
       return r.once('value').then(function (s) { var v = s.val(); if (v && Array.isArray(v.txnIds)) { var d = dayOf(v.at); if (d) { days[d] = 1; v.txnIds.forEach(function (id) { paths['transactions/' + d + '/' + sk(id)] = 1; }); } } }).catch(function () {});
-    })).then(function () { return { paths: Object.keys(paths), days: Object.keys(days), bills: Object.keys(bills) }; });
+    }))).then(function () { return { paths: Object.keys(paths), days: Object.keys(days), bills: Object.keys(bills) }; });
   }
   function deleteEntries(entries, opts) {
     opts = opts || {};
