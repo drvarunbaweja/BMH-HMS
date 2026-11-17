@@ -242,8 +242,8 @@
   }
 
   // ── One patient's full billing history ───────────────────────────────────
-  function patientView(bmhId) {
-    var el = resultEl(); if (!el) return;
+  function patientView(bmhId, into) {
+    var el = into || resultEl(); if (!el) return;
     var list = buildEntries().filter(function (e) { return String(e.bmhId) === String(bmhId); });
     S.patient = bmhId; S.view = list;
     var p = patientInfo(bmhId); var name = (list[0] && list[0].name) || p.name || '';
@@ -410,6 +410,22 @@
   function install() {
     if (typeof window.bmhSearchBillHistory !== 'function' || typeof window.bmhRecordBillingCollection !== 'function' || !document.getElementById('bmh-bill-history-results')) return false;
     window.bmhSearchBillHistory = function (q, mode) { return search(q, mode === 'list'); };
+    // read-only popup of one patient's billing history (logins without the Billing page: doctors reconciling)
+    window.bmhBillHistoryPopup = function (id) {
+      if (!id) return;
+      var ov = document.getElementById('bmh-bh-pop'); if (ov) ov.remove();
+      ov = document.createElement('div'); ov.id = 'bmh-bh-pop';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(10,20,40,.5);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
+      ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:920px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35)"><div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #e5e7eb"><div style="flex:1;font-weight:900;font-size:15px">🧾 Billing history</div><button type="button" class="btn btn-gray btn-sm" id="bmh-bh-pop-x">✕ Close</button></div><div id="bmh-bh-pop-body" style="padding:12px 16px"><div style="padding:18px;text-align:center;color:#777">Loading…</div></div></div>';
+      document.body.appendChild(ov);
+      ov.querySelector('#bmh-bh-pop-x').onclick = function () { ov.remove(); };
+      ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+      ensureLoaded().then(function () {
+        var body = document.getElementById('bmh-bh-pop-body'); if (!body) return;
+        patientView(id, body);
+        Array.prototype.forEach.call(body.querySelectorAll('[onclick*="bmhSearchBillHistory"]'), function (b) { b.style.display = 'none'; });
+      }).catch(function () { var body = document.getElementById('bmh-bh-pop-body'); if (body) body.innerHTML = '<div style="padding:18px;text-align:center;color:#c62828">Could not load — check the connection</div>'; });
+    };
     window.bmhBillHistoryPatient = function (id) { if (!id) return; ensureLoaded().then(function () { patientView(id); var el = resultEl(); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); };
     window.bmhBillHistoryReprint = reprint;
     // every payment record on file (uses this computer's saved copy of past days) — read-only, for reports
