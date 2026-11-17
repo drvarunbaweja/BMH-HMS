@@ -12785,7 +12785,7 @@ function bmhCanOpenBilling() {
   return !!document.querySelector('#sbnav .ni[onclick*="nav(\'billing\'"]');
 }
 function bmhQueueBillHistoryLink(p) {
-  if (!p || !p.bmhId || !bmhCanOpenBilling()) return '';
+  if (!p || !p.bmhId) return '';   // every login: Billing users open Bills & History, others a read-only popup
   const idArg = String(p.bmhId).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   return ' <span title="Bill history" onclick="event.stopPropagation();bmhOpenPatientBillHistory(\'' + idArg + '\')" style="cursor:pointer;font-size:10px;opacity:.85">🧾</span>';
 }
@@ -12793,7 +12793,10 @@ function bmhOpenPatientBillHistory(bmhId) {
   if (!bmhId) return;
   try { closeM('m-queue-payments'); } catch (e) {}
   const navEl = document.querySelector('#sbnav .ni[onclick*="nav(\'billing\'"]');
-  if (!navEl) { showToast('Billing is not available for this login', 'w'); return; }
+  if (!navEl) {
+    if (typeof window.bmhBillHistoryPopup === 'function') { window.bmhBillHistoryPopup(bmhId); return; }
+    showToast('Billing is not available for this login', 'w'); return;
+  }
   nav('billing', navEl);
   setTimeout(function () {
     const tab = Array.from(document.querySelectorAll('#pg-billing > .ptabs .ptab')).find(function (t) { return /Bills\s*&\s*History/i.test(t.textContent || ''); });
@@ -51391,7 +51394,7 @@ function buildQCard(p, sno) {
     : paidServiceEntries.length
     ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>${bmhQueueBillHistoryLink(p)}`
     : noFeeConsult
-    ? queueNoFeeConsultationBadge(true, p)
+    ? queueNoFeeConsultationBadge(true, p) + bmhQueueBillHistoryLink(p)
     : advPill;
   // previous balance first; the advance pill also shows next to Paid / No fee
   const chargeHtml = duesHtml + chargeHtml0 + (chargeHtml0 && chargeHtml0 !== advPill && advPill ? ' ' + advPill : '');
@@ -51507,7 +51510,7 @@ function buildQTableRow(p, sno, opts) {
     : paidServiceEntries.length
     ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${bmhQueueBillHistoryLink(p)}${advLbl ? ' · ' + advLbl : ''}`
     : noFeeConsult
-    ? `${queueNoFeeConsultationBadge(false, p)}${advLbl ? ' · ' + advLbl : ''}`
+    ? `${queueNoFeeConsultationBadge(false, p)}${bmhQueueBillHistoryLink(p)}${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
   const chargeHint = duesHint + chargeHint0;
   const seenRow = isQueueRowMarkedSeen(p);
