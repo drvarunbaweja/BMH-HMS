@@ -43,7 +43,7 @@
     return fetch(dbUrl() + '/transactions.json?shallow=true').then(function (r) { return r.json(); }).then(function (o) { return Object.keys(o || {}).filter(function (k) { return /^\d{4}-\d{2}-\d{2}$/.test(k); }).sort(); });
   }
   function fetchDay(day) {
-    var toRows = function (v) { v = v || {}; return Object.keys(v).map(function (k) { return Object.assign({}, v[k], { id: (v[k] && v[k].id) || k, _day: day }); }); };
+    var toRows = function (v) { v = v || {}; return Object.keys(v).map(function (k) { return Object.assign({}, v[k], { id: (v[k] && v[k].id) || k, _day: day, _key: k }); }); };
     return fetch(dbUrl() + '/transactions/' + encodeURIComponent(day) + '.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(toRows)
       .catch(function () { return window.FBDB.ref('transactions/' + day).once('value').then(function (snap) { return toRows(snap.val()); }); });
   }
@@ -61,7 +61,26 @@
     return withTimeout(p, 8000);
   }
   // Loads everything once per session (past days from the browser cache); today is refreshed on every search.
-  function ensureLoaded(onStep) {
+  // Bills / receipts deleted (Bills & History → day review) leave a small marker at billingDeletions/:
+  //   days/<day> = when a record of that day was deleted or restored → this computer re-reads that day;
+  //   bills/<billId> = a deleted bill → this computer's own saved copy of it is ignored and dropped.
+  S.del = { days: {}, bills: {} }; S.delAt = 0;
+  function syncDeletions(force) {
+    if (!force && Date.now() - S.delAt < 60000) return Promise.resolve();
+    S.delAt = Date.now();
+    return withTimeout(fetch(dbUrl() + '/billingDeletions.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (v) {
+      v = v || {}; S.del = { days: v.days || {}, bills: v.bills || {} };
+      try { var keep = (window.BMH_SAVED_BILLS || []).filter(function (b) { return !(b && S.del.bills[safeKey(b.id)]); }); if (window.BMH_SAVED_BILLS && keep.length !== window.BMH_SAVED_BILLS.length) { window.BMH_SAVED_BILLS.length = 0; keep.forEach(function (b) { window.BMH_SAVED_BILLS.push(b); }); try { localStorage.setItem('bmh_saved_bills', JSON.stringify(window.BMH_SAVED_BILLS)); } catch (x) {} } } catch (x) {}
+      return idbGet('__delStamps').then(function (seen) {
+        seen = seen || {};
+        var changed = Object.keys(S.del.days).filter(function (d) { return seen[d] !== S.del.days[d] && /^\d{4}-\d{2}-\d{2}$/.test(d); });
+        return Promise.all(changed.map(function (d) { return loadDay(d, true).catch(function () {}); })).then(function () { return idbPut('__delStamps', S.del.days); });
+      });
+    }).catch(function () {}), 10000);
+  }
+  function safeKey(id) { return String(id == null ? '' : id).replace(/[.#$\[\]\/]/g, '_'); }
+  function ensureLoaded(onStep) { return ensureLoaded0(onStep).then(function (r) { return syncDeletions().then(function () { return r; }); }); }
+  function ensureLoaded0(onStep) {
     if (!window.FBDB) return Promise.reject(new Error('Not connected'));
     if (S.days && !S.loading) return Promise.all([loadDay(today(), true).catch(function () {}), loadSaved()]);
     if (S.loading) return S.loading;
@@ -84,6 +103,7 @@
     var m = {};
     (window.BMH_SAVED_BILLS || []).concat(window.BILLS || []).forEach(function (b) { if (b && b.id) m[b.id] = b; });
     Object.keys(S.saved || {}).forEach(function (k) { var b = S.saved[k]; if (b && b.id) m[b.id] = b; });
+    Object.keys(m).forEach(function (k) { if (S.del && S.del.bills[safeKey(k)]) delete m[k]; });
     return m;
   }
   function buildEntries() {
@@ -250,6 +270,7 @@
   function voidBill(key) {
     if (!isAdmin()) { toast('Only admin can delete a bill', 'w'); return; }
     var e = findEntry(key); if (!e || e.kind !== 'bill' || !window.FBDB) return;
+    if (typeof window.bmhBillDeleteEntries === 'function') { window.bmhBillDeleteEntries([e]).then(function (ok) { if (ok) { if (S.patient) patientView(S.patient); else search(S.lastQuery || ''); } }); return; }
     var reason = prompt('Delete bill ' + e.no + ' for ' + (e.name || e.bmhId) + '?\n\nBill ' + money(e.amount) + ' · paid ' + money(e.paid) + ' · ' + fmtDate(e.at)
       + '\n\nThe bill and its ' + e.txns.length + ' payment record' + (e.txns.length === 1 ? '' : 's') + ' will be removed from billing and the collection totals. A copy is kept.\n\nReason:', 'Duplicate bill');
     if (reason === null) return;
@@ -412,5 +433,6 @@
 
   var tries = 0;
   (function wait() { if (install()) return; if (++tries < 200) setTimeout(wait, 100); })();
-  window.bmhBillsHistory = { state: S, buildEntries: buildEntries, ensureLoaded: ensureLoaded };
+  window.bmhBillsHistory = { state: S, buildEntries: buildEntries, ensureLoaded: ensureLoaded, loadDay: loadDay, syncDeletions: syncDeletions, dayOf: dayOf, safeKey: safeKey, deptLabel: deptLabel,
+    rerender: function () { try { if (S.patient) patientView(S.patient); } catch (e) {} try { renderMulti(); } catch (e) {} } };
 })();
