@@ -64,7 +64,7 @@
       + '<button type="button" id="pbd-del" title="Remove a procedure from this department" style="' + st + ';background:#c62828">−</button>';
     lab.appendChild(box);
     document.getElementById('pbd-add').onclick = addOne;
-    document.getElementById('pbd-del').onclick = removeList;
+    document.getElementById('pbd-del').onclick = function () { removeList(); };
   }
   function addOne() {
     var d = dept();
@@ -81,10 +81,10 @@
     if (hit) { sel.value = hit.textContent; try { checkSurgeryPurpose(); } catch (e) {} }
     toast('"' + name + '" added for ' + (NAMES[d] || d) + ' ✓', 's');
   }
-  function removeList() {
-    var d = dept(), r = rec(d), sel = document.getElementById('rc-purpose');
+  function removeList(dIn, itemsFn) {
+    var d = typeof dIn === 'string' && dIn ? dIn : dept(), r = rec(d), sel = document.getElementById('rc-purpose');
     var own = {}; r.add.forEach(function (x) { own[low(x)] = 1; });
-    var items = sel ? Array.prototype.map.call(sel.options, function (o) { return o.textContent; }).filter(function (x) { return low(x) !== low(CHECKIN); }) : [];
+    var items = (typeof itemsFn === 'function' ? itemsFn() : (sel ? Array.prototype.map.call(sel.options, function (o) { return o.textContent; }) : [])).filter(function (x) { return low(x) !== low(CHECKIN); });
     var old = document.getElementById('pbd-ov'); if (old) old.remove();
     var ov = document.createElement('div'); ov.id = 'pbd-ov';
     ov.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(10,20,40,.5);display:flex;align-items:center;justify-content:center;padding:14px';
@@ -105,19 +105,50 @@
         var r2 = rec(d);
         if (r2.add.some(function (x) { return low(x) === low(rm); })) r2.add = r2.add.filter(function (x) { return low(x) !== low(rm); });
         else if (!r2.hide.some(function (x) { return low(x) === low(rm); })) r2.hide.push(rm);
-        save(d, r2); refresh(); removeList(); toast('"' + rm + '" removed for ' + (NAMES[d] || d), 's');
+        save(d, r2); refresh(); removeList(d, itemsFn); toast('"' + rm + '" removed for ' + (NAMES[d] || d), 's');
       } else if (sh) {
         var r3 = rec(d); r3.hide = r3.hide.filter(function (x) { return low(x) !== low(sh); });
-        save(d, r3); refresh(); removeList();
+        save(d, r3); refresh(); removeList(d, itemsFn);
       }
     };
   }
   // list changed (here or on another computer): rebuild, but keep the purpose already chosen
   function refresh() {
+    try { if (typeof renderDocQueue === 'function' && document.getElementById('pg-doctor-queue') && document.getElementById('pg-doctor-queue').classList.contains('active')) renderDocQueue(); } catch (e) {}
     var sel = document.getElementById('rc-purpose'), keep = sel ? sel.value : '';
     try { if (typeof updatePurposeOptions === 'function') updatePurposeOptions(); else apply(); } catch (e) { apply(); }
     if (sel && keep && sel.value !== keep && Array.prototype.some.call(sel.options, function (o) { return o.textContent === keep; })) { sel.value = keep; try { checkSurgeryPurpose(); } catch (e) {} }
   }
+
+
+  // ── My patient queue: the same department lists ──
+  function dk(v) { try { return normalizeDeptKeyForQueue(v || '') || 'ophtho'; } catch (e) { return String(v || 'ophtho').toLowerCase(); } }
+  function queueChoices(d) {
+    d = dk(d); var r = rec(d), hide = {}, seen = {};
+    r.hide.forEach(function (x) { hide[low(x)] = 1; });
+    return ['Consultation', 'Follow-up', 'Surgery Today'].concat(r.add, window.CUSTOM_PURPOSES || []).filter(function (x) {
+      var k = low(x); if (!k || hide[k] || seen[k] || k === low(CHECKIN)) return false; seen[k] = 1; return true;
+    });
+  }
+  window.bmhPurposeByDept = { queueChoices: queueChoices, rec: rec };
+  function ptOf(bmhId) { var l = []; try { l = PATIENTS || []; } catch (e) {} return l.filter(function (x) { return x && String(x.bmhId) === String(bmhId); })[0] || null; }
+  window.addQueuePurposeOption = function (bmhId) {
+    var p = ptOf(bmhId), d = dk(p && (p.dept || p.department));
+    var raw = window.prompt('Add purpose of visit for ' + (NAMES[d] || d) + ':', '');
+    if (raw === null) return;
+    var name = String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!name) { toast('Enter a purpose of visit', 'w'); return; }
+    if (low(name) !== low(CHECKIN)) {
+      var r = rec(d); r.hide = r.hide.filter(function (x) { return low(x) !== low(name); });
+      if (!r.add.some(function (x) { return low(x) === low(name); }) && !queueChoices(d).some(function (x) { return low(x) === low(name); })) r.add.push(name);
+      save(d, r);
+    }
+    try { setQueueVisitPurpose(bmhId, name); } catch (e) {}
+  };
+  window.bmhQueuePurposeRemove = function (bmhId) {
+    var p = ptOf(bmhId), d = dk(p && (p.dept || p.department));
+    removeList(d, function () { return queueChoices(d); });
+  };
 
   function load() {
     try {
