@@ -48,6 +48,16 @@
     return '<div class="blk"><div class="bh"><span>' + esc(title) + ' (' + rows.length + ')</span><span>' + rs(tot) + '</span></div>'
       + rows.map(function (t) { return '<div class="ln"><span class="nm">' + esc(t.patient || t.patientName || '—') + '<i>' + esc(String(t.service || t.for || '').replace(/^Balance payment — /, 'Balance: ')) + (t.billNo ? ' · ' + esc(t.billNo) : '') + '</i></span><span class="md">' + esc(t.mode || '') + '</span><span class="am">' + rs(net(t)) + '</span></div>'; }).join('') + '</div>';
   }
+  // every change made today to a receipt of this department (deleted, amount / mode changed, marked not collected, refunds)
+  function changesBlock(dept) {
+    if (typeof window.bmhMoneyChangesToday !== 'function') return '';
+    var rows = window.bmhMoneyChangesToday(dept);
+    var tm = function (v) { var d = new Date(v); return isNaN(d) ? '' : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); };
+    return '<div class="blk" style="margin-top:6px"><div class="bh"><span>Changes made to payments today (' + rows.length + ')</span><span></span></div>'
+      + (rows.length ? rows.map(function (r) { return '<div class="ln"><span class="nm">' + esc(tm(r.at)) + ' · ' + esc(r.by || '—') + ' · ' + esc(r.patient || '—') + '<i>' + esc((r.what || []).join('; ')) + (r.service ? ' — ' + esc(r.service) : '') + '</i></span></div>'; }).join('')
+        : '<div class="ln"><span class="nm" style="font-weight:400">No receipt was changed or deleted today.</span></div>')
+      + '<div style="font-size:8px;color:#666;margin-top:2px">Every change to a receipt is recorded automatically with the login and time.</div></div>';
+  }
   window.bmhPrintDeptDaySummary = function (dept) {
     var d = DEPTS.filter(function (x) { return x[0] === dept; })[0]; if (!d) return;
     var b; try { b = build(dept); } catch (e) { toast('Could not build the summary: ' + (e && e.message || 'error'), 'w'); return; }
@@ -77,6 +87,7 @@
       + (b.pend.length ? '<div class="blk"><div class="bh"><span>Pending dues (' + b.pend.length + ')</span><span>' + rs(pendAmt) + '</span></div>' + b.pend.map(function (r) { return '<div class="ln"><span class="nm">' + esc(r.patient || '—') + '<i>' + esc(r.for || '') + '</i></span><span class="am">' + rs(r.amount) + '</span></div>'; }).join('') + '</div>' : '')
       + '</div>'
       + '<div class="tot"><span>Total collected (cash + UPI / card)</span><span>' + rs(b.total) + '</span></div>'
+      + changesBlock(dept)
       + '<div class="sig"><span>Reception</span><span>Doctor</span></div></body></html>';
     var w = window.open('', '_blank', 'width=640,height=820'); if (!w) { toast('Allow pop-ups to print', 'w'); return; }
     w.document.write(html); w.document.close(); setTimeout(function () { try { w.focus(); w.print(); } catch (e) {} }, 400);
