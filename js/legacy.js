@@ -13881,6 +13881,32 @@ async function bmhSaveBillToRtdbOnly() {
   const savedBill = bmhSaveBillRecordToRtdb(billData);
   const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
   bmhRecordBillingCollection(savedBill, billData, pt);
+  // v155: TPA / cashless — the same as Save & Print: mark the insurer and create the TPA claim for the TPA portion
+  try {
+    const isTPA = !!billData.isTPA, tpaAmount = Number(billData.tpaAmount) || 0;
+    if (pt && isTPA) {
+      pt.ins = billData.tpaCompany || pt.ins || 'Insurance/TPA';
+      pt.policy = billData.tpaPolicy || pt.policy || '';
+      try { fbUpdate && fbUpdate('patients/' + bmhId, { ins: pt.ins || '', policy: pt.policy || '', updatedAt: new Date().toISOString() }); } catch (e) {}
+    }
+    if (isTPA && tpaAmount > 0) {
+      const amountReceived = Number(billData.amountReceived) || 0;
+      const insurerAlreadyReceived = (TRANSACTIONS || []).filter(function (t) {
+        return t && t.bmhId === bmhId && isInsuranceLikeMode(t.mode || t.ins || '');
+      }).reduce(function (sum, t) { return sum + Math.max(0, Number(t.amount || 0)); }, 0);
+      bmhUpsertInsurancePayRequestFromBilling({
+        bmhId: bmhId, patient: pt, patientName: pt?.name || '', items: billData.items || [],
+        procedure: bmhGetPrimaryBillLineLabel(bmhId, billData.items || []),
+        diagnosis: pt?.diagnosis || pt?.dx || pt?.purpose || '',
+        insurer: billData.tpaCompany || '', policy: billData.tpaPolicy || '', approvedAmount: tpaAmount,
+        insurerAlreadyReceived: insurerAlreadyReceived, patientShareCollected: amountReceived,
+        patientDue: Math.max(0, Number(savedBill.netPayable || 0) - amountReceived - tpaAmount),
+        hospitalBillTotal: Number(savedBill.netPayable || 0),
+        centre: pt?.centre || (window.CURRENT_USER?.centre) || 'CHD', dept: pt?.dept || 'ophtho',
+        paymentRef: billData.paymentRef || '', billId: savedBill.id
+      });
+    }
+  } catch (e) { console.warn('[bill] TPA claim (RTDB save)', e); }
   showToast('Bill saved to RTDB ✓', 's');
   const choice = bmhAskPrintChoice();
   bmhHandleBillPrintingChoice(savedBill, choice);
