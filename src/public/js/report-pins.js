@@ -70,6 +70,20 @@
       });
     }).catch(function () { toast('Could not check the PIN — check the internet', 'w'); });
   }
+  // check a PIN without unlocking anything here (used by Bills & History → delete bills). Resolves true / false.
+  window.bmhReportPinVerify = function (pin, len) {
+    pin = String(pin || '').replace(/\D/g, '');
+    if (Date.now() < waitUntil) { toast('Too many wrong tries — wait a minute', 'w'); return Promise.resolve(false); }
+    if (pin.length !== len) { toast('Wrong PIN', 'w'); return Promise.resolve(false); }
+    return getStored().then(function (st) {
+      var rec = st && (len === 4 ? st.p4 : st.p6);
+      if (!rec) { toast(st ? 'Wrong PIN' : 'The report PINs have not been set yet', 'w'); return false; }
+      return derive(pin, rec.salt, rec.iter).then(function (h) {
+        if (h !== rec.hash) { tries++; if (tries >= 5) { tries = 0; waitUntil = Date.now() + 60000; } toast('Wrong PIN', 'w'); return false; }
+        tries = 0; return true;
+      });
+    }).catch(function () { toast('Could not check the PIN — check the internet', 'w'); return false; });
+  };
   function setupPins() {
     if (!isOwner()) return;
     var old = document.getElementById('rp-setup-ov'); if (old) old.remove();
