@@ -51571,7 +51571,7 @@ function buildQTableRow(p, sno, opts) {
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}${bmhQueueHistoryIcon(p.bmhId)}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800;cursor:pointer" title="Click to change department" onclick="event.stopPropagation();reassignReceptionPatientDept('${String(p.bmhId).replace(/'/g, "\\'")}','${String(p.dept || '').replace(/'/g, "\\'")}')">${deptLabel}</span></td>
-    <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
+    <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${(typeof window.bmhObgDoctorSelectHtml === 'function' && window.bmhObgDoctorSelectHtml(p)) || docShort}</td>
     <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${purposeCell}</td>
     <td style="font-size:11px">${dilationCellHtml(p)}</td>
     <td style="font-size:11px;color:var(--g2)">${isPreRegRow?'—':waitStr}</td>
