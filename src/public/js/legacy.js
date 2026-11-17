@@ -6714,6 +6714,7 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
     ${gonioPachyHtml}
   </div>
 </div>
+${(function () { try { return typeof window.bmhKeratPrintHtml === 'function' ? window.bmhKeratPrintHtml(pt, { od: { k1: readVal('kerat-od-k1', 'keratOdK1'), k2: readVal('kerat-od-k2', 'keratOdK2'), axis: readVal('kerat-od-axis', 'keratOdAxis') }, os: { k1: readVal('kerat-os-k1', 'keratOsK1'), k2: readVal('kerat-os-k2', 'keratOsK2'), axis: readVal('kerat-os-axis', 'keratOsAxis') } }, visitPrintDate || getDeptPrintDateValue('ophtho') || new Date().toISOString()) : ''; } catch (e) { return ''; } })()}
 
 ${ocularBlock}
 
@@ -53743,6 +53744,11 @@ function loadPastVisits(bmhId, dept) {
           const re = v.iopGatOD || v.iopNctOD || '';
           const le = v.iopGatOS || v.iopNctOS || '';
           return [re ? ('RE ' + re + ' mmHg') : '', le ? ('LE ' + le + ' mmHg') : ''].filter(Boolean).join(' · ') || '—';
+        } },
+        { label: 'Keratometry', get: function (v) {
+          if (typeof window.bmhKeratLine !== 'function') return '—';
+          const kp = window.CURRENT_PATIENT && String(window.CURRENT_PATIENT.bmhId || '') === String(bmhId || '') ? window.CURRENT_PATIENT : ((PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(bmhId || ''); }) || { bmhId: bmhId });
+          return window.bmhKeratLine(kp, v) || '—';
         } },
         { label: 'Subjective Refraction', get: function (v) {
           const re = [v.subjODsph, v.subjODcyl, v.subjODax, v.subjODva].filter(Boolean).join(' ');
