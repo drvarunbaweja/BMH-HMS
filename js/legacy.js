@@ -51418,9 +51418,9 @@ function buildQCard(p, sno) {
   const chargeHtml0 = runningDue>0
     ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ ${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
     : paidServiceEntries.length
-    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>${bmhQueueBillHistoryLink(p)}`
+    ? `${noFeeConsult ? queueNoFeeConsultationBadge(true, p) + ' ' : ''}<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>${noFeeConsult ? '' : bmhQueueBillHistoryLink(p)}`
     : noFeeConsult
-    ? queueNoFeeConsultationBadge(true, p) + bmhQueueBillHistoryLink(p)
+    ? queueNoFeeConsultationBadge(true, p)
     : advPill;
   // previous balance first; the advance pill also shows next to Paid / No fee
   const chargeHtml = duesHtml + chargeHtml0 + (chargeHtml0 && chargeHtml0 !== advPill && advPill ? ' ' + advPill : '');
@@ -51529,14 +51529,16 @@ function buildQTableRow(p, sno, opts) {
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const noFeeConsult = patientHasNoFeeConsultation(p);
   const duesHint = typeof window.bmhDuesBadge === 'function' && !p._xrefEntry ? window.bmhDuesBadge(p, false) : '';
+  // free cross-refer / no-fee patients who paid for a test or procedure: keep the label and add "Paid" (click → payments)
+  const paidLinkB = paidServiceEntries.length ? ` · <span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${noFeeConsult ? '' : bmhQueueBillHistoryLink(p)}` : '';
   const chargeHint0 = p._xrefEntry
-    ? getCrossRefQueueChargeHint(p)
+    ? getCrossRefQueueChargeHint(p) + (!p._xrefPendingPay && !p._xrefFeeRequired ? paidLinkB : '')
     : runningDue>0
     ? `<span style="font-size:10px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
     : paidServiceEntries.length
-    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${bmhQueueBillHistoryLink(p)}${advLbl ? ' · ' + advLbl : ''}`
+    ? (noFeeConsult ? `${queueNoFeeConsultationBadge(false, p)}${paidLinkB}${advLbl ? ' · ' + advLbl : ''}` : `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${bmhQueueBillHistoryLink(p)}${advLbl ? ' · ' + advLbl : ''}`)
     : noFeeConsult
-    ? `${queueNoFeeConsultationBadge(false, p)}${bmhQueueBillHistoryLink(p)}${advLbl ? ' · ' + advLbl : ''}`
+    ? `${queueNoFeeConsultationBadge(false, p)}${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
   const chargeHint = duesHint + chargeHint0;
   const seenRow = isQueueRowMarkedSeen(p);
