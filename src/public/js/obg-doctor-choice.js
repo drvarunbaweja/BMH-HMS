@@ -63,9 +63,11 @@
     window.resolveTreatingDoctorForPrint = function (dept, candidates) {
       try {
         var key = normalizeDeptKeyForQueue(dept || '');
+        // only OBG is affected (cheap check first: this runs for every OT case when lists are tidied up);
         // OT notes / OT prints keep their surgeon exactly as before
-        var otPage = false; try { otPage = (typeof getActivePageId === 'function' && getActivePageId() === 'pg-ot') || !!document.querySelector('#m-ot-notes.open, #m-ot-notes[style*="flex"]'); } catch (e) {}
-        var c = cur(), ch = key === 'obg' && !otPage ? choiceOf(c) : '';
+        if (key !== 'obg') return origRes.apply(this, arguments);
+        var c = cur(), ch = choiceOf(c);
+        if (ch) { try { if (typeof getActivePageId === 'function' && getActivePageId() === 'pg-ot') ch = ''; } catch (e) {} }
         if (ch) {
           // an explicitly different OBG doctor passed in (e.g. the OT surgeon) is respected as before
           var me = ''; try { me = (CURRENT_USER && CURRENT_USER.name) || ''; } catch (e) {}
