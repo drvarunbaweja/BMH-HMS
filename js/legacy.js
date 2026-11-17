@@ -27039,8 +27039,8 @@ function fetchReceptionPatientsFromFirebase(value) {
   const primaryReads = [];
   const directIds = new Set();
   if (/^BMSH[-\s]*\d+$/i.test(raw)) directIds.add('BMSH-' + digits);
-  if (/^\d{4,9}$/.test(raw)) directIds.add('BMSH-' + digits);
-  if (/^\d{4,6}$/.test(raw)) { directIds.add('BMSH-' + digits.padStart(6, '0')); directIds.add('BMSH-' + (digits.replace(/^0+/, '') || digits)); }
+  if (/^\d{3,9}$/.test(raw)) directIds.add('BMSH-' + digits);
+  if (/^\d{3,6}$/.test(raw)) { directIds.add('BMSH-' + digits.padStart(6, '0')); directIds.add('BMSH-' + (digits.replace(/^0+/, '') || digits)); }
   directIds.forEach(function (id) {
     primaryReads.push(window.FBDB.ref('patients/' + id).once('value').then(function (snap) {
       const row = snap.val();
@@ -27234,8 +27234,8 @@ function lookupByBMHID(val, opts) {
   const byPhone = phoneMatches.length === 1 ? phoneMatches[0] : null;
   const byName = val.length >= 3 ? findReceptionPatientsByName(vLow) : [];
   const single = byId || byPhone;
-  // a bare number of 4–6 digits is an old-style BMSH ID (e.g. 3820 → BMSH-3820): look the exact ID up in all records too
-  const bareIdNumber = /^\d{4,6}$/.test(val.trim());
+  // a bare number of 3–6 digits is an old-style BMSH ID (e.g. 382 → BMSH-382, 3820 → BMSH-3820): look the exact ID up in all records too
+  const bareIdNumber = /^\d{3,6}$/.test(val.trim());
   const exactBareHit = !!(bareIdNumber && byId && String(byId.bmhId || '').toUpperCase().replace(/^BMSH-0*/, '') === digits.replace(/^0+/, ''));
   if(single) {
     cancelReceptionRemoteLookup('id');
