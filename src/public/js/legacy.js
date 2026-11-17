@@ -5264,9 +5264,11 @@ function queuePurposeVisual(value) {
   for (let i = 0; i < text.length; i += 1) hash = ((hash * 31) + text.charCodeAt(i)) >>> 0;
   return palette[hash % palette.length];
 }
-function queuePurposeOptionsHtml(currentPurpose) {
+function queuePurposeOptionsHtml(currentPurpose, dept) {
   const current = String(currentPurpose || 'Consultation').trim() || 'Consultation';
-  const choices = ['Consultation', 'Follow-up', 'Surgery Today', 'Need to Check In'].concat(window.CUSTOM_PURPOSES || [], [current]);
+  // each department's own list (Reception → Purpose ＋ / −, purpose-by-dept.js); Need to Check In stays last for all
+  const own = (dept && window.bmhPurposeByDept && typeof window.bmhPurposeByDept.queueChoices === 'function') ? window.bmhPurposeByDept.queueChoices(dept) : null;
+  const choices = own ? own.concat([current, 'Need to Check In']) : ['Consultation', 'Follow-up', 'Surgery Today', 'Need to Check In'].concat(window.CUSTOM_PURPOSES || [], [current]);
   const seen = new Set();
   return choices.filter(function (value) {
     const key = String(value || '').trim().toLowerCase();
@@ -51543,8 +51545,8 @@ function buildQTableRow(p, sno, opts) {
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" onmouseenter="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='block'" onmouseleave="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='none'" style="position:relative;display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready${labTooltip.replace('<span style="display:none;', '<span class="lab-ready-tip" style="display:none;')}</span>` : '';
   const surgeryTodayBadge = isSurgeryToday ? '<span style="font-size:9px;padding:1px 6px;margin-left:4px;background:var(--orange);color:#fff;border-radius:6px;font-weight:900;vertical-align:middle">SURGERY TODAY</span>' : '';
   const purposeVisual = queuePurposeVisual(p.purpose || 'Consultation');
-  const purposeCell = isOphtho && !isPreRegRow
-    ? `<div style="display:flex;align-items:center;gap:4px;max-width:158px"><select title="Purpose of visit" onclick="event.stopPropagation()" onchange="event.stopPropagation();setQueueVisitPurpose('${String(p.bmhId).replace(/'/g, "\\'")}', this.value)" style="min-width:0;max-width:128px;background:${purposeVisual.bg};border:1.5px solid ${purposeVisual.border};border-radius:6px;padding:3px 5px;font-size:10px;font-weight:800;color:${purposeVisual.text};cursor:pointer">${queuePurposeOptionsHtml(p.purpose)}</select><button type="button" title="Add purpose of visit" onclick="event.stopPropagation();addQueuePurposeOption('${String(p.bmhId).replace(/'/g, "\\'")}')" style="width:24px;height:24px;flex:0 0 24px;border:1.5px solid ${purposeVisual.border};border-radius:6px;background:#fff;color:${purposeVisual.text};font-size:16px;font-weight:900;line-height:18px;cursor:pointer">+</button></div>`
+  const purposeCell = !isPreRegRow
+    ? `<div style="display:flex;align-items:center;gap:4px;max-width:186px"><select title="Purpose of visit" onclick="event.stopPropagation()" onchange="event.stopPropagation();setQueueVisitPurpose('${String(p.bmhId).replace(/'/g, "\\'")}', this.value)" style="min-width:0;max-width:128px;background:${purposeVisual.bg};border:1.5px solid ${purposeVisual.border};border-radius:6px;padding:3px 5px;font-size:10px;font-weight:800;color:${purposeVisual.text};cursor:pointer">${queuePurposeOptionsHtml(p.purpose, p.dept || p.department || '')}</select><button type="button" title="Add purpose of visit" onclick="event.stopPropagation();addQueuePurposeOption('${String(p.bmhId).replace(/'/g, "\\'")}')" style="width:24px;height:24px;flex:0 0 24px;border:1.5px solid ${purposeVisual.border};border-radius:6px;background:#fff;color:${purposeVisual.text};font-size:16px;font-weight:900;line-height:18px;cursor:pointer">+</button><button type="button" title="Remove a purpose for this department" onclick="event.stopPropagation();bmhQueuePurposeRemove('${String(p.bmhId).replace(/'/g, "\\'")}')" style="width:24px;height:24px;flex:0 0 24px;border:1.5px solid ${purposeVisual.border};border-radius:6px;background:#fff;color:${purposeVisual.text};font-size:16px;font-weight:900;line-height:18px;cursor:pointer">−</button></div>`
     : (p.purpose || '—');
   const restoreSeenAction = seenRow
     ? (p._xrefId
