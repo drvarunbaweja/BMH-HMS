@@ -11,7 +11,7 @@
 (function () {
   'use strict';
   try { if (localStorage.getItem('bmh_bill_day_review_off') === '1') return; } catch (e) {}
-  var SK = 'bmh_bill_del', MS = 30 * 60e3, REC = 'deletedBillRecords';
+  var SK = 'bmh_bill_del', SK_BIN = 'bmh_bill_bin', MS = 30 * 60e3, REC = 'deletedBillRecords', EDT = 'billEditRecords';
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function rs(n) { return '₹' + Math.round(Number(n || 0)).toLocaleString('en-IN'); }
   function toast(m, t) { try { showToast(m, t || 'i'); } catch (e) {} }
@@ -22,13 +22,15 @@
   function dayOf(v) { var b = BH(); return b ? b.dayOf(v) : String(v || '').slice(0, 10); }
   function sk(id) { return String(id == null ? '' : id).replace(/[.#$\[\]\/]/g, '_'); }
   function ref(p) { return window.FBDB ? window.FBDB.ref(p) : null; }
-  function finOk() { return typeof window.bmhReportFinUnlocked === 'function' && window.bmhReportFinUnlocked(); }
+  function finOk() { return (typeof window.bmhReportFinUnlocked === 'function' && window.bmhReportFinUnlocked()) || sess(SK_BIN); }
   function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function fmtT(v) { var d = new Date(v); return isNaN(d) ? '' : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); }
   function fmtDT(v) { var d = new Date(v); return isNaN(d) ? String(v || '') : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
   // ── 4-digit PIN: open for 30 minutes on this computer ──
-  function unlocked() { try { var o = JSON.parse(sessionStorage.getItem(SK) || 'null'); return !!(o && o.user === uname() && o.until > Date.now()); } catch (e) { return false; } }
+  function sess(k) { try { var o = JSON.parse(sessionStorage.getItem(k) || 'null'); return !!(o && o.user === uname() && o.until > Date.now()); } catch (e) { return false; } }
+  function unlocked() { return sess(SK); }
+  function grant(k) { try { sessionStorage.setItem(k, JSON.stringify({ user: uname(), until: Date.now() + MS })); } catch (e) {} }
   function pinBox(title, sub, len) {
     return new Promise(function (resolve) {
       var old = document.getElementById('bdr-pin'); if (old) old.remove();
@@ -47,17 +49,31 @@
       setTimeout(function () { inp.focus(); }, 30);
     });
   }
-  function needPin() {
-    if (!isAdmin()) { toast('Only admin can delete bills', 'w'); return Promise.resolve(false); }
-    if (unlocked()) return Promise.resolve(true);
+  // the PIN box shows 4 spaces but takes 6: 4 digits opens review / edit / delete for 30 minutes;
+  // 6 digits also shows the deleted bills and old versions of edited bills (30 minutes, this computer)
+  function askPin(sub) {
     if (typeof window.bmhReportPinVerify !== 'function') { toast('The report PINs are not available', 'w'); return Promise.resolve(false); }
-    return pinBox('4-digit PIN', 'Needed to review and delete bills. It stays open for 30 minutes on this computer.', 4).then(function (pin) {
+    return pinBox('PIN', sub, 6).then(function (pin) {
       if (pin == null) return false;
-      return window.bmhReportPinVerify(pin, 4).then(function (ok) {
-        if (ok) { try { sessionStorage.setItem(SK, JSON.stringify({ user: uname(), until: Date.now() + MS })); } catch (e) {} toast('Bill deletion open for 30 minutes', 's'); }
-        return ok;
+      var len = pin.length === 6 ? 6 : 4;
+      return window.bmhReportPinVerify(pin, len).then(function (ok) {
+        if (!ok) return false;
+        grant(SK);
+        if (len === 6) { grant(SK_BIN); toast('Bills open · deleted bills shown (30 minutes)', 's'); } else toast('Bills open for 30 minutes', 's');
+        try { buttons(); } catch (e) {}
+        return true;
       });
     });
+  }
+  function needPin() {
+    if (!isAdmin()) { toast('Only admin can review bills', 'w'); return Promise.resolve(false); }
+    if (unlocked()) return Promise.resolve(true);
+    return askPin('Needed to review, edit and delete bills. It stays open for 30 minutes on this computer.');
+  }
+  function needBin() {
+    if (!isAdmin()) return Promise.resolve(false);
+    if (finOk()) return Promise.resolve(true);
+    return askPin('Enter the 6-digit PIN to see deleted bills.').then(function () { return finOk(); });
   }
 
   // ── what kind of bill it is ──
@@ -174,12 +190,13 @@
     needPin().then(function (ok) {
       if (!ok) return;
       if (!V.day) { var y = new Date(); y.setDate(y.getDate() - 1); V.day = ymd(y); }
-      var ov = modal('bdr-ov', '🗂 Bills of a day — review & delete',
+      var ov = modal('bdr-ov', '🗂 Review bills',
         '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:10px">'
         + '<label style="font-size:11px;font-weight:800;color:#555">Date<br><input type="date" id="bdr-day" value="' + esc(V.day) + '" style="font-size:13px"></label>'
         + '<label style="font-size:11px;font-weight:800;color:#555">Centre<br><select id="bdr-centre" style="font-size:13px"><option value="">Both</option><option value="RPR"' + (V.centre === 'RPR' ? ' selected' : '') + '>Ropar</option><option value="CHD"' + (V.centre === 'CHD' ? ' selected' : '') + '>Chandigarh</option></select></label>'
         + '<label style="font-size:11px;font-weight:800;color:#555;flex:1;min-width:180px">Reason for deleting<br><input type="text" id="bdr-reason" value="Entered wrongly" style="font-size:13px;width:100%"></label>'
-        + '<button type="button" class="btn btn-sm" id="bdr-del" style="background:#c62828;color:#fff">🗑 Delete selected (0)</button></div>'
+        + '<button type="button" class="btn btn-sm" id="bdr-del" style="background:#c62828;color:#fff">🗑 Delete selected (0)</button>'
+        + '<button type="button" class="btn btn-sm btn-outline" onclick="bmhDeletedBills()">🗑 Deleted bills</button></div>'
         + '<div id="bdr-list"><div style="padding:18px;text-align:center;color:#777">Loading…</div></div>');
       ov.querySelector('#bdr-day').onchange = function () { V.day = this.value; load(); };
       ov.querySelector('#bdr-centre').onchange = function () { V.centre = this.value; draw(); };
@@ -228,34 +245,144 @@
                   + '<td><b>' + esc(e.name || '—') + '</b> <span style="color:#777;font-size:11px">' + esc(e.bmhId) + '</span><div style="color:#555;font-size:11px">' + esc(e.label) + '</div></td>'
                   + '<td style="width:120px;color:#666;font-size:11px">' + (e.kind === 'bill' ? 'Bill ' : 'Receipt ') + esc(e.no) + (e.centre ? '<br>' + esc(e.centre) : '') + '</td>'
                   + '<td style="width:80px;color:#666;font-size:11px">' + esc(e.mode || '') + '</td>'
-                  + '<td style="width:110px;text-align:right;font-weight:800">' + rs(e.amount) + (e.kind === 'bill' && Number(e.paid) !== Number(e.amount) ? '<div style="font-weight:600;color:#777;font-size:10.5px">paid ' + rs(e.paid) + '</div>' : '') + '</td></tr>';
+                  + '<td style="width:110px;text-align:right;font-weight:800">' + rs(e.amount) + (e.kind === 'bill' && Number(e.paid) !== Number(e.amount) ? '<div style="font-weight:600;color:#777;font-size:10.5px">paid ' + rs(e.paid) + '</div>' : '') + '</td>'
+                  + '<td style="width:40px;text-align:right"><button type="button" class="btn btn-xs btn-outline" title="Edit details" onclick="bmhBillEdit(\'' + esc(e.key).replace(/'/g, '') + '\')">✏️</button></td></tr>';
               }).join('') + '</tbody></table></div></details>';
           }).join('') + '</div>';
       }).join('');
   }
 
+  // ── edit the details of a bill / receipt (never the amounts); the old version is kept at billEditRecords/ ──
+  var DEPTS = [['ophtho', 'Ophthalmology'], ['obg', 'OBG'], ['psych', 'Neuropsychiatry'], ['skin', 'Skin & Cosmetology']];
+  var MODES = ['Cash', 'UPI', 'Card', 'Online / NEFT', 'Cheque', 'Insurance', 'TPA'];
+  function localTime(v) { var d = new Date(v); return isNaN(d) ? null : d; }
+  function moveDate(iso, newDay) {
+    var d = localTime(iso) || new Date(); var p = newDay.split('-').map(Number);
+    return new Date(p[0], p[1] - 1, p[2], d.getHours(), d.getMinutes(), d.getSeconds()).toISOString();
+  }
+  window.bmhBillEdit = function (key) {
+    needPin().then(function (ok) {
+      if (!ok) return;
+      var e = V.list.filter(function (x) { return x.key === key; })[0]; if (!e) { toast('Bill not found — reload the day', 'w'); return; }
+      // the payment rows this edit changes: a bill's own rows (not balance payments made later), or the receipt's rows
+      var rows = (e.txns || []).filter(function (t) { return e.kind !== 'bill' || t.type !== 'due-payment'; });
+      var items = [];
+      if (e.kind === 'bill' && e.full && e.full.items) items = (Array.isArray(e.full.items) ? e.full.items : Object.values(e.full.items)).map(function (i) { return (i && (i.desc || i.name)) || ''; });
+      else if (rows.length === 1) { var al = (rows[0].chargeAllocations || []).filter(Boolean); items = al.length ? al.map(function (a) { return a.desc || a.name || ''; }) : [rows[0].service || '']; }
+      var modes = rows.map(function (t) { return t.mode || ''; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+      var oneMode = modes.length <= 1;
+      var cur = { name: e.name || '', dept: e.dept || (rows[0] || {}).dept || '', centre: String(e.centre || '').toUpperCase(), mode: oneMode ? (modes[0] || e.mode || '') : '', day: dayOf(e.at), items: items };
+      var fld = 'display:block;font-size:11px;font-weight:800;color:#555;margin-top:8px';
+      var inp = 'width:100%;box-sizing:border-box;font-size:13px;padding:6px 8px';
+      var deptOpts = DEPTS.slice(); if (cur.dept && !DEPTS.some(function (d) { return d[0] === cur.dept; })) deptOpts.push([cur.dept, cur.dept]);
+      var ov = modal('bdr-edit', '✏️ Edit ' + (e.kind === 'bill' ? 'bill ' : 'receipt ') + esc(e.no) + ' · ' + esc(e.name || '') + ' ' + esc(e.bmhId),
+        '<div style="font-size:12px;color:#555;margin-bottom:6px">Amount ' + rs(e.amount) + (e.kind === 'bill' ? ' · paid ' + rs(e.paid) : '') + ' — amounts cannot be changed here. The old version is kept (6-digit PIN to see it).</div>'
+        + '<label style="' + fld + '">Patient name<input id="be-name" style="' + inp + '" value="' + esc(cur.name) + '"></label>'
+        + (items.length ? '<div style="' + fld + '">Particulars</div>' + items.map(function (d, i) { return '<input class="be-item" data-i="' + i + '" style="' + inp + ';margin-top:4px" value="' + esc(d) + '">'; }).join('') : '')
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+        + '<label style="' + fld + '">Department<select id="be-dept" style="' + inp + '">' + deptOpts.map(function (d) { return '<option value="' + esc(d[0]) + '"' + (d[0] === cur.dept ? ' selected' : '') + '>' + esc(d[1]) + '</option>'; }).join('') + '</select></label>'
+        + '<label style="' + fld + '">Centre<select id="be-centre" style="' + inp + '"><option value="RPR"' + (cur.centre === 'RPR' ? ' selected' : '') + '>Ropar</option><option value="CHD"' + (cur.centre === 'CHD' ? ' selected' : '') + '>Chandigarh</option>' + (cur.centre && cur.centre !== 'RPR' && cur.centre !== 'CHD' ? '<option value="' + esc(cur.centre) + '" selected>' + esc(cur.centre) + '</option>' : '') + '</select></label>'
+        + (oneMode ? '<label style="' + fld + '">Payment mode<input id="be-mode" list="be-modes" style="' + inp + '" value="' + esc(cur.mode) + '"><datalist id="be-modes">' + MODES.map(function (m) { return '<option value="' + m + '">'; }).join('') + '</datalist></label>' : '<div style="' + fld + '">Payment mode<div style="font-weight:600;color:#777;margin-top:6px">' + esc(modes.join(' + ')) + ' (split payment — not editable)</div></div>')
+        + '<label style="' + fld + '">Date<input id="be-day" type="date" style="' + inp + '" value="' + esc(cur.day) + '"></label></div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button type="button" class="btn btn-gray btn-sm" onclick="document.getElementById(\'bdr-edit\').remove()">Cancel</button><button type="button" class="btn btn-gold btn-sm" id="be-save">Save changes</button></div>');
+      ov.style.zIndex = '9100';
+      ov.querySelector('#be-save').onclick = function () {
+        var g = function (id) { var el = ov.querySelector('#' + id); return el ? String(el.value || '').replace(/\s+/g, ' ').trim() : null; };
+        var nx = { name: g('be-name'), dept: g('be-dept'), centre: g('be-centre'), mode: oneMode ? g('be-mode') : null, day: g('be-day'),
+          items: Array.prototype.map.call(ov.querySelectorAll('.be-item'), function (x) { return String(x.value || '').replace(/\s+/g, ' ').trim(); }) };
+        saveEdit(e, rows, cur, nx).then(function (done) { if (done) { ov.remove(); load(); } });
+      };
+    });
+  };
+  function saveEdit(e, rows, cur, nx) {
+    var changes = [];
+    var ch = function (f, a, b) { if (b != null && String(a || '') !== String(b || '')) changes.push({ field: f, from: String(a || ''), to: String(b || '') }); };
+    ch('Patient name', cur.name, nx.name); ch('Department', cur.dept, nx.dept); ch('Centre', cur.centre, nx.centre);
+    if (nx.mode != null) ch('Payment mode', cur.mode, nx.mode);
+    ch('Date', cur.day, nx.day);
+    var itemMap = {}; cur.items.forEach(function (d, i) { if (nx.items[i] != null && nx.items[i] !== d) { if (!nx.items[i]) return; itemMap[d] = nx.items[i]; ch('Particulars', d, nx.items[i]); } });
+    if (!nx.name) { toast('Patient name cannot be empty', 'w'); return Promise.resolve(false); }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(nx.day || '')) { toast('Choose a date', 'w'); return Promise.resolve(false); }
+    if (!changes.length) { toast('Nothing changed', 'i'); return Promise.resolve(true); }
+    if (!window.confirm('Save these changes?\n\n' + changes.map(function (c) { return c.field + ': ' + c.from + ' → ' + c.to; }).join('\n') + '\n\nAmounts stay the same.')) return Promise.resolve(false);
+    var at = new Date().toISOString(), u = me() || {}, by = u.name || u.username || 'Admin';
+    var tPaths = rows.map(function (t) { return { t: t, p: 'transactions/' + txnDay(t) + '/' + (t._key || sk(t.id)) }; });
+    var bPath = e.kind === 'bill' && e.billId ? 'savedBills/' + sk(e.billId) : null;
+    var reads = tPaths.map(function (x) { return ref(x.p).once('value').then(function (s) { return { p: x.p, v: s.val(), t: x.t }; }); });
+    if (bPath) reads.push(ref(bPath).once('value').then(function (s) { return { p: bPath, v: s.val(), bill: true }; }));
+    return Promise.all(reads).then(function (orig) {
+      var up = {}, days = {}, before = [];
+      var mapDesc = function (d) { return itemMap.hasOwnProperty(d) ? itemMap[d] : d; };
+      orig.forEach(function (o) {
+        if (o.v == null) return;
+        before.push({ p: o.p, v: o.v });
+        var v = JSON.parse(JSON.stringify(o.v));
+        if (o.bill) {
+          v.patientName = nx.name; v.dept = nx.dept; v.centre = nx.centre; if (nx.mode != null) v.paymentMode = nx.mode;
+          if (cur.day !== nx.day) { if (v.createdAt) v.createdAt = moveDate(v.createdAt, nx.day); if (v.date) v.date = moveDate(v.date, nx.day); }
+          if (v.items) Object.keys(v.items).forEach(function (k) { var it = v.items[k]; if (it) { if (it.desc != null) it.desc = mapDesc(it.desc); if (it.name != null) it.name = mapDesc(it.name); } });
+          v.editedAt = at; v.editedBy = by;
+          up[o.p] = v; return;
+        }
+        var oldDay = o.p.split('/')[1];
+        v.patient = nx.name; if (v.patientName != null) v.patientName = nx.name; v.dept = nx.dept; v.centre = nx.centre; if (nx.mode != null) v.mode = nx.mode;
+        if (v.service != null) v.service = mapDesc(v.service);
+        (v.chargeAllocations || []).forEach(function (a) { if (a) { if (a.desc != null) a.desc = mapDesc(a.desc); if (a.name != null) a.name = mapDesc(a.name); } });
+        v.editedAt = at; v.editedBy = by;
+        days[oldDay] = 1;
+        if (cur.day !== nx.day && oldDay === cur.day) {
+          if (v.date) v.date = moveDate(v.date, nx.day); if (v.createdAt) v.createdAt = moveDate(v.createdAt, nx.day);
+          up[o.p] = null; up['transactions/' + nx.day + '/' + o.p.split('/')[2]] = v; days[nx.day] = 1;
+        } else up[o.p] = v;
+      });
+      if (!before.length) { toast('Record not found on the server — reload the day', 'w'); return false; }
+      Object.keys(days).forEach(function (d) { up['billingDeletions/days/' + d] = at; });
+      var rid = 'EDIT' + Date.now() + Math.floor(Math.random() * 1000);
+      up[EDT + '/' + rid] = { id: rid, at: at, by: by, kind: e.kind, no: String(e.no || ''), name: cur.name, bmhId: e.bmhId || '', changes: changes, before: before };
+      return window.FBDB.ref().update(up).then(function () {
+        var b = BH(), S = b && b.state;
+        if (S && bPath && up[bPath]) { S.saved = S.saved || {}; S.saved[sk(e.billId)] = up[bPath]; }
+        try { (window.BMH_SAVED_BILLS || []).forEach(function (x) { if (x && bPath && sk(x.id) === sk(e.billId)) Object.assign(x, up[bPath]); }); localStorage.setItem('bmh_saved_bills', JSON.stringify(window.BMH_SAVED_BILLS)); } catch (x) {}
+        try { if (b) { b.syncDeletions(true); } } catch (x) {}
+        try { fbPush && fbPush('auditLog', { user: by, role: 'Admin', action: 'EDIT_BILL', item: (e.no || '') + ' · ' + changes.map(function (c) { return c.field; }).join(', '), timestamp: at }); } catch (x) {}
+        toast('Changes saved ✓', 's');
+        return Promise.all(Object.keys(days).map(function (d) { return b ? b.loadDay(d, true).catch(function () {}) : null; })).then(function () { return true; });
+      }, function () { toast('Could not save — check the connection', 'w'); return false; });
+    });
+  }
+
   // ── the hidden copies (6-digit PIN) ──
   window.bmhDeletedBills = function () {
-    if (!isAdmin() || !finOk()) { toast('Enter the 6-digit PIN in Reports first', 'w'); return; }
+    needBin().then(function (ok) { if (ok) openBin(); });
+  };
+  function openBin() {
     var ov = modal('bdr-bin', '🗑 Deleted bills (hidden copies)', '<div id="bdr-bin-list"><div style="padding:18px;text-align:center;color:#777">Loading…</div></div>');
     drawBin(ov);
-  };
+  }
   function drawBin(ov) {
     var box = ov.querySelector('#bdr-bin-list');
-    Promise.all([ref(REC).once('value'), ref('deletedTransactions').once('value')]).then(function (r) {
-      var recs = r[0].val() || {}, oldT = r[1].val() || {};
+    Promise.all([ref(REC).once('value'), ref('deletedTransactions').once('value'), ref(EDT).once('value')]).then(function (r) {
+      var recs = r[0].val() || {}, oldT = r[1].val() || {}, eds = r[2].val() || {};
+      var elist = Object.keys(eds).map(function (k) { return eds[k]; }).filter(Boolean).sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
       var oldN = 0; Object.keys(oldT).forEach(function (d) { oldN += Object.keys(oldT[d] || {}).length; });
       var list = Object.keys(recs).map(function (k) { return recs[k]; }).filter(Boolean).sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
       box.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><div style="flex:1;font-size:12px;color:#555">' + list.length + ' deletion' + (list.length === 1 ? '' : 's') + (oldN ? ' · plus ' + oldN + ' payment rows from the earlier "Delete bill" button' : '') + '. Restore puts a record back everywhere; Erase removes the copy for good.</div>'
-        + ((list.length || oldN) ? '<button type="button" class="btn btn-sm" id="bdr-empty" style="background:#7f1d1d;color:#fff">Empty all copies for good</button>' : '') + '</div>'
+        + ((list.length || oldN || elist.length) ? '<button type="button" class="btn btn-sm" id="bdr-empty" style="background:#7f1d1d;color:#fff">Empty all copies for good</button>' : '') + '</div>'
         + (list.length ? list.map(function (x) {
           return '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div style="flex:1;font-size:12px"><b>Deleted ' + esc(fmtDT(x.at)) + '</b> by ' + esc(x.by) + (x.reason ? ' · “' + esc(x.reason) + '”' : '') + ' · <b>' + rs(x.total) + '</b></div>'
             + '<button type="button" class="btn btn-xs btn-gold" data-restore="' + esc(x.id) + '">↩ Restore</button> <button type="button" class="btn btn-xs btn-outline" data-erase="' + esc(x.id) + '">Erase</button></div>'
             + '<div style="font-size:11.5px;color:#444;margin-top:4px">' + (x.items || []).map(function (i) { return '• ' + esc(i.name) + ' ' + esc(i.bmhId) + ' · ' + (i.kind === 'bill' ? 'Bill ' : 'Receipt ') + esc(i.no) + ' · ' + esc(i.label) + ' · ' + rs(i.amount) + (i.at ? ' · ' + esc(String(i.at).slice(0, 10)) : ''); }).join('<br>') + '</div></div>';
-        }).join('') : '<div style="padding:18px;text-align:center;color:#777">No deleted bills.</div>');
+        }).join('') : '<div style="padding:18px;text-align:center;color:#777">No deleted bills.</div>')
+        + '<div style="font-size:14px;font-weight:900;margin:16px 0 8px">✏️ Edited bills — old versions (' + elist.length + ')</div>'
+        + (elist.length ? elist.map(function (x) {
+          return '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center"><div style="flex:1;font-size:12px"><b>Edited ' + esc(fmtDT(x.at)) + '</b> by ' + esc(x.by) + ' · ' + esc(x.name) + ' ' + esc(x.bmhId) + ' · ' + (x.kind === 'bill' ? 'Bill ' : 'Receipt ') + esc(x.no) + '</div>'
+            + '<button type="button" class="btn btn-xs btn-outline" data-erase-edit="' + esc(x.id) + '">Erase</button></div>'
+            + '<div style="font-size:11.5px;color:#444;margin-top:4px">' + (x.changes || []).map(function (c) { return '• ' + esc(c.field) + ': <s style="color:#999">' + esc(c.from) + '</s> → <b>' + esc(c.to) + '</b>'; }).join('<br>') + '</div></div>';
+        }).join('') : '<div style="padding:10px;text-align:center;color:#777;font-size:12px">No edits yet.</div>');
       box.onclick = function (e) {
         var t = e.target; if (!t || !t.getAttribute) return;
-        var rid = t.getAttribute('data-restore'), eid = t.getAttribute('data-erase');
+        var rid = t.getAttribute('data-restore'), eid = t.getAttribute('data-erase'), xid = t.getAttribute('data-erase-edit');
+        if (xid) { if (window.confirm('Erase this old version for good?')) ref(EDT + '/' + xid).remove().then(function () { toast('Old version erased', 's'); drawBin(ov); }); return; }
         if (rid) restore(recs[rid]).then(function () { drawBin(ov); });
         else if (eid && window.confirm('Erase this hidden copy for good? It cannot be restored afterwards.')) ref(REC + '/' + eid).remove().then(function () { toast('Copy erased', 's'); drawBin(ov); });
         else if (t.id === 'bdr-empty') emptyAll().then(function () { drawBin(ov); });
@@ -278,10 +405,10 @@
   }
   function emptyAll() {
     if (!finOk()) return Promise.resolve();
-    if (!window.confirm('Empty ALL hidden copies of deleted bills for good?\nThey cannot be restored afterwards.')) return Promise.resolve();
+    if (!window.confirm('Empty ALL hidden copies of deleted bills (and old versions of edited bills) for good?\nThey cannot be restored afterwards.')) return Promise.resolve();
     if (!window.confirm('Are you sure? This erases every deleted-bill copy permanently.')) return Promise.resolve();
     return ref('savedBills').orderByChild('status').equalTo('void').once('value').then(function (s) { return s.val() || {}; }).catch(function () { return {}; }).then(function (voids) {
-      var up = {}; up[REC] = null; up['deletedTransactions'] = null;
+      var up = {}; up[REC] = null; up[EDT] = null; up['deletedTransactions'] = null;
       Object.keys(voids).forEach(function (k) { up['savedBills/' + k] = null; });
       return window.FBDB.ref().update(up).then(function () { toast('All deleted-bill copies erased', 's'); }, function () { toast('Could not empty — check the connection', 'w'); });
     });
@@ -293,7 +420,7 @@
     var bar = document.getElementById('bdr-bar');
     if (!isAdmin()) { if (bar) bar.remove(); return; }
     if (!bar) { bar = document.createElement('div'); bar.id = 'bdr-bar'; bar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 10px'; res.parentNode.insertBefore(bar, res); }
-    var html = '<button type="button" class="btn btn-sm btn-outline" onclick="bmhBillDayReview()">🗂 Review / delete bills of a day</button>'
+    var html = '<button type="button" class="btn btn-sm btn-outline" onclick="bmhBillDayReview()">🗂 Review bills</button>'
       + (finOk() ? '<button type="button" class="btn btn-sm btn-outline" onclick="bmhDeletedBills()">🗑 Deleted bills</button>' : '');
     if (bar.innerHTML !== html) bar.innerHTML = html;
   }
