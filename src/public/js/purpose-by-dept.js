@@ -1,7 +1,8 @@
 /* BMH — Reception → Purpose of visit: each department keeps its own procedures.
  * ＋ (next to "Purpose") adds a procedure to the department chosen at reception (e.g. OBG → MTP, Drip, Iron Sucrose, HCG);
  * － lists that department's purposes: ones added here are removed, built-in / older ones are only hidden for that
- * department (and can be shown again). "Need to Check In" stays in every department, always last.
+ * department (and can be shown again). Only Consultation, Follow-up and "Need to Check In" are common to all
+ * departments; the older shared names (added with the old "+") and Surgery Today belong to Eye.
  * Saved at settings/purposeByDept/<dept> = { add: [...], hide: [...] } — the same on every computer.
  * Only the list of names changes; what a purpose does (surgery panel, check-in, fees) is unchanged.
  * Off switch (this browser): localStorage.setItem('bmh_purpose_dept_off','1') then reload.
@@ -34,7 +35,9 @@
     var sel = document.getElementById('rc-purpose'); if (!sel || !DATA) return;
     var keep = sel.value, r = rec(dept()), hide = {};
     r.hide.forEach(function (x) { hide[low(x)] = 1; });
-    Array.prototype.slice.call(sel.options).forEach(function (o) { if (hide[low(o.textContent)] && low(o.textContent) !== low(CHECKIN)) o.remove(); });
+    var own = {}; r.add.forEach(function (x) { own[low(x)] = 1; });
+    var shared = {}; if (dept() !== 'ophtho') (window.CUSTOM_PURPOSES || []).forEach(function (x) { if (!own[low(x)]) shared[low(x)] = 1; });
+    Array.prototype.slice.call(sel.options).forEach(function (o) { var k = low(o.textContent); if ((hide[k] || shared[k]) && k !== low(CHECKIN) && o.textContent !== keep) o.remove(); });
     var have = {}; Array.prototype.forEach.call(sel.options, function (o) { have[low(o.textContent)] = 1; });
     var ci = Array.prototype.filter.call(sel.options, function (o) { return low(o.textContent) === low(CHECKIN); })[0];
     r.add.forEach(function (x) { if (have[low(x)]) return; var o = document.createElement('option'); o.textContent = x; sel.insertBefore(o, ci || null); have[low(x)] = 1; });
@@ -126,7 +129,10 @@
   function queueChoices(d) {
     d = dk(d); var r = rec(d), hide = {}, seen = {};
     r.hide.forEach(function (x) { hide[low(x)] = 1; });
-    return ['Consultation', 'Follow-up', 'Surgery Today'].concat(r.add, window.CUSTOM_PURPOSES || []).filter(function (x) {
+    // common to all: Consultation, Follow-up (and Need to Check In, added last by the queue); Surgery Today and the older
+    // shared custom names belong to Eye; every other option belongs only to the department it was added to
+    var eyeOnly = d === 'ophtho' ? ['Surgery Today'].concat(window.CUSTOM_PURPOSES || []) : [];
+    return ['Consultation', 'Follow-up'].concat(eyeOnly, r.add).filter(function (x) {
       var k = low(x); if (!k || hide[k] || seen[k] || k === low(CHECKIN)) return false; seen[k] = 1; return true;
     });
   }
