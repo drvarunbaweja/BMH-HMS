@@ -1,9 +1,10 @@
 /* BMH — OBG: two doctors (Dr. Namrata Baweja / Dr. Geeta Baweja) alternate. Choose who is seeing the patient:
  *  - My patient queue: OBG rows show a small Doctor dropdown instead of plain text;
  *  - inside the patient (OBG page): the existing "Doctor" dropdown.
- * The choice is saved on the patient (obgDoctor + obgDoctorDate, and assignedDoctor / doctor) and, for that day, the
- * prescription and other OBG prints carry that doctor's name and credentials — even when the other doctor (or admin)
- * is logged in. Other departments and other days work as before. Billing is not touched.
+ * The choice is saved on the patient for that day only (obgDoctor + obgDoctorDate; the patient's own doctor fields are
+ * not changed) and that day's prescription / certificate prints carry that doctor's name and credentials — even when
+ * the other doctor (or admin) is logged in. OT entries, OT notes and consents keep their own doctor. Other departments
+ * and other days work as before. Billing is not touched.
  * Off switch (this browser): localStorage.setItem('bmh_obg_doc_choice_off','1') then reload.
  */
 (function () {
@@ -28,7 +29,8 @@
   window.bmhSetObgDoctor = function (bmhId, name, quiet) {
     name = canon(name); if (!bmhId || !name) return;
     var at = new Date().toISOString(), by = ''; try { by = (CURRENT_USER && CURRENT_USER.name) || ''; } catch (e) {}
-    var patch = { obgDoctor: name, obgDoctorDate: today(), assignedDoctor: name, doctor: name, obgDoctorSetAt: at, obgDoctorSetBy: by };
+    // only the day's choice is saved: the patient's own doctor fields (used by OT, IPD, reports) are not touched
+    var patch = { obgDoctor: name, obgDoctorDate: today(), obgDoctorSetAt: at, obgDoctorSetBy: by };
     var lists = []; try { lists.push(PATIENTS); } catch (e) {} lists.push(window._BMH_ALL_PATIENTS_CACHE || []);
     lists.forEach(function (l) { (l || []).forEach(function (x) { if (x && String(x.bmhId) === String(bmhId)) Object.assign(x, patch); }); });
     var c = cur(); if (c && String(c.bmhId) === String(bmhId)) Object.assign(c, patch);
@@ -57,7 +59,14 @@
       return origSel.apply(this, arguments);
     };
   }
-  // prints: today's chosen OBG doctor comes before the logged-in doctor
+  // prints: today's chosen OBG doctor comes before the logged-in doctor — only inside the prescription / certificate
+  // prints (never OT entries, OT notes, consents or anything else)
+  var CTX = 0;
+  ['printUnifiedRx', 'getRxDoctorDisplayName', 'getDeptPrintDoctorInfo', 'buildCertificateContext', 'openCertificateModal'].forEach(function (name) {
+    var f = window[name]; if (typeof f !== 'function' || f._obgCtx) return;
+    var w = function () { CTX++; try { return f.apply(this, arguments); } finally { CTX--; } };
+    w._obgCtx = true; window[name] = w;
+  });
   var origRes = window.resolveTreatingDoctorForPrint;
   if (typeof origRes === 'function') {
     window.resolveTreatingDoctorForPrint = function (dept, candidates) {
@@ -65,7 +74,7 @@
         var key = normalizeDeptKeyForQueue(dept || '');
         // only OBG is affected (cheap check first: this runs for every OT case when lists are tidied up);
         // OT notes / OT prints keep their surgeon exactly as before
-        if (key !== 'obg') return origRes.apply(this, arguments);
+        if (key !== 'obg' || !CTX) return origRes.apply(this, arguments);
         var c = cur(), ch = choiceOf(c);
         if (ch) { try { if (typeof getActivePageId === 'function' && getActivePageId() === 'pg-ot') ch = ''; } catch (e) {} }
         if (ch) {
