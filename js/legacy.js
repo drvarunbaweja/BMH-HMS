@@ -28214,7 +28214,7 @@ async function _registerPatientImpl() {
       });
     } catch (e) {}
   }
-  const existingPt = hintedExistingPt || findSamePersonForRegistration({
+  let existingPt = hintedExistingPt || findSamePersonForRegistration({
     uidDisplayed: uidDisplayed,
     name: name,
     mob: mob,
@@ -28223,6 +28223,15 @@ async function _registerPatientImpl() {
     dob: dob,
     forceNewId: forceNewBmsh
   });
+  // v157: "New BMSH ID" ticked, but the same name + phone + age is already in today's queue → ask (one BMSH ID per person)
+  if (!existingPt && forceNewBmsh) {
+    const todaySame = sortPatientsByCanonicalIdentity((window.PATIENTS || []).filter(function (p) {
+      return p && !isMergedPatientRecord(p) && patientQueueDateMatchesToday(p) && samePersonRecordVsForm(p, formIdentity);
+    }))[0];
+    if (todaySame && window.confirm(name + ' (' + todaySame.bmhId + ') is already registered today in ' + bmhDeptLabel(todaySame.dept || '') + '.\n\nOK = use the same BMSH ID (adds ' + bmhDeptLabel(dept) + ' to today\'s visit)\nCancel = make a new BMSH ID (a different person, e.g. spouse)')) {
+      existingPt = todaySame;
+    }
+  }
   const isExistingRegistration = !!existingPt;
   const existingQueueRow = findSamePatientInTodayReceptionDeptQueue(formIdentity, existingPt, dept, centre);
   if (existingQueueRow) {
@@ -38422,8 +38431,11 @@ function getPatientIdentityMatches(input, opts) {
       .filter(Boolean)
   ));
   if (!nameKey || !phoneKeys.length) return [];
-  const source = typeof getReceptionLookupPool === 'function' ? getReceptionLookupPool() : (getAllKnownPatientRecords ? getAllKnownPatientRecords() : (PATIENTS || []));
-  return (source || []).filter(function (p) {
+  const pool = typeof getReceptionLookupPool === 'function' ? getReceptionLookupPool() : (getAllKnownPatientRecords ? getAllKnownPatientRecords() : (PATIENTS || []));
+  // v157: also today's live list — a patient registered a few seconds ago may not be in the full cache yet
+  const poolIds = new Set((pool || []).map(function (p) { return String(p?.bmhId || ''); }));
+  const source = (pool || []).concat((window.PATIENTS || []).filter(function (p) { return p && !poolIds.has(String(p.bmhId || '')); }));
+  return source.filter(function (p) {
     if (!p || isMergedPatientRecord(p)) return false;
     if (exclude && String(p.bmhId || '').trim() === exclude) return false;
     if (patientNameIdentityKey(p.name || p.patient) !== nameKey) return false;
@@ -38637,7 +38649,8 @@ function duplicateIdentityChargeSignature(row) {
     localDateKey(row.ts || row.date || row.createdAt || row.updatedAt),
     normalizeDuplicateFinancialText(row.desc || row.name || ''),
     Math.max(0, Number(row.amount != null ? row.amount : ((Number(row.qty) || 1) * (Number(row.rate) || 0))) || 0),
-    String(row.source || row.from || '').toLowerCase()
+    String(row.source || row.from || '').toLowerCase(),
+    normalizeDeptKeyForQueue(row.dept || row.department || '')
   ].join('|');
 }
 function isDuplicateIdentityConsultationPayRequest(row) {
@@ -38651,7 +38664,8 @@ function duplicateIdentityPayRequestSignature(row) {
     localDateKey(row.date || row.createdAt || row.updatedAt),
     normalizeDuplicateFinancialText(row.for || row.service || row.desc || ''),
     Math.max(0, Number(row.amount || 0)),
-    String(row.mode || '').toLowerCase()
+    String(row.mode || '').toLowerCase(),
+    normalizeDeptKeyForQueue(row.dept || row.department || '')   // v157: another department's consultation is not a duplicate
   ].join('|');
 }
 function duplicateIdentityTransactionSignature(row) {
@@ -38661,7 +38675,8 @@ function duplicateIdentityTransactionSignature(row) {
     normalizeDuplicateFinancialText(row.service || row.for || row.desc || ''),
     Math.max(0, Number(row.amount || 0)),
     String(row.mode || '').toLowerCase(),
-    String(row.source || row.createdBy || '').toLowerCase()
+    String(row.source || row.createdBy || '').toLowerCase(),
+    normalizeDeptKeyForQueue(row.dept || row.department || '')
   ].join('|');
 }
 function dedupeDuplicateIdentityChargeRows(rows) {
@@ -38807,6 +38822,27 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
     if (duplicateIsActive) merged.seenByDept = clearPatientSeenStateForDept(merged, duplicate.dept || duplicate.department || '');
     merged.queueRemoved = false;
   }
+  // v157: keep today's visit in another department — both records' same-day entries, plus the record whose
+  // department is not the merged one becomes a same-day entry, so that patient stays in both doctors' queues
+  (function keepOtherDeptVisit() {
+    const today = localDateKey(new Date());
+    const rows = new Map();
+    [].concat(Array.isArray(canonical.deptQueueEntries) ? canonical.deptQueueEntries : [], Array.isArray(duplicate.deptQueueEntries) ? duplicate.deptQueueEntries : []).forEach(function (r) { if (r && r.id && !rows.has(r.id)) rows.set(r.id, Object.assign({}, r)); });
+    const finalDept = normalizeDeptKeyForQueue(merged.dept || merged.department || '');
+    const addVisit = function (src) {
+      const d = normalizeDeptKeyForQueue(src?.dept || src?.department || '');
+      if (!d || d === finalDept || !patientQueueDateMatchesToday(src)) return;
+      const has = Array.from(rows.values()).some(function (r) { return r.active !== false && normalizeDeptKeyForQueue(r.dept || '') === d && localDateKey(r.createdAt || r.queueDate || r.date) === today; });
+      if (has) return;
+      const seenAt = isQueueRowMarkedSeen(src) ? (src.seenAt || nowIso) : '';
+      const id = 'DQ' + Date.now() + Math.floor(Math.random() * 1000);
+      rows.set(id, { id: id, dept: d, doctor: src.assignedDoctor || src.doctor || '', purpose: src.purpose || 'Consultation', queueDate: today,
+        source: src.queueSource || 'reception', centre: patientCentreKey(src.centre || merged.centre), createdAt: src.queueAddedAt || src.checkinAt || src.createdAt || nowIso,
+        active: true, seen: !!seenAt, status: seenAt ? 'seen' : 'waiting', seenAt: seenAt, updatedAt: nowIso, mergedFrom: String(src.bmhId || '') });
+    };
+    addVisit(duplicate); addVisit(canonical);
+    if (rows.size) merged.deptQueueEntries = Array.from(rows.values());
+  })();
   normalizePatientRecord(merged);
   merged.lastUpdated = nowIso;
   merged.updatedBy = CURRENT_USER?.name || 'System';
