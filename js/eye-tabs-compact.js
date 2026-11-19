@@ -58,7 +58,18 @@
     + '#oe-slitlamp .sl-chip.sel{background:var(--blue);color:#fff;border-color:var(--blue)}'
     + '#oe-slitlamp input[type=text],#oe-slitlamp textarea{background:#fff!important;color:#222!important;border:1px solid var(--g4,#d5dbe5)!important}'
     + '#oe-slitlamp button[onclick^="addSlitLampRow"]{background:#f3f6fb!important;color:var(--bmh-blue,#1a3c6e)!important;border-color:#b9c4d6!important}'
-    + '#oe-slitlamp .etc-sl-add{position:absolute;left:0;top:22px;background:var(--blue,#1d6fe0);color:#fff;border:none;border-radius:999px;font-size:10px;font-weight:800;padding:1px 8px;cursor:pointer;line-height:16px}'
+    + '#oe-slitlamp .etc-sl-add{position:absolute;left:80px;top:2px;width:16px;height:16px;padding:0;background:var(--blue,#1d6fe0);color:#fff;border:none;border-radius:50%;font-size:12px;font-weight:900;cursor:pointer;line-height:16px;text-align:center}'
+    // Slit lamp compressed: no title / note / OD-OS header row; rows close together; OD / OS tag, chips and "other finding" on one line
+    + '#oe-slitlamp>div:first-child{padding:8px 10px!important}'
+    + '#oe-slitlamp .etc-gone{display:none!important}'
+    + '#oe-slitlamp .sl-sl-row{margin-bottom:5px!important;gap:6px!important;grid-template-columns:96px 1fr 1fr!important}'
+    + '#oe-slitlamp .sl-sl-row>[style*="background:rgba"]{display:flex;flex-wrap:wrap;align-items:center;gap:3px;padding:3px 5px!important}'
+    + '#oe-slitlamp .sl-sl-row>[style*="background:rgba"]>div[style*="8.5px"]{margin:0 2px 0 0!important}'
+    + '#oe-slitlamp .sl-sl-row>[style*="background:rgba"]>div[style*="flex-wrap"]{display:contents!important}'
+    + '#oe-slitlamp .sl-sl-row .sl-free-text{flex:1 1 110px;width:auto!important;margin-top:0!important;padding:2px 6px!important;min-height:0;height:22px}'
+    + '#oe-slitlamp .sl-chip{padding:2px 7px!important;font-size:10.5px!important}'
+    + '#oe-slitlamp .sl-sl-row [style*="9.5px"]{padding-top:2px!important}'
+    + '#oe-slitlamp .etc-slbar{display:flex;justify-content:center;gap:10px;align-items:center;margin:6px 0!important}'
     // Plan: Diagnosis on top, Instructions | Procedure side by side
     + '#oe-plan .oe-plan-grid{grid-template-columns:1fr!important}'
     + '#oe-plan .plan-stack{grid-template-columns:1fr 1fr}'
@@ -169,11 +180,22 @@
     });
   }
   function buildSl() {
+    var box = document.querySelector('#oe-slitlamp>div:first-child');
+    if (box && !box.classList.contains('etc-slc')) {
+      box.classList.add('etc-slc');
+      var kids = box.children, title = kids[0], note = kids[1], hdr = kids[2];
+      var pb = title && title.querySelector('button[onclick*="printEyeExaminationCaseSheetA4"]');
+      var addBtn = box.querySelector('button[onclick^="addSlitLampRow"]');
+      if (pb && addBtn && addBtn.parentNode) { addBtn.parentNode.classList.add('etc-slbar'); addBtn.parentNode.appendChild(pb); }
+      if (title && /Slit lamp/i.test(title.textContent) && pb && pb.parentNode !== title) title.classList.add('etc-gone');
+      if (note && /print directly/i.test(note.textContent)) note.classList.add('etc-gone');
+      if (hdr && /RIGHT EYE/i.test(hdr.textContent) && !hdr.querySelector('[style*="9.5px"]')) hdr.classList.add('etc-gone');
+    }
     slRows().forEach(function (row) {
       if (row.querySelector('.etc-sl-add')) return;
       var label = row.querySelector('[style*="9.5px"]').textContent.trim();
       row.style.position = 'relative';
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'etc-sl-add'; b.textContent = '+ Add'; b.title = 'Add a finding to ' + label + ' (stays for next time)';
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'etc-sl-add'; b.textContent = '+'; b.title = 'Add a finding to ' + label + ' (stays for next time)';
       b.onclick = function () {
         var v = String(window.prompt('Add a finding to "' + label + '" (it will stay for next time):', '') || '').trim();
         if (!v) return;
