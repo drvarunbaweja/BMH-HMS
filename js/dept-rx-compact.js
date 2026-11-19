@@ -9,7 +9,7 @@
 (function () {
   'use strict';
   try { if (localStorage.getItem('bmh_dept_rx_compact_off') === '1') return; } catch (e) {}
-  var TABS = ['obg-rx', 'psych-rx', 'skin-rx'];
+  var TABS = ['obg-rx']; // Psych / Skin to be added after their go-ahead: 'psych-rx', 'skin-rx'
   var S = TABS.map(function (t) { return '#' + t; });
   function sel(suffix) { return S.map(function (s) { return s + ' ' + suffix; }).join(','); }
   var CSS = ''
