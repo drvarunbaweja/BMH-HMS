@@ -28,13 +28,24 @@
     + '#etc-va b{font-size:13px;font-weight:900;color:inherit;min-width:28px;display:inline-block}'
     + '#etc-va .etc-lbl{font-size:9px;font-weight:800;color:var(--g1)}'
     + '#etc-va select{width:72px!important;padding:2px!important;font-size:12px!important;height:24px}'
-    + '#oe-va-iop-ref .etc-row3{display:grid!important;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(200px,.75fr)!important;gap:10px}'
-    + '#oe-va-iop-ref .etc-row3>div{margin-bottom:0!important}'
-    + '#oe-va-iop-ref .etc-row3 .etc-cv{padding:8px 10px!important}'
-    + '#oe-va-iop-ref .etc-dil{flex-direction:column;align-items:stretch!important;justify-content:center;text-align:center}'
+    + '#etc-dil{background:var(--purple,#8e44ad);color:#fff;border:none;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;text-transform:none;letter-spacing:0}'
+    + '#etc-lower{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr) minmax(0,.8fr);gap:10px;align-items:start;margin-top:10px}'
+    + '#etc-lower>div{border:1px solid var(--g4,#dde2ea);border-radius:var(--rsm,8px);padding:8px 10px;background:#fff;min-width:0}'
+    + '#etc-lower>div>div{margin-bottom:6px!important}'
+    + '#etc-lower .etc-cv{background:#fff!important;border:none!important;padding:0!important;margin:0!important}'
+    + '#etc-lower .etc-cv input[type=number],#etc-lower .etc-cv input[type=text]{width:48px!important}'
+    + '#etc-lower .etc-kerat{border:none!important;padding:0!important}'
+    + '#etc-lower .etc-kerat input{padding:3px!important;font-size:12px!important}'
+    + '#etc-lower .etc-kerat [style*="grid-template-columns:58px"]{grid-template-columns:44px repeat(3,minmax(0,1fr))!important;gap:4px!important}'
+    + '#etc-lower .etc-iop{font-size:11px}'
+    + '#etc-lower .etc-iop td,#etc-lower .etc-iop th{padding:2px 4px!important}'
+    + '#etc-lower .etc-iop input{width:56px!important;padding:2px 4px!important;font-size:12px!important}'
+    + '#etc-lower .etc-iop input[type=time]{width:74px!important;font-size:10px!important}'
+    + '#etc-lower .etc-iop select{font-size:11px!important;padding:2px!important}'
+    + '#etc-lower [id$="-box"][id^="iop-o"]{padding:2px 10px!important}'
+    + '#oe-va-iop-ref .etc-gone{display:none!important}'
     + '#oe-va-iop-ref .etc-fg4{display:grid!important;grid-template-columns:90px 1.4fr 1fr 1fr;gap:10px}'
     + '#oe-va-iop-ref .etc-fg4 .form-group{margin-bottom:0}'
-    + '#oe-va-iop-ref .etc-iop td,#oe-va-iop-ref .etc-iop th{padding-top:3px!important;padding-bottom:3px!important}'
     // Slit lamp: light theme (inline styles are left alone; the save code reads them)
     + '#oe-slitlamp>div:first-child{background:#fff!important;border:1px solid var(--g4,#dde2ea)}'
     + '#oe-slitlamp [style*="color:#fff"],#oe-slitlamp [style*="color:rgba(255,255,255"]{color:var(--bmh-blue,#1a3c6e)!important}'
@@ -63,7 +74,7 @@
     + '#oe-rx .rx-drugs-root>div[style*="overflow:hidden"]~div[style*="overflow:hidden"]>div:first-child{display:none!important}'
     + '#oe-rx .rx-drugs-root [style*="padding:8px 10px"][style*="align-items:start"]{padding:5px 10px!important}'
     + '#oe-rx .rx-drugs-root [style*="flex-direction:column;gap:6px"]{flex-direction:row!important;gap:4px!important}'
-    + '@media(max-width:900px){#oe-va-iop-ref .etc-row3,#oe-va-iop-ref .etc-fg4,#oe-plan .plan-stack{grid-template-columns:1fr!important}}';
+    + '@media(max-width:900px){#etc-lower,#oe-va-iop-ref .etc-fg4,#oe-plan .plan-stack{grid-template-columns:1fr!important}}';
 
   function addCss() { if ($('etc-css')) return; var s = document.createElement('style'); s.id = 'etc-css'; s.textContent = CSS; document.head.appendChild(s); }
 
@@ -92,17 +103,40 @@
       else if ((m = id.match(/^subj-(od|os)-va$/))) setSelVal($('va-' + m[1] + '-bc'), ev.target.value);
       paintVa();
     });
-    // Keratometry · Colour vision · Dilation in one row
-    var kgrid = $('kerat-od-k1') && $('kerat-od-k1').closest('[style*="grid-template-columns:minmax(0,2fr)"]');
+    // Refraction straight under the VA heading; IOP (with pachy) · Keratometry · Colour vision side by side below it;
+    // "Mark dilated" as a small button on the VA heading line. Existing elements are moved, never copied, so ids stay unique.
+    var kerat = $('kerat-od-k1') && $('kerat-od-k1').closest('[style*="background:#fff"]');
+    var kgrid = kerat && kerat.parentNode;
+    var dil = kgrid && kgrid.children[1];
     var cvHead = Array.prototype.find.call(tab.querySelectorAll('div'), function (d) { return /Colour Vision \(Ishihara\)/.test(d.textContent) && d.children.length === 0; });
     var cv = cvHead && cvHead.parentNode;
-    if (kgrid && cv) {
-      var dil = kgrid.children[1];
-      kgrid.classList.add('etc-row3'); cv.classList.add('etc-cv');
-      kgrid.insertBefore(cv, dil); if (dil) dil.classList.add('etc-dil');
-    }
-    var fg = $('ipd-val') && $('ipd-val').closest('.fg3'); if (fg) fg.classList.add('etc-fg4');
-    var gat = tab.querySelector('table'); if (gat) gat.classList.add('etc-iop');
+    var refWrap = $('ucva-od-dist') && $('ucva-od-dist').closest('[style*="overflow-x:auto"]');
+    var refHead = refWrap && refWrap.previousElementSibling;
+    var fg = $('ipd-val') && $('ipd-val').closest('.fg3');
+    var iopWrap = $('pachy-od') && $('pachy-od').closest('[style*="overflow-x:auto"]');
+    var badges = $('iop-od-box') && $('iop-od-box').parentNode;
+    var iopHead = badges && badges.previousElementSibling;
+    if (kerat && kgrid && cv && refWrap && refHead && fg && iopWrap && badges && iopHead) {
+      if (fg) fg.classList.add('etc-fg4');
+      boxes.parentNode.insertBefore(refHead, boxes.nextSibling);
+      refHead.parentNode.insertBefore(refWrap, refHead.nextSibling);
+      refWrap.parentNode.insertBefore(fg, refWrap.nextSibling);
+      var low = document.createElement('div'); low.id = 'etc-lower';
+      var c1 = document.createElement('div'), c2 = document.createElement('div'), c3 = document.createElement('div');
+      c1.appendChild(iopHead); c1.appendChild(badges); c1.appendChild(iopWrap);
+      c2.appendChild(kerat); kerat.classList.add('etc-kerat');
+      c3.appendChild(cv); cv.classList.add('etc-cv');
+      low.appendChild(c1); low.appendChild(c2); low.appendChild(c3);
+      fg.parentNode.insertBefore(low, fg.nextSibling);
+      kgrid.classList.add('etc-gone');
+      Array.prototype.forEach.call(tab.querySelectorAll(':scope>div[style*="height:1px"]'), function (d) { d.classList.add('etc-gone'); });
+      if (dil && !$('etc-dil')) {
+        var b = document.createElement('button'); b.type = 'button'; b.id = 'etc-dil'; b.textContent = '💧 Dilated'; b.title = 'Mark dilated now (timer shows on the queue card)';
+        b.onclick = function () { try { markCurrentPatientDilated(); } catch (e) {} };
+        head.insertBefore(b, head.lastElementChild);
+      }
+    } else if (fg) fg.classList.add('etc-fg4');
+    var gat = iopWrap && iopWrap.querySelector('table'); if (gat) gat.classList.add('etc-iop');
     paintVa();
   }
   function paintVa() {
