@@ -6386,8 +6386,10 @@ function buildOphthoCaseSheetHtml(opts) {
   const nctOS  = readVal('iop-nct-os', 'iopNctOS', '—') || '—';
   const nctTOD = document.getElementById('iop-nct-od-t')?.value || '—';
   const nctTOS = document.getElementById('iop-nct-os-t')?.value || '—';
-  const pachOD = readVal('pachy-od', 'pachyOD', '—') || '—';
-  const pachOS = readVal('pachy-os', 'pachyOS', '—') || '—';
+  const pachOD = readVal('pachy-od', 'pachyOD', '') || readVal('refr-od-pachy', 'refr-od-pachy', '') || '—';
+  const pachOS = readVal('pachy-os', 'pachyOS', '') || readVal('refr-os-pachy', 'refr-os-pachy', '') || '—';
+  const nvFinOD = readVal('nv-od-final', 'nvODFinal', '') || readVal('nv-od-final-manual', 'nvODFinal', '') || '—';
+  const nvFinOS = readVal('nv-os-final', 'nvOSFinal', '') || readVal('nv-os-final-manual', 'nvOSFinal', '') || '—';
   const gonioOD = readVal('gonio-od', 'gonioOD', '—') || '—';
   const gonioOS = readVal('gonio-os', 'gonioOS', '—') || '—';
   const corrOD = readVisit('iopCorrOD', document.getElementById('iop-corr-od')?.textContent?.trim() || '—') || '—';
@@ -6495,7 +6497,7 @@ function buildOphthoCaseSheetHtml(opts) {
   <col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:6%">
   <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6%">
   <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%">
-  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%">
+  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%"><col style="width:6.5%">
 </colgroup>
 <thead>
 <tr>
@@ -6503,7 +6505,7 @@ function buildOphthoCaseSheetHtml(opts) {
   <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#dfeeff;color:#0f4c81">VA</th>
   <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#e8f5e9;color:#165b2f">Current Glasses</th>
   <th colspan="3" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#efe6ff;color:#5c2a9d">AR / Cycloplegic</th>
-  <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#fff1df;color:#8a4200">Subjective Refraction</th>
+  <th colspan="5" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#fff1df;color:#8a4200">Subjective Refraction</th>
 </tr>
 <tr>
   ${examHead('UCVA','#dfeeff','#0f4c81')}
@@ -6521,6 +6523,7 @@ function buildOphthoCaseSheetHtml(opts) {
   ${examHead('Cyl','#fff1df','#8a4200')}
   ${examHead('Axis','#fff1df','#8a4200')}
   ${examHead('VA','#fff1df','#8a4200')}
+  ${examHead('NV','#fff1df','#8a4200')}
 </tr>
 </thead>
 <tbody>
@@ -6529,14 +6532,14 @@ function buildOphthoCaseSheetHtml(opts) {
   ${examCell(ucvaOD)}${examCell(bcvaOD)}${examCell(phOD)}${examCell(readVal('ucva-od-near', 'vaODNear', '—') || '—')}
   ${examCell(rf.odSph2)}${examCell(rf.odCyl2)}${examCell(rf.odAx2)}${examCell(rf.odAddSpec)}
   ${examCell(rf.cycODsph)}${examCell(rf.cycODcyl)}${examCell(rf.cycODax)}
-  ${examCell(rf.subjODsph)}${examCell(rf.subjODcyl)}${examCell(rf.subjODax)}${examCell(readVal('subj-od-va', 'subjODva', '—') || '—')}
+  ${examCell(rf.subjODsph)}${examCell(rf.subjODcyl)}${examCell(rf.subjODax)}${examCell(readVal('subj-od-va', 'subjODva', '—') || '—')}${examCell(nvFinOD)}
 </tr>
 <tr>
   <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#edf9f0;color:#165b2f">OS</td>
   ${examCell(ucvaOS)}${examCell(bcvaOS)}${examCell(phOS)}${examCell(readVal('ucva-os-near', 'vaOSNear', '—') || '—')}
   ${examCell(rf.osSph2)}${examCell(rf.osCyl2)}${examCell(rf.osAx2)}${examCell(rf.osAddSpec)}
   ${examCell(rf.cycOSsph)}${examCell(rf.cycOScyl)}${examCell(rf.cycOSax)}
-  ${examCell(rf.subjOSsph)}${examCell(rf.subjOScyl)}${examCell(rf.subjOSax)}${examCell(readVal('subj-os-va', 'subjOSva', '—') || '—')}
+  ${examCell(rf.subjOSsph)}${examCell(rf.subjOScyl)}${examCell(rf.subjOSax)}${examCell(readVal('subj-os-va', 'subjOSva', '—') || '—')}${examCell(nvFinOS)}
 </tr>
 </tbody>
 </table>
