@@ -21356,7 +21356,12 @@ function removePatientFromQueue(bmhId) {
   if (!p) { showToast('Patient not found in queue', 'w'); return; }
   const label = 'Queue patient — ' + (p.name || bmhId) + ' · ' + bmhId;
   if (canCurrentUserDeleteQueueDirectly()) {
-    if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?\n\nAny matching reception OPD/consultation entry for today will also be removed from charges/collection.')) return;
+    const mainDeptQ = normalizeDeptKeyForQueue(p.dept || p.department || '');
+    const others = bmhOtherDeptVisitsToday(p, mainDeptQ);
+    const msg = others.length
+      ? 'Remove ' + (p.name || 'this patient') + ' from today\'s ' + bmhDeptLabel(mainDeptQ) + ' queue only?\n\nThe patient stays in today\'s ' + others.map(function (r) { return bmhDeptLabel(r.dept); }).join(', ') + ' queue. Only the ' + bmhDeptLabel(mainDeptQ) + ' reception OPD/consultation entry for today is removed.'
+      : 'Remove ' + (p.name || 'this patient') + ' from today\'s queue?\n\nAny matching reception OPD/consultation entry for today will also be removed from charges/collection.';
+    if (!confirm(msg)) return;
     bmhRemovePatientFromTodayQueueAndCharges(bmhId, { by: CURRENT_USER?.name || 'Reception' });
   } else {
     requestDeletion('queuePatient', bmhId, label);
@@ -21386,13 +21391,14 @@ function bmhIsTodayReceptionConsultationRequest(pr, bmhId, dateKey) {
   return isConsultationChargeEntry(pr) || isConsultationPurposeText([pr.for, pr.service, pr.desc].filter(Boolean).join(' '));
 }
 
-function bmhRemoveTodayReceptionOpdChargeRows(bmhId, dateKey) {
+function bmhRemoveTodayReceptionOpdChargeRows(bmhId, dateKey, onlyDept) {
   const rows = window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId];
   if (!Array.isArray(rows) || !rows.length) return 0;
   let removed = 0;
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const row = rows[i] || {};
     if (localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) !== dateKey) continue;
+    if (onlyDept && !bmhRowIsDept(row, onlyDept)) continue;
     const sourceText = String(row.source || row.from || '').toLowerCase();
     if (sourceText && !sourceText.includes('reception')) continue;
     const isConsult = String(row.cat || '').toLowerCase() === 'consultation'
@@ -21404,6 +21410,21 @@ function bmhRemoveTodayReceptionOpdChargeRows(bmhId, dateKey) {
   return removed;
 }
 
+// v158: a receipt / charge belongs to a department (records without one count as the patient's main department)
+function bmhRowIsDept(row, dept, mainDept) {
+  const d = normalizeDeptKeyForQueue(row?.dept || row?.department || '');
+  return d ? d === dept : (!mainDept || mainDept === dept);
+}
+// v158: today's other-department visits of this patient that are still waiting / open
+function bmhOtherDeptVisitsToday(p, mainDept) {
+  const today = todayKey();
+  return (Array.isArray(p?.deptQueueEntries) ? p.deptQueueEntries : []).filter(function (row) {
+    if (!row || row.active === false || row.removedAt) return false;
+    const d = normalizeDeptKeyForQueue(row.dept || '');
+    if (!d || d === mainDept) return false;
+    return localDateKey(row.queueDate || row.createdAt || row.date) === today;
+  }).sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')); });
+}
 function bmhRemovePatientFromTodayQueueAndCharges(bmhId, opts) {
   const id = String(bmhId || '').trim();
   const p = PATIENTS.find(function (x) { return String(x.bmhId || '') === id; });
@@ -21412,6 +21433,55 @@ function bmhRemovePatientFromTodayQueueAndCharges(bmhId, opts) {
   const nowIso = new Date().toISOString();
   const by = opts?.by || CURRENT_USER?.name || 'Reception';
   const label = (p.name || id) + ' · ' + id;
+  // v158: also waiting in another department today → remove only this department's visit and its reception OPD entries;
+  // the patient stays in the other department's queue (that visit becomes the main one)
+  const mainDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+  const otherVisits = bmhOtherDeptVisitsToday(p, mainDept);
+  if (mainDept && otherVisits.length) {
+    const keep = otherVisits[0];
+    const removedTxns = [];
+    for (let i = TRANSACTIONS.length - 1; i >= 0; i -= 1) {
+      const txn = TRANSACTIONS[i];
+      if (!bmhIsTodayReceptionConsultationTxn(txn, id, dateKey) || !bmhRowIsDept(txn, mainDept, mainDept)) continue;
+      removedTxns.push(txn);
+      TRANSACTIONS.splice(i, 1);
+      try { if (window.firebase && firebase.database) firebase.database().ref('transactions/' + dateKey + '/' + txn.id).remove(); } catch (e) {}
+    }
+    const removedRequests = [];
+    for (let i = PAY_REQUESTS.length - 1; i >= 0; i -= 1) {
+      const pr = PAY_REQUESTS[i];
+      if (!bmhIsTodayReceptionConsultationRequest(pr, id, dateKey) || !bmhRowIsDept(pr, mainDept, mainDept)) continue;
+      removedRequests.push(pr);
+      PAY_REQUESTS.splice(i, 1);
+      try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).remove(); } catch (e) {}
+    }
+    const removedChargeRows = bmhRemoveTodayReceptionOpdChargeRows(id, dateKey, mainDept);
+    const rows = p.deptQueueEntries.map(function (row) {
+      if (!row || String(row.id) !== String(keep.id)) return row;
+      return Object.assign({}, row, { active: false, promotedAt: nowIso, updatedAt: nowIso });
+    });
+    const seenAt = keep.seenAt || '';
+    const patch = {
+      dept: normalizeDeptKeyForQueue(keep.dept), doctor: keep.doctor || p.doctor || '', assignedDoctor: keep.doctor || p.assignedDoctor || p.doctor || '',
+      purpose: keep.purpose || 'Consultation', queueAddedAt: keep.createdAt || p.queueAddedAt || nowIso, queueSource: keep.source || p.queueSource || 'reception',
+      seen: !!seenAt, seenAt: seenAt || null, status: seenAt ? 'seen' : 'waiting', queueRemoved: false,
+      deptQueueEntries: rows, updatedAt: nowIso, lastDeptRemoved: mainDept, lastDeptRemovedBy: by, lastDeptRemovedAt: nowIso
+    };
+    Object.assign(p, patch, { seenAt: seenAt || '' });
+    try { fbUpdate && fbUpdate('patients/' + id, sanitizeFirebaseValue(patch)).catch(function (e) { console.warn('Queue dept remove error:', e); }); } catch (e) {}
+    try { saveTodayTransactionsToLocal && saveTodayTransactionsToLocal(); } catch (e) {}
+    try { saveBmhFinancials && saveBmhFinancials(); } catch (e) {}
+    if (typeof bmhSyncPatientRunningBalance === 'function') bmhSyncPatientRunningBalance(id);
+    fbPush && fbPush('auditLog', { user: CURRENT_USER?.name || 'Staff', role: CURRENT_USER?.role || 'Staff', action: 'DELETE_QUEUE_DEPT_ONLY', item: label, details: { dept: mainDept, keptIn: patch.dept, transactions: removedTxns.length, payRequests: removedRequests.length, chargeRows: removedChargeRows }, timestamp: nowIso });
+    renderDocQueue && renderDocQueue();
+    renderReceptionPage && renderReceptionPage();
+    renderCollectionDashboard && renderCollectionDashboard();
+    renderChargesList && renderChargesList();
+    renderDeptSummary && renderDeptSummary();
+    renderDashboard && renderDashboard();
+    showToast('Removed from ' + bmhDeptLabel(mainDept) + ' only — still in today\'s ' + bmhDeptLabel(patch.dept) + ' queue ✓', 's');
+    return true;
+  }
 
   const removedTxns = [];
   for (let i = TRANSACTIONS.length - 1; i >= 0; i -= 1) {
