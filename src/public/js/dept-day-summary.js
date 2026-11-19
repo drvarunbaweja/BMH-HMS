@@ -49,9 +49,13 @@
       + rows.map(function (t) { return '<div class="ln"><span class="nm">' + esc(t.patient || t.patientName || '—') + '<i>' + esc(String(t.service || t.for || '').replace(/^Balance payment — /, 'Balance: ')) + (t.billNo ? ' · ' + esc(t.billNo) : '') + '</i></span><span class="md">' + esc(t.mode || '') + '</span><span class="am">' + rs(net(t)) + '</span></div>'; }).join('') + '</div>';
   }
   // every change made today to a receipt of this department (deleted, amount / mode changed, marked not collected, refunds)
-  function changesBlock(dept) {
+  function changesBlock(dept, centre) {
     if (typeof window.bmhMoneyChangesToday !== 'function') return '';
     var rows = window.bmhMoneyChangesToday(dept);
+    // only this centre's changes (Chandigarh print = Chandigarh changes, Ropar print = Ropar changes); "BOTH" view keeps all
+    var cKey = function (v) { try { return normalizeAppointmentCentreValue(v); } catch (e) { return String(v || '').toUpperCase(); } };
+    var want = Array.isArray(centre) ? centre.map(cKey) : (centre ? [cKey(centre)] : []);
+    if (want.length && want.every(function (c) { return c === 'CHD' || c === 'RPR'; })) rows = rows.filter(function (r) { return r && r.centre && want.indexOf(cKey(r.centre)) >= 0; });
     var tm = function (v) { var d = new Date(v); return isNaN(d) ? '' : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); };
     return '<div class="blk" style="margin-top:6px"><div class="bh"><span>Changes made to payments today (' + rows.length + ')</span><span></span></div>'
       + (rows.length ? rows.map(function (r) { return '<div class="ln"><span class="nm">' + esc(tm(r.at)) + ' · ' + esc(r.by || '—') + ' · ' + esc(r.patient || '—') + '<i>' + esc((r.what || []).join('; ')) + (r.service ? ' — ' + esc(r.service) : '') + '</i></span></div>'; }).join('')
@@ -87,7 +91,7 @@
       + (b.pend.length ? '<div class="blk"><div class="bh"><span>Pending dues (' + b.pend.length + ')</span><span>' + rs(pendAmt) + '</span></div>' + b.pend.map(function (r) { return '<div class="ln"><span class="nm">' + esc(r.patient || '—') + '<i>' + esc(r.for || '') + '</i></span><span class="am">' + rs(r.amount) + '</span></div>'; }).join('') + '</div>' : '')
       + '</div>'
       + '<div class="tot"><span>Total collected (cash + UPI / card)</span><span>' + rs(b.total) + '</span></div>'
-      + changesBlock(dept)
+      + changesBlock(dept, b.centre)
       + '<div class="sig"><span>Reception</span><span>Doctor</span></div></body></html>';
     var w = window.open('', '_blank', 'width=640,height=820'); if (!w) { toast('Allow pop-ups to print', 'w'); return; }
     w.document.write(html); w.document.close(); setTimeout(function () { try { w.focus(); w.print(); } catch (e) {} }, 400);
