@@ -5,7 +5,8 @@
  *   – any bill was saved for this patient in the last 15 minutes.
  * v174: the warning asks  [Second eye — save]  [Something else — save]  [Cancel — don't save]; the choice goes to the
  * audit log. Cancel = nothing is saved (and the previous-balance box opens if there is a balance).
- * A second press of Save while a save is still running is ignored (bills were being saved twice seconds apart).
+ * A second press of Save while a save is still running is ignored, and the Save buttons are greyed out showing
+ * "⏳ Saving bill…" until the save has finished (bills were being saved twice seconds apart).
  * Reads only. Off switch (this browser): localStorage.setItem('bmh_bill_guard_off','1') then reload.
  */
 (function () {
@@ -52,14 +53,27 @@
       ov.querySelector('#bdg-cancel').onclick = function () { done(null); };
     });
   }
+  // while a bill is being saved: the Save buttons are greyed out and show "⏳ Saving bill…"
+  function busy(on) {
+    Array.prototype.forEach.call(document.querySelectorAll('button[onclick*="bmhSaveBillToRtdbOnly"],button[onclick*="bmhSaveAndPrintBill"]'), function (btn) {
+      if (on) {
+        if (btn.dataset.bgText == null) btn.dataset.bgText = btn.textContent;
+        btn.disabled = true; btn.style.opacity = '0.55'; btn.style.cursor = 'wait'; btn.textContent = '⏳ Saving bill…';
+      } else {
+        btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = '';
+        if (btn.dataset.bgText != null && /Saving/.test(btn.textContent)) btn.textContent = btn.dataset.bgText;
+        delete btn.dataset.bgText;
+      }
+    });
+  }
   function guard(orig) {
     return function () {
       var self = this, args = arguments, id = selected();
       if (inFlight) { try { showToast('Bill is already being saved…', 'i'); } catch (e) {} return; }
       if (!id || typeof bmhBuildBillPayloadFromUi !== 'function') return orig.apply(self, args);
       var draft = null; try { draft = bmhBuildBillPayloadFromUi(id, { status: 'check' }); } catch (e) { return orig.apply(self, args); }
-      inFlight = true;
-      var release = function () { setTimeout(function () { inFlight = false; }, 1500); };
+      inFlight = true; busy(true);
+      var release = function () { setTimeout(function () { inFlight = false; busy(false); }, 1500); };
       return recentBills(id).then(function (bills) {
         var now = Date.now();
         var dup = bills.filter(function (b) { return sameItems(draft, b) || (now - billTime(b) < RECENT_MS); }).sort(function (a, b) { return billTime(b) - billTime(a); });
