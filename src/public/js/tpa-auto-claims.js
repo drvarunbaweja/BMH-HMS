@@ -2,9 +2,10 @@
  * TPA / Cashless dues.
  * When reception registers or checks in an ECHS / CGHS / PMJAY / insurance patient (including the ₹0 "no fee" entry), or
  * a charge (surgery, procedure, investigation) is added for a patient whose scheme is ECHS / CGHS / PMJAY / insurance,
- * a pop-up asks:  "<Scheme> claim — <patient> — <item>:  ₹[amount]   [Add to TPA / Cashless dues]  [Not a claim]".
- * The amount can be corrected. The amount entered is remembered for that scheme and item (e.g. ECHS · consultation,
- * ECHS · Phaco with IOL) and is filled in automatically next time, on every computer (settings/tpaClaimDefaults).
+ * a pop-up asks for the claim NAME (OPD consultation, IPD, Surgery, YAG, Procedure, Investigation, Injection or anything
+ * typed — new names are offered next time) and the AMOUNT:  [Add to TPA / Cashless dues]  [Not a claim].
+ * The amount can be corrected. The amount entered is remembered for that scheme and claim name (e.g. ECHS · OPD
+ * consultation, ECHS · YAG) and is filled in automatically next time, on every computer (settings/tpaClaimDefaults).
  * "Add" creates a pending claim exactly like the existing insurance claims, so it shows in Reception → Insurance/TPA,
  * the TPA page and the TPA / Cashless due totals until the payment is recorded. Receipts are not changed.
  * Doctors' screens get no pop-up: for a charge a doctor adds, the claim is made with the remembered (or charged) amount.
@@ -38,6 +39,14 @@
     try { localStorage.setItem(LS, JSON.stringify(defs)); } catch (e) {}
     try { if (window.FBDB) window.FBDB.ref(PATH + '/' + s + '/' + key.replace(/[.#$\/\[\]]/g, ' ')).set(amt).catch(function () {}); } catch (e) {}
   }
+  var BASE_NAMES = ['OPD consultation', 'IPD', 'Surgery', 'YAG', 'Procedure', 'Investigation', 'Injection'];
+  var NPATH = 'settings/tpaClaimNames', NLS = 'bmh_tpa_claim_names_v1';
+  var names_ = {}; try { names_ = JSON.parse(localStorage.getItem(NLS) || '{}') || {}; } catch (e) { names_ = {}; }
+  function rememberName(scheme, n) {
+    var s = k(scheme), key = k(n); names_[s] = names_[s] || {}; if (names_[s][key] === n) return; names_[s][key] = n;
+    try { localStorage.setItem(NLS, JSON.stringify(names_)); } catch (e) {}
+    try { if (window.FBDB) window.FBDB.ref(NPATH + '/' + s + '/' + key).set(n).catch(function () {}); } catch (e) {}
+  }
   function claimExists(bmhId, desc) {
     var d = day(), want = k(desc);
     try {
@@ -53,25 +62,34 @@
     if (busy || !queue.length) return; busy = true;
     var j = queue.shift();
     if (claimExists(j.bmhId, j.desc)) { busy = false; return next(); }
-    var amt = defaultAmount(j.scheme, j.key, j.amount);
+    var name0 = j.key === 'consultation' ? 'OPD consultation' : j.desc;
+    if (claimExists(j.bmhId, name0)) { busy = false; return next(); }
+    var amt = defaultAmount(j.scheme, k(name0), '') || defaultAmount(j.scheme, j.key, j.amount);
     // doctors are not interrupted: the claim is made with the remembered (or charged) amount; reception can correct it
-    if (isDoctor()) { if (Number(amt) > 0) create(j, Number(amt)); busy = false; return next(); }
+    if (isDoctor()) { if (Number(amt) > 0) { j.desc = name0; create(j, Number(amt)); } busy = false; return next(); }
+    var names = BASE_NAMES.slice(); var nm = names_[k(j.scheme)] || {};
+    Object.keys(nm).forEach(function (key) { if (names.map(k).indexOf(key) < 0) names.push(nm[key]); });
     var ov = document.createElement('div'); ov.id = 'tac-ov';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100001;display:flex;align-items:center;justify-content:center';
-    ov.innerHTML = '<div style="background:#fff;border-radius:14px;padding:18px 20px;width:min(440px,92vw);box-shadow:0 18px 50px rgba(0,0,0,.3)">'
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;padding:18px 20px;width:min(460px,92vw);box-shadow:0 18px 50px rgba(0,0,0,.3)">'
       + '<div style="font-size:15px;font-weight:900;color:#1a3c6e">🏦 ' + esc(j.scheme) + ' claim</div>'
-      + '<div style="font-size:12px;color:#444;margin:4px 0 12px">' + esc(j.patient) + ' · ' + esc(j.bmhId) + '<br><b>' + esc(j.desc) + '</b></div>'
+      + '<div style="font-size:12px;color:#444;margin:4px 0 12px">' + esc(j.patient) + ' · ' + esc(j.bmhId) + '<br>Entered: <b>' + esc(j.desc) + '</b></div>'
+      + '<label style="font-size:11px;font-weight:800;color:#555">Claim for (OPD, IPD, Surgery, YAG, Procedure… — pick or type)</label>'
+      + '<input id="tac-name" list="tac-names" value="' + esc(name0) + '" style="width:100%;margin:4px 0 10px;padding:9px;border:1.5px solid #c7c7cc;border-radius:8px;font-size:14px;font-weight:800">'
+      + '<datalist id="tac-names">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>'
       + '<label style="font-size:11px;font-weight:800;color:#555">Claim amount (₹) — change it if it is not right; it will be filled in next time</label>'
       + '<input id="tac-amt" type="number" min="0" value="' + esc(amt) + '" style="width:100%;margin:4px 0 12px;padding:9px;border:1.5px solid #c7c7cc;border-radius:8px;font-size:15px;font-weight:900">'
       + '<div style="display:flex;gap:8px"><button type="button" id="tac-add" style="flex:2;background:#1a3c6e;color:#fff;border:none;border-radius:9px;padding:10px;font-weight:900;cursor:pointer">Add to TPA / Cashless dues</button>'
       + '<button type="button" id="tac-no" style="flex:1;background:#f2f2f7;color:#333;border:none;border-radius:9px;padding:10px;font-weight:700;cursor:pointer">Not a claim</button></div></div>';
     document.body.appendChild(ov);
-    var inp = ov.querySelector('#tac-amt'); setTimeout(function () { try { inp.focus(); inp.select(); } catch (e) {} }, 50);
+    var inp = ov.querySelector('#tac-amt'), nin = ov.querySelector('#tac-name');
+    setTimeout(function () { try { inp.focus(); inp.select(); } catch (e) {} }, 50);
+    nin.addEventListener('input', function () { var d = defaultAmount(j.scheme, k(nin.value), ''); if (d !== '') inp.value = d; });
     function close() { ov.remove(); busy = false; setTimeout(next, 50); }
     ov.querySelector('#tac-no').onclick = close;
     ov.querySelector('#tac-add').onclick = function () {
-      var a = Number(inp.value); if (!(a > 0)) { inp.focus(); return; }
-      create(j, a); remember(j.scheme, j.key, a); close();
+      var a = Number(inp.value), n = String(nin.value || '').trim(); if (!n) { nin.focus(); return; } if (!(a > 0)) { inp.focus(); return; }
+      j.desc = n; create(j, a); remember(j.scheme, k(n), a); rememberName(j.scheme, n); close();
     };
   }
   function create(j, amount) {
@@ -135,6 +153,7 @@
   var tries = 0, lv = setInterval(function () {
     if (window.FBDB || ++tries > 30) {
       clearInterval(lv);
+      try { if (window.FBDB) window.FBDB.ref(NPATH).once('value').then(function (s) { var v = s.val(); if (v && typeof v === 'object') { names_ = v; try { localStorage.setItem(NLS, JSON.stringify(v)); } catch (e) {} } }).catch(function () {}); } catch (e) {}
       try { if (window.FBDB) window.FBDB.ref(PATH).once('value').then(function (s) { var v = s.val(); if (v && typeof v === 'object') { defs = v; try { localStorage.setItem(LS, JSON.stringify(v)); } catch (e) {} } }).catch(function () {}); } catch (e) {}
     }
   }, 2000);
