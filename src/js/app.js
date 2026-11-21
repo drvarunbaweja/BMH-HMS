@@ -999,6 +999,35 @@ window._loginUser = async function () {
         return
       }
     } catch (_) { /* noop */ }
+    // v177: a plain username (no "@") is never an email address. Logins added in Settings are checked against the
+    // database, which takes a moment; wait for that check instead of trying the old email sign-in, which showed a
+    // false "Invalid email address." message. A wrong password still shows "Incorrect username or password".
+    // Off switch (this browser): localStorage.setItem('bmh_login_wait_off','1') then reload.
+    let waitOff = false
+    try { waitOff = localStorage.getItem('bmh_login_wait_off') === '1' } catch (_) { /* ignore */ }
+    if (!looksLikeEmail && !waitOff && typeof window.loginUser === 'function') {
+      const gate = document.getElementById('login-gate')
+      const started = Date.now()
+      while (Date.now() - started < 12000) {
+        await new Promise(function (r) { setTimeout(r, 200) })
+        const done = !gate || gate.style.display === 'none'
+        const errShown = errEl && errEl.style.display !== 'none' && String(errEl.textContent || '').trim()
+        if (done) {
+          try {
+            if (remember) localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ email, password }))
+            else localStorage.removeItem(SAVED_LOGIN_KEY)
+          } catch (_) { /* ignore */ }
+          break
+        }
+        if (errShown) break
+      }
+      if (gate && gate.style.display !== 'none' && errEl && !(errEl.style.display !== 'none' && String(errEl.textContent || '').trim())) {
+        errEl.textContent = 'Could not check the login. Please check the internet and try again.'
+        errEl.style.display = 'block'
+      }
+      if (btn) { btn.textContent = 'Sign In →'; btn.disabled = false }
+      return
+    }
   }
 
   try {
