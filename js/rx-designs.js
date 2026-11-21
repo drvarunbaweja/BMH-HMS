@@ -246,7 +246,7 @@
       }).join('');
     } else if (c.rxEmpty) main += '<div style="margin-top:3mm;font-size:9.4pt;color:var(--muted)">' + c.rxEmpty + '</div>';
     if (c.procedures.length) main += '<h3>Procedures advised</h3>' + procBlock(c);
-    if (c.investigations.length) main += '<h3>Investigations advised</h3><div style="font-size:9.3pt">' + c.investigations.map(esc).join(' · ') + '</div>';
+    if (c.investigations.length) main += '<h3>Investigations advised</h3><div style="font-size:9.3pt">' + '<b><i>' + c.investigations.map(esc).join(' · ') + '</i></b>' + '</div>';
     var adv = adviceLines(c);
     if (adv.length) main += '<h3>Advice</h3><ul class="adv">' + adv.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
     if (c.warning) main += '<div class="warn">' + c.warning + '</div>';
@@ -343,7 +343,7 @@
     if (c.warning) h += '<div class="warn">' + c.warning + '</div>';
     var adv = adviceLines(c), left = '';
     if (c.procedures.length) left += '<div style="margin-bottom:4px"><b>Procedures advised:</b>' + procBlock(c) + '</div>';
-    if (c.investigations.length) left += '<b>Investigations:</b> ' + c.investigations.map(esc).join(' · ') + '<br>';
+    if (c.investigations.length) left += '<b>Investigations:</b> ' + '<b><i>' + c.investigations.map(esc).join(' · ') + '</i></b>' + '<br>';
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ') + '<br>';
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
     h += '<div class="bottom"><div class="adv">' + left + '</div>' + signature(c, 'center') + '</div>';
@@ -416,7 +416,7 @@
     if (c.warning) h += '<div class="warn">' + c.warning + '</div>';
     var adv = adviceLines(c), left = '';
     if (c.procedures.length) left += '<div style="margin-bottom:4px"><b>Procedures advised:</b>' + procBlock(c) + '</div>';
-    if (c.investigations.length) left += '<b>Investigations:</b> ' + c.investigations.map(esc).join(' · ') + '<br>';
+    if (c.investigations.length) left += '<b>Investigations:</b> ' + '<b><i>' + c.investigations.map(esc).join(' · ') + '</i></b>' + '<br>';
     if (adv.length) left += '<b>Advice:</b> ' + adv.map(esc).join(' · ');
     if (c.followUp) left += '<span class="fu">Next visit: ' + esc(c.followUp) + (L ? ' · <span class="loc">' + L.next + '</span>' : '') + '</span>';
     h += '<div class="bottom"><div class="adv">' + left + '</div>' + signature(c, 'center') + '</div>';
