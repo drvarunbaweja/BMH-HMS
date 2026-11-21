@@ -44803,10 +44803,16 @@ function loadInventoryFromFirebase() {
         }).catch(function () {});
       }
     });
+    // v180: upload only rows this computer has that the shared record lacks or holds older; re-saving every row
+    // (with a fresh time) overwrote stock deducted meanwhile on other computers (IOLs used in OT came back into stock)
+    const remoteByBarcode = {};
+    remoteRows.forEach(function (item) { if (item && item.barcode) remoteByBarcode[String(item.barcode)] = item; });
     Object.values(mergedByBarcode).forEach(function (item) {
       if (!item || !item.barcode || item._deleted) return;
       const deletedTs = Number(deletedRows[String(item.barcode)] || 0);
       if (deletedTs && deletedTs >= bmhInventoryRowUpdatedAt(item)) return;
+      const remote = remoteByBarcode[String(item.barcode)];
+      if (remote && bmhInventoryRowUpdatedAt(item) <= bmhInventoryRowUpdatedAt(remote)) return;
       saveInventoryItemToFirebase(item).catch(function () {});
     });
     renderInventoryImportDatalists();
