@@ -1,7 +1,7 @@
 /* BMH — Stock for a patient: staff PIN, and a warning before taking another department's stock.
  * 1. Staff PIN: saving "Procedure done", Inventory → Patient Usage (Save / scan) and the billing scan ask who is taking
  *    the stock — pick your name, enter your 4-digit staff PIN (the same PIN as the IPD nursing sign-in; new staff create
- *    one the first time; admin can reset it). Once given, the PIN is not asked again on that computer for 30 minutes;
+ *    one the first time; admin adds staff names in Settings → Logins and can reset a PIN). Once given, the PIN is not asked again on that computer for 30 minutes;
  *    after that it is asked again. Doctors are asked too. The name is saved with each stock entry (takenBy) and the
  *    audit log.
  * 2. Other department's stock: when the stock comes from a store of another department than the patient's (e.g. an
@@ -66,14 +66,13 @@
         var ov = overlay('<div style="font-size:15px;font-weight:900;color:#1A3C6E">🔐 Who is taking the stock?</div>'
           + '<div style="font-size:12px;color:#555;margin:3px 0 10px">' + esc(reason || 'Select your name, then enter your staff PIN.') + '</div>'
           + '<select id="idg-name" style="width:100%;padding:9px;border:1.5px solid #c9d3e3;border-radius:9px;font-size:14px"><option value="">Select your name</option>'
-          + names.map(function (n) { return '<option' + (n === last ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '<option value="__new">+ My name is not in the list</option></select>'
+          + names.map(function (n) { return '<option' + (n === last ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select><div style="font-size:11px;color:#777;margin-top:5px">Name not in the list? Ask admin to add it in Settings → Logins → Staff PINs.</div>'
           + '<div id="idg-err" style="font-size:12px;color:#c62828;min-height:16px;margin:6px 0"></div>'
           + '<div style="display:flex;gap:8px"><button type="button" class="btn btn-gray" id="idg-cancel" style="flex:1">Cancel</button><button type="button" class="btn btn-gold" id="idg-ok" style="flex:1">Next — PIN</button></div>');
         var sel = ov.querySelector('#idg-name');
         ov.querySelector('#idg-cancel').onclick = function () { ov.remove(); resolve(''); };
         ov.querySelector('#idg-ok').onclick = function () {
           var n = sel.value;
-          if (n === '__new') { n = String(window.prompt('Your name (as staff):', '') || '').trim(); if (!n) return; try { var all = getIPDNurseNames(); all.push(n); saveIPDNurseNames(all); } catch (e) {} }
           if (!n) { ov.querySelector('#idg-err').textContent = 'Select your name'; return; }
           ov.remove(); resolve(n);
         };
