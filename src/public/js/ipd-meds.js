@@ -454,7 +454,12 @@
     (r.src === 'own' ? Promise.resolve({ src: 'own' }) : chooseSource(p, r, r.src === 'stock' ? 'stock' : '')).then(function (ch) {
       if (!ch) return null;
       choice = ch;
-      return g ? g('ipdm-nurse-select') : String((document.getElementById('ipdm-nurse-select') || {}).value || '');
+      // stock from another department's store → warning first (inv-dept-guard.js)
+      var chk = (ch.src === 'stock' && ch.item && window.bmhStockDeptCheck) ? window.bmhStockDeptCheck(p.bmhId || p.id, p.dept || deptOf(p) || '', ch.item, ch.qty, 'IPD nurse') : Promise.resolve(true);
+      return chk.then(function (okk) {
+        if (!okk) { choice = null; return ''; }
+        return g ? g('ipdm-nurse-select') : String((document.getElementById('ipdm-nurse-select') || {}).value || '');
+      });
     }).then(function (nurse) {
       if (!choice) return;
       if (!nurse) { if (!g) toast('Select nursing staff first', 'w'); return; }
