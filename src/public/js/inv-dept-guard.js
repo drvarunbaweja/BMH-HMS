@@ -115,7 +115,8 @@
     var p = patient(bmhId);
     return warnOther(other, pd, 'This is ' + (pd === 'obg' ? 'an ' : 'a ') + (LABEL[pd] || pd) + ' patient' + (p && p.name ? ' (' + p.name + ')' : '')).then(function (yes) {
       if (!yes) return '';
-      return (opts.noPin ? Promise.resolve(opts.noPin) : staffPin(true, 'Taking stock from another department — enter your staff PIN.')).then(function (name) {
+      var ub = ''; try { ub = window.bmhInvDeptLists ? bmhInvDeptLists.unlockedBy() : ''; } catch (e) {}
+      return (opts.noPin ? Promise.resolve(opts.noPin) : ub ? Promise.resolve(ub) : staffPin(true,'Taking stock from another department — enter your staff PIN.')).then(function (name) {
         if (name) audit('STOCK_TAKEN_OTHER_DEPT', (p && p.name ? p.name + ' ' : '') + '[' + (bmhId || '') + '] ' + (LABEL[pd] || pd) + ' patient · ' + other.map(function (o) { return o.name + ' ×' + o.qty + ' from ' + o.store; }).join('; ') + ' · by ' + name);
         return name;
       });
