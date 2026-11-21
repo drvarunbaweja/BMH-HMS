@@ -41092,7 +41092,7 @@ window.printUnifiedRx = function(deptId) {
     : '';
   const bmhInvestigationsHtml = incInvFinal && patientInvestigationPrintRows.length
     ? bmhClinicalSection('Investigations Ordered', patientInvestigationPrintRows.map(function (row, index) {
-        return '<div><b>' + (index + 1) + '.</b> ' + escapeHtmlConsent(row.name || 'Investigation') + (row.notes ? ' - ' + escapeHtmlConsent(row.notes) : '') + '</div>';
+        return '<div><b>' + (index + 1) + '.</b> <b><i>' + escapeHtmlConsent(row.name || 'Investigation') + (row.notes ? ' - ' + escapeHtmlConsent(row.notes) : '') + '</i></b></div>';
       }).join(''))
     : '';
   const bmhApprovedMeds = rxDesign === 'tabular_1' || rxDesign === 'tabular_2'
@@ -41225,7 +41225,7 @@ tr:nth-child(even) td{background:#fafafa}
 .proc-item{padding:3px 0;font-size:11.4px;line-height:1.45;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:7px}
 /* Investigations */
 .inv-wrap{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}
-.inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9px;font-weight:700;color:#222;line-height:1.2}
+.inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9px;font-weight:700;font-style:italic;color:#222;line-height:1.2}
 /* Instructions */
 .advice-block{font-size:12px;color:#222;padding:6px 10px;border-left:2px solid #bbb;line-height:1.65;margin-bottom:4px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
 /* Follow-up */
