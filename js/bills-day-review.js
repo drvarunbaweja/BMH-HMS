@@ -1,7 +1,8 @@
 /* BMH — Billing → Bills & History: review the bills of a day, and delete wrong ones (admin + 4-digit report PIN).
- * "🗂 Review / delete bills of a day" (admin logins only) asks the 4-digit report PIN; after one correct PIN it stays open
- * for 30 minutes on this computer. Choose a date: the bills and receipts of that day are grouped by department, then
+ * "🗂 Review / delete bills" (admin logins only) asks the 4-digit report PIN; after one correct PIN it stays open
+ * for 30 minutes on this computer. Choose a date, or From–To dates (up to 92 days), and a department (or All): the bills and receipts are grouped by department, then
  * Consultations / Investigations / Surgeries / Procedures / Balance payments / Advances & other, each a roll-down list
+ * with sub-headings by name inside (e.g. Investigations → OCT, VF; Psych → EEG; Surgeries → Phaco + IOL)
  * with a tick box per bill (and a tick-all per group). "Delete selected" removes them from billing, collection totals,
  * day summaries, dues, reports and every computer — only money records (the patient, visit and prescription stay).
  * A hidden copy of everything removed is kept at deletedBillRecords/ — shown only after the 6-digit report PIN
@@ -190,7 +191,28 @@
   }
 
   // ── the day review ──
-  var V = { day: '', centre: '', list: [] };
+  var V = { day: '', to: '', centre: '', dept: '', list: [] };
+  var MAX_DAYS = 92;
+  function addDay(k, n) { var p = k.split('-').map(Number); var d = new Date(p[0], p[1] - 1, p[2] + n); return ymd(d); }
+  function daysIn(a, b) { var out = []; if (!a) return out; if (!b || b < a) b = a; for (var k = a; k <= b && out.length < MAX_DAYS; k = addDay(k, 1)) out.push(k); return out; }
+  function fmtD(k) { var m = String(k || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? m[3] + '/' + m[2] + '/' + m[1] : k; }
+  // the names under a heading: the bill lines of that kind (e.g. Investigations → OCT, VF; Neuro → EEG)
+  function linesOf(e) {
+    var lines = [];
+    if (e.full && e.full.items) (Array.isArray(e.full.items) ? e.full.items : Object.values(e.full.items)).forEach(function (i) { if (i) lines.push(i.desc || i.name); });
+    (e.txns || []).forEach(function (t) { (t.chargeAllocations || []).forEach(function (a) { if (a) lines.push(a.desc || a.name); }); if (!lines.length && t.service) lines.push(t.service); });
+    if (!lines.length) lines.push(e.label);
+    return lines.map(function (l) { return String(l || '').replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+  }
+  function subOf(e, cat) {
+    if (cat === 'Balance payments') return 'Balance payments';
+    if (cat === 'Advances, refunds & other') return /refund/i.test(e.label || '') || e.refund ? 'Refunds' : /advance/i.test(e.label || '') || e.type === 'advance' ? 'Advances' : (e.label || 'Other');
+    var k = CATS.indexOf(cat), lines = linesOf(e), mine = lines.filter(function (l) { return lineKind(l) === k; });
+    if (!mine.length) mine = lines;
+    var seen = {}, names = [];
+    mine.forEach(function (l) { var n = l.replace(/\s*[x×]\s*\d+\s*$/i, ''); var key = n.toLowerCase(); if (!seen[key]) { seen[key] = 1; names.push(n); } });
+    return names.sort().join(' + ') || 'Other';
+  }
   function modal(id, title, inner) {
     var ov = document.getElementById(id);
     if (!ov) { ov = document.createElement('div'); ov.id = id; ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(10,20,40,.5);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto'; document.body.appendChild(ov); }
@@ -201,15 +223,20 @@
     needPin().then(function (ok) {
       if (!ok) return;
       if (!V.day) { var y = new Date(); y.setDate(y.getDate() - 1); V.day = ymd(y); }
+      if (!V.to || V.to < V.day) V.to = V.day;
       var ov = modal('bdr-ov', '🗂 Review bills',
         '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:10px">'
-        + '<label style="font-size:11px;font-weight:800;color:#555">Date<br><input type="date" id="bdr-day" value="' + esc(V.day) + '" style="font-size:13px"></label>'
+        + '<label style="font-size:11px;font-weight:800;color:#555">From<br><input type="date" id="bdr-day" value="' + esc(V.day) + '" style="font-size:13px"></label>'
+        + '<label style="font-size:11px;font-weight:800;color:#555">To<br><input type="date" id="bdr-to" value="' + esc(V.to || V.day) + '" style="font-size:13px"></label>'
+        + '<label style="font-size:11px;font-weight:800;color:#555">Department<br><select id="bdr-dept" style="font-size:13px"><option value="">All</option></select></label>'
         + '<label style="font-size:11px;font-weight:800;color:#555">Centre<br><select id="bdr-centre" style="font-size:13px"><option value="">Both</option><option value="RPR"' + (V.centre === 'RPR' ? ' selected' : '') + '>Ropar</option><option value="CHD"' + (V.centre === 'CHD' ? ' selected' : '') + '>Chandigarh</option></select></label>'
         + '<label style="font-size:11px;font-weight:800;color:#555;flex:1;min-width:180px">Reason for deleting<br><input type="text" id="bdr-reason" value="Entered wrongly" style="font-size:13px;width:100%"></label>'
         + '<button type="button" class="btn btn-sm" id="bdr-del" style="background:#c62828;color:#fff">🗑 Delete selected (0)</button>'
         + '<button type="button" class="btn btn-sm btn-outline" onclick="bmhDeletedBills()">🗑 Deleted bills</button></div>'
         + '<div id="bdr-list"><div style="padding:18px;text-align:center;color:#777">Loading…</div></div>');
-      ov.querySelector('#bdr-day').onchange = function () { V.day = this.value; load(); };
+      ov.querySelector('#bdr-day').onchange = function () { V.day = this.value; if (!V.to || V.to < V.day) { V.to = V.day; ov.querySelector('#bdr-to').value = V.to; } load(); };
+      ov.querySelector('#bdr-to').onchange = function () { V.to = this.value < V.day ? V.day : this.value; this.value = V.to; load(); };
+      ov.querySelector('#bdr-dept').onchange = function () { V.dept = this.value; draw(); };
       ov.querySelector('#bdr-centre').onchange = function () { V.centre = this.value; draw(); };
       ov.querySelector('#bdr-del').onclick = function () {
         var keys = Array.prototype.map.call(ov.querySelectorAll('.bdr-ck:checked'), function (c) { return c.getAttribute('data-k'); });
@@ -226,21 +253,35 @@
   };
   function load() {
     var b = BH(), box = document.getElementById('bdr-list'); if (!b || !box) return;
-    box.innerHTML = '<div style="padding:18px;text-align:center;color:#777">Loading ' + esc(V.day) + '…</div>';
-    b.ensureLoaded().then(function () { return b.loadDay(V.day, true).catch(function () {}); }).then(function () {
-      V.list = b.buildEntries().filter(function (e) { return dayOf(e.at) === V.day; });
+    var days = daysIn(V.day, V.to), one = days.length === 1, set = {};
+    days.forEach(function (d) { set[d] = 1; });
+    var over = V.to && daysIn(V.day, '9999-12-31').length && V.to > days[days.length - 1];
+    box.innerHTML = '<div style="padding:18px;text-align:center;color:#777">Loading ' + esc(one ? fmtD(V.day) : fmtD(days[0]) + ' – ' + fmtD(days[days.length - 1])) + '…</div>';
+    b.ensureLoaded().then(function () {
+      var i = 0;
+      var next = function () { if (i >= days.length) return Promise.resolve(); var d = days[i++]; var el = document.getElementById('bdr-list'); if (el && !one && i % 5 === 0) el.innerHTML = '<div style="padding:18px;text-align:center;color:#777">Loading… ' + i + ' / ' + days.length + ' days</div>'; return b.loadDay(d, one).catch(function () {}).then(next); };
+      return next();
+    }).then(function () {
+      V.list = b.buildEntries().filter(function (e) { return set[dayOf(e.at)]; });
+      V.over = over ? days[days.length - 1] : '';
       draw();
     }).catch(function () { box.innerHTML = '<div style="padding:18px;text-align:center;color:#c62828">Could not load the bills — check the connection</div>'; });
   }
   function draw() {
     var box = document.getElementById('bdr-list'); if (!box) return;
-    var b = BH(), list = V.list.filter(function (e) { return !V.centre || String(e.centre || '').toUpperCase() === V.centre; });
+    var b = BH(), byCentre = V.list.filter(function (e) { return !V.centre || String(e.centre || '').toUpperCase() === V.centre; });
+    var dl = function (e) { return ((b && b.deptLabel(e.dept)) || 'Other') || 'Other'; };
+    var sel = document.getElementById('bdr-dept');
+    if (sel) { var have = {}; byCentre.forEach(function (e) { have[dl(e)] = 1; }); if (V.dept) have[V.dept] = 1; sel.innerHTML = '<option value="">All</option>' + Object.keys(have).sort().map(function (d) { return '<option' + (d === V.dept ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join(''); }
+    var list = byCentre.filter(function (e) { return !V.dept || dl(e) === V.dept; });
+    var multi = V.to && V.to !== V.day;
     var del = document.getElementById('bdr-del'); if (del) del.textContent = '🗑 Delete selected (0)';
-    if (!list.length) { box.innerHTML = '<div style="padding:18px;text-align:center;color:#777">No bills or receipts on this date.</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div style="padding:18px;text-align:center;color:#777">No bills or receipts ' + (multi ? 'in these dates' : 'on this date') + (V.dept ? ' for ' + esc(V.dept) : '') + '.</div>'; return; }
     var depts = {};
     list.forEach(function (e) { var d = (b && b.deptLabel(e.dept)) || 'Other'; d = d || 'Other'; var c = catOf(e); ((depts[d] = depts[d] || {})[c] = depts[d][c] || []).push(e); });
     var totalAll = list.reduce(function (s, e) { return s + cashOf(e); }, 0);
-    box.innerHTML = '<div style="font-size:12px;color:#555;margin-bottom:8px"><b>' + list.length + '</b> bills / receipts · collected <b>' + rs(totalAll) + '</b>. Open a group, tick the wrong ones, then Delete selected.</div>'
+    box.innerHTML = (V.over ? '<div style="font-size:12px;color:#b45309;margin-bottom:6px">Showing up to ' + MAX_DAYS + ' days at a time — to ' + esc(fmtD(V.over)) + '.</div>' : '')
+      + '<div style="font-size:12px;color:#555;margin-bottom:8px"><b>' + list.length + '</b> bills / receipts · collected <b>' + rs(totalAll) + '</b>' + (multi ? ' · ' + esc(fmtD(V.day)) + ' – ' + esc(fmtD(V.to)) : '') + '. Open a group, tick the wrong ones, then Delete selected.</div>'
       + Object.keys(depts).sort().map(function (d) {
         var cats = depts[d], n = 0, tot = 0;
         Object.keys(cats).forEach(function (c) { n += cats[c].length; cats[c].forEach(function (e) { tot += cashOf(e); }); });
@@ -248,17 +289,21 @@
           + CAT_ORDER.filter(function (c) { return cats[c]; }).map(function (c) {
             var rows = cats[c].slice().sort(function (x, y) { return String(x.at).localeCompare(String(y.at)); });
             var ct = rows.reduce(function (s, e) { return s + cashOf(e); }, 0);
+            var subs = {}; rows.forEach(function (e) { var n = subOf(e, c); (subs[n] = subs[n] || []).push(e); });
+            var subNames = Object.keys(subs).sort(function (x, y) { return subs[y].length - subs[x].length || x.localeCompare(y); });
             return '<details style="border-top:1px solid #eef0f4"><summary style="padding:8px 12px;cursor:pointer;font-size:12.5px;font-weight:800">' + esc(c) + ' <span style="font-weight:600;color:#555">· ' + rows.length + ' · ' + rs(ct) + '</span></summary>'
               + '<div style="padding:0 12px 8px"><label style="font-size:11px;font-weight:700;color:#555;display:inline-flex;gap:5px;align-items:center;margin:4px 0"><input type="checkbox" class="bdr-all"> Tick all in this group</label>'
-              + '<table style="width:100%;font-size:12px;border-collapse:collapse"><tbody>' + rows.map(function (e) {
+              + '<table style="width:100%;font-size:12px;border-collapse:collapse"><tbody>' + subNames.map(function (sn) {
+                var srows = subs[sn], st = srows.reduce(function (s, e) { return s + cashOf(e); }, 0);
+                return '<tr><td colspan="7" style="padding:7px 4px 3px;font-size:11.5px;font-weight:900;color:#1a3c6e;border-top:1px solid #dbe3ef">' + esc(sn) + ' <span style="font-weight:600;color:#666">· ' + srows.length + ' · ' + rs(st) + '</span></td></tr>' + srows.map(function (e) {
                 return '<tr style="border-top:1px solid #f1f2f5"><td style="width:26px;padding:5px 2px"><input type="checkbox" class="bdr-ck" data-k="' + esc(e.key) + '"></td>'
-                  + '<td style="width:52px;color:#666">' + esc(fmtT(e.at)) + '</td>'
+                  + '<td style="width:' + (multi ? '84' : '52') + 'px;color:#666">' + (multi ? esc(fmtD(dayOf(e.at)).slice(0, 5)) + ' ' : '') + esc(fmtT(e.at)) + '</td>'
                   + '<td><b>' + esc(e.name || '—') + '</b> <span style="color:#777;font-size:11px">' + esc(e.bmhId) + '</span><div style="color:#555;font-size:11px">' + esc(e.label) + '</div></td>'
                   + '<td style="width:120px;color:#666;font-size:11px">' + (e.kind === 'bill' ? 'Bill ' : 'Receipt ') + esc(e.no) + (e.centre ? '<br>' + esc(e.centre) : '') + '</td>'
                   + '<td style="width:80px;color:#666;font-size:11px">' + esc(e.mode || '') + '</td>'
                   + '<td style="width:110px;text-align:right;font-weight:800">' + rs(e.amount) + (e.kind === 'bill' && Number(e.paid) !== Number(e.amount) ? '<div style="font-weight:600;color:#777;font-size:10.5px">paid ' + rs(e.paid) + '</div>' : '') + '</td>'
                   + '<td style="width:40px;text-align:right"><button type="button" class="btn btn-xs btn-outline" title="Edit details" onclick="bmhBillEdit(\'' + esc(e.key).replace(/'/g, '') + '\')">✏️</button></td></tr>';
-              }).join('') + '</tbody></table></div></details>';
+              }).join(''); }).join('') + '</tbody></table></div></details>';
           }).join('') + '</div>';
       }).join('');
   }
