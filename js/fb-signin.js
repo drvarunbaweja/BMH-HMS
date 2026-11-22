@@ -11,7 +11,7 @@
 (function () {
   'use strict';
   try { if (localStorage.getItem('bmh_fb_signin_off') === '1') return; } catch (e) {}
-  var VER = 'v123';
+  var VER = 'v189';
   var DOMAIN = 'hms-login.bawejahospital.com';
   var PATH = 'security/signinCheck';
   var OWNER = ['drvarun', 'drvarun@bawejahospital.com'];
@@ -76,6 +76,11 @@
   function notFound(c) { return c === 'auth/user-not-found' || c === 'auth/invalid-credential' || c === 'auth/invalid-login-credentials' || c === 'auth/wrong-password'; }
 
   // Sign this HMS login in to its Firebase account. typed = password just typed at the login screen (may be '').
+  // v189: Firebase refuses passwords shorter than 6 characters. For the Firebase sign-in only, a short HMS password
+  // (e.g. the attendance staff starting password) is quietly lengthened in a fixed way, so staff keep typing exactly
+  // what they type today. Passwords of 6+ characters are used unchanged, so existing Firebase accounts are unaffected.
+  function fbPw(p) { p = String(p || ''); if (!p) return ''; return p.length >= 6 ? p : 'bmh~' + p + '~hms'; }
+
   function signIn(uname, typed) {
     var a = auth();
     if (!uname) return Promise.resolve();
@@ -85,7 +90,7 @@
     var email = emailOf(uname);
     var prof = udb()[uname] || udb()[low(uname)] || {};
     var cands = [];
-    [prof.pw, typed].forEach(function (p) { p = String(p || ''); if (p && cands.indexOf(p) < 0) cands.push(p); });
+    [prof.pw, typed].forEach(function (p) { p = fbPw(p); if (p && cands.indexOf(p) < 0) cands.push(p); });
     return ready(a).then(function () {
       var cur = a.currentUser;
       if (cur && low(cur.email) === email) { state.email = email; if (!state.pw && cands.length) state.pw = cands[0]; record(uname, true); return; }
@@ -114,7 +119,7 @@
   function syncPassword() {
     var u = me(); var a = auth(); if (!u || !a || state.busy) return;
     var cur = a.currentUser; var uname = u.username; var email = emailOf(uname);
-    var prof = udb()[uname] || {}; var want = String(prof.pw || '');
+    var prof = udb()[uname] || {}; var want = fbPw(prof.pw);
     if (!cur || low(cur.email) !== email) {
       // Retry only for passing problems (no internet, not ready yet); never hammer a password that is out of step.
       var c = state.last && state.last.code;
