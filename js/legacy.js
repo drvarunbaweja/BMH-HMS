@@ -37085,6 +37085,23 @@ function getProcedureDoneSelectedProcedureText() {
 function shouldHideIolFromProcedureStock(dept, procedureText) {
   return dept === 'ophtho' && bmhIsCataractProcedureText(procedureText || getProcedureDoneSelectedProcedureText());
 }
+// Past visits (eye): procedure name + eye only — no surgical steps, notes or consumables
+function bmhShortProcedureDone(visit) {
+  const pd = visit && visit.procDone;
+  if (!pd || !pd.procedure) return '';
+  let name = String(pd.procedure).split(/\r?\n/)[0].split(/\s*[:;]\s+/)[0].trim();
+  if (name.length > 70) name = name.slice(0, 67).trim() + '…';
+  const eye = String(pd.eye || '').trim().replace(/Right Eye \(OD\)/i, 'RE').replace(/Left Eye \(OS\)/i, 'LE').replace(/Both Eyes \(OU\)/i, 'BE');
+  return name + (eye ? ' (' + eye + ')' : '');
+}
+// OT case complication, only when there was one
+function bmhOtComplicationText(c) {
+  const t = String((c && (c.complications || c.complication)) || '').trim();
+  if (!t || /^(none|nil|no|no complications?|uneventful|-|—|na|n\/a)$/i.test(t)) return '';
+  return t;
+}
+window.bmhShortProcedureDone = bmhShortProcedureDone;
+window.bmhOtComplicationText = bmhOtComplicationText;
 function getProcedureDoneDisplayLabel(state) {
   if (!state || !state.procedure) return '';
   const eye = String(state.eye || '').trim();
@@ -53906,8 +53923,8 @@ function loadPastVisits(bmhId, dept) {
         { label: 'Past Ocular Hx / Surgery', get: function (v) { return summarizeOphthoPastOcularHistory(v) || '—'; } },
         { label: 'Positive Findings', get: function (v) { return cleanStoredOphthoPositiveFindings(v.positiveFindings) || '—'; } },
         { label: 'Diagnosis', get: function (v) { return Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—'); } },
-        { label: 'Procedure done', get: function (v) { return summarizeProcedureDoneLine(v) || '—'; } },
-        { label: 'Consumables used', get: function (v) { return summarizeProcedureDoneConsumables(v) || '—'; } },
+        // procedure name and eye only (no steps / notes / consumables) — the OT history alongside has the IOL
+        { label: 'Procedure done', get: function (v) { return bmhShortProcedureDone(v) || '—'; } },
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
       ];
       const historyByDate = {};
@@ -53968,15 +53985,9 @@ function loadPastVisits(bmhId, dept) {
               <div style="font-weight:800;color:var(--bmh-blue)">${formatDateIN(caseDate)}</div>
               <div>${expandProcedureLabelForPrint(c.procedure || c.procedureMain || '—')}</div>
               <div style="color:var(--g1)">${[(c.site || c.eye || '—').replace(/right/ig,'RE').replace(/left/ig,'LE').replace(/both/ig,'BE'), c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ')}</div>
+              ${bmhOtComplicationText(c) ? `<div style="color:#b42318;font-weight:800">Complication: ${String(bmhOtComplicationText(c)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
             </div>`;
           }).join('') : '<div style="font-size:11px;color:var(--g1)">No OT module entries saved for this patient.</div>'}
-          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin:12px 0 8px">Examination procedures</div>
-          ${rightHistory.length ? rightHistory.map(function (entry) {
-            return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
-              <div style="font-weight:800;color:var(--bmh-blue)">${entry.date}</div>
-              <div style="color:var(--tx)">${entry.items.join(', ')}</div>
-            </div>`;
-          }).join('') : '<div style="font-size:11px;color:var(--g1)">No procedures recorded in past examinations.</div>'}
         </div>
       </div>`;
       return;

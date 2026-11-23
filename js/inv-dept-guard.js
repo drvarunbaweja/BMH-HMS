@@ -1,5 +1,5 @@
 /* BMH — Stock for a patient: staff PIN, and a warning before taking another department's stock.
- * 1. Staff PIN: saving "Procedure done", Inventory → Patient Usage (Save / scan) and the billing scan ask who is taking
+ * 1. Staff PIN: saving "Procedure done" with stock items (no PIN when no stock is used, e.g. YAG, OCT, VF, biometry), Inventory → Patient Usage (Save / scan) and the billing scan ask who is taking
  *    the stock — pick your name, enter your 4-digit staff PIN (the same PIN as the IPD nursing sign-in; new staff create
  *    one the first time; admin adds staff names in Settings → Logins and can reset a PIN). Once given, the PIN is not asked again on that computer for 30 minutes;
  *    after that it is asked again. Doctors are asked too. The name is saved with each stock entry (takenBy) and the
@@ -179,6 +179,8 @@
           var d = Math.max(0, Number(r.qty || 0) - Number(r.appliedQty || 0));
           return d > 0 ? { item: it, qty: d } : null;
         }).filter(Boolean);
+        // no stock used (YAG, OCT, visual fields, biometry …) → no PIN
+        if (!rows.length) return o.apply(self, args);
         busy = true;
         return gate(bmhId, dept, rows, { reason: 'Procedure done — select your name, then enter your staff PIN.' }).then(function (n) {
           busy = false; if (!n) return;
