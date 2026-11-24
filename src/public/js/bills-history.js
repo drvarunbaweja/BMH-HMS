@@ -223,6 +223,7 @@
       + (e.balance && e.billKey ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryStatement(\'' + jsArg(e.billKey) + '\')">📄 Statement</button>' : '')
       + ((e.kind === 'bill' ? e.paid : (e.adj ? 0 : e.amount)) !== 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'receipt\')">🧾 Receipt</button>' : '')
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryPatient(\'' + jsArg(e.bmhId) + '\')">History</button>'
+      + (e.kind === 'bill' && window.bmhBillEditOpen && (!window.bmhBillEditCan || window.bmhBillEditCan()) ? '<button type="button" class="btn btn-outline btn-sm" title="Edit this bill (reason required, recorded)" onclick="bmhBillEditOpen(\'' + k + '\')">✏️ Edit</button>' : '')
       + (e.kind === 'bill' && isAdmin() ? '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" title="Delete this bill (admin)" onclick="bmhBillHistoryVoid(\'' + k + '\')">🗑 Delete</button>' : '')
       + '</div></div>';
   }
@@ -449,6 +450,6 @@
 
   var tries = 0;
   (function wait() { if (install()) return; if (++tries < 200) setTimeout(wait, 100); })();
-  window.bmhBillsHistory = { state: S, buildEntries: buildEntries, ensureLoaded: ensureLoaded, loadDay: loadDay, syncDeletions: syncDeletions, dayOf: dayOf, safeKey: safeKey, deptLabel: deptLabel,
+  window.bmhBillsHistory = { state: S, buildEntries: buildEntries, findEntry: function (k) { try { return findEntry(k); } catch (e) { return null; } }, billObject: billObject, ensureLoaded: ensureLoaded, loadDay: loadDay, syncDeletions: syncDeletions, dayOf: dayOf, safeKey: safeKey, deptLabel: deptLabel,
     rerender: function () { try { if (S.patient) patientView(S.patient); } catch (e) {} try { renderMulti(); } catch (e) {} } };
 })();
