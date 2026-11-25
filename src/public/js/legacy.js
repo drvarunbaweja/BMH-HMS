@@ -3012,13 +3012,20 @@ function rememberRxLibraryFromRows(deptKey, rows) {
   }
 }
 
+function bmhRxVisitIsToday(v) {
+  if (!v) return false;
+  const when = v.rxPrintedAt || v.printedAt || v.date || v.visitDate || v.createdAt || v.updatedAt || v.savedAt || '';
+  try { return !!when && localDateKey(when) === localDateKey(new Date()); } catch (e) { return false; }
+}
+window.bmhRxVisitIsToday = bmhRxVisitIsToday;
 function restoreCurrentPatientRxForDeptIfEmpty(dept) {
   if (typeof RX_DRUGS === 'undefined' || !Array.isArray(RX_DRUGS)) return;
   if (RX_DRUGS.length) return;
   const bmhId = window.CURRENT_PATIENT?.bmhId;
   if (!bmhId) return;
   const visit = getLastPrintedRxSnapshotForDept(bmhId, dept) || getLatestSavedPrescriptionVisitForDept(bmhId, dept);
-  if (visit && Array.isArray(visit.rx) && visit.rx.length) {
+  // only a prescription from TODAY is put back (a follow-up with no medicines written today must print none)
+  if (visit && Array.isArray(visit.rx) && visit.rx.length && bmhRxVisitIsToday(visit)) {
     restoreRxFromVisitData(visit);
   }
 }
@@ -6750,7 +6757,7 @@ ${drugs.length?`
 
 ${(()=>{
   const fuDate = visitOverride ? (visitOverride.rxFuDate || visitOverride.followupDate || '') : (getDeptFollowUpDateInput('oe')?.value || '');
-  const fuFmt = fuDate ? new Date(fuDate).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}) : '';
+  const fuFmt = fuDate ? new Date(fuDate).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}) : (!visitOverride && typeof window.bmhFollowupSosText === 'function' ? window.bmhFollowupSosText('oe') : '');
   return fuFmt ? `<div style="background:#EBF3FF;border-radius:4px;padding:3px 8px;display:inline-block;font-size:6.5px;font-weight:800;color:#1A3C6E;border:1px solid rgba(26,60,110,.25);margin:2px 0 4px">Next: ${fuFmt}</div>` : '';
 })()}
 
@@ -40413,7 +40420,9 @@ window.printUnifiedRx = function(deptId) {
   const latestDeptVisit = currentBmhId && saveDept && typeof getLatestSavedVisitForDept === 'function'
     ? (getLatestSavedPrescriptionVisitForDept(currentBmhId, saveDept) || getLatestSavedVisitForDept(currentBmhId, saveDept))
     : null;
-  const latestDeptRx = Array.isArray(latestDeptVisit?.rx) ? latestDeptVisit.rx : [];
+  // only a visit saved TODAY may fill in the medicines — a follow-up with no medicines written today prints none
+  // (before, the last visit's medicines were picked up)
+  const latestDeptRx = Array.isArray(latestDeptVisit?.rx) && bmhRxVisitIsToday(latestDeptVisit) ? latestDeptVisit.rx : [];
   const currentEditorRx = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
   const renderedEditorRx = typeof collectRenderedRxRowsForPrint === 'function' ? collectRenderedRxRowsForPrint(deptId) : [];
   const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
@@ -40432,7 +40441,7 @@ window.printUnifiedRx = function(deptId) {
   })[0] || [];
   let drugs = Array.isArray(preferredRxRows) && preferredRxRows.length ? JSON.parse(JSON.stringify(preferredRxRows)) : [];
   if (!drugs || !drugs.length) {
-    const savedRx = Array.isArray(window.CURRENT_PATIENT?.lastVisit?.rx) ? window.CURRENT_PATIENT.lastVisit.rx : [];
+    const savedRx = Array.isArray(window.CURRENT_PATIENT?.lastVisit?.rx) && bmhRxVisitIsToday(window.CURRENT_PATIENT.lastVisit) ? window.CURRENT_PATIENT.lastVisit.rx : [];
     if (Array.isArray(savedRx) && savedRx.length) drugs = JSON.parse(JSON.stringify(savedRx));
   }
   drugs.forEach(function (d) {
@@ -40666,7 +40675,7 @@ window.printUnifiedRx = function(deptId) {
 
   // ── Follow-up (per-dept date field; duplicate id=rx-fu-date would otherwise read Ophtho only) ──
   let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
-  const fuFormatted = fuDate ? formatDateIN(fuDate) : '';
+  const fuFormatted = fuDate ? formatDateIN(fuDate) : ((typeof window.bmhFollowupSosText === 'function' && window.bmhFollowupSosText(deptId)) || '');
   const advice  = (deptId === 'oe'
     ? [document.getElementById('rx-advice-text')?.value || '', document.getElementById('rx-extra-advice-text')?.value || ''].filter(Boolean).join('\n')
     : [document.getElementById(deptId+'-advice')?.value || '', document.getElementById(deptId+'-extra-advice')?.value || ''].filter(Boolean).join('\n')) || '';
