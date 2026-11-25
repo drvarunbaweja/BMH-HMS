@@ -42745,7 +42745,7 @@ function _renderCollectionDashboardImpl() {
               <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div></div>
               <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
-              ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
+              ${receptionQueueRestoreButtonHtml(t.bmhId, { dept: t.dept, label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
               <button title="Delete" onclick="deleteTransaction('${t.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red);padding:0 2px">🗑️</button>
             </div>`).join('') : '<div style="padding:8px;color:var(--g1);font-size:11.5px">No collected payments yet</div>'}
         </div>
@@ -42766,7 +42766,7 @@ function _renderCollectionDashboardImpl() {
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
         <div style="font-weight:900;color:${t.collected!==false?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
         <span class="badge ${t.collected!==false?'bd-green':'bd-orange'}" style="font-size:9.5px">${t.collected!==false?'✅':'⏳'}</span>
-        ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
+        ${receptionQueueRestoreButtonHtml(t.bmhId, { dept: t.dept, label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
         <button title="Delete this transaction" onclick="deleteTransaction('${t.id}')" style="background:var(--red-lt);color:var(--red);border:1px solid rgba(255,59,48,.3);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">🗑️</button>
       </div>`).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No paid transactions today.</div>';
     allEl.innerHTML = '<div style="font-size:11px;font-weight:900;color:#166534;text-transform:uppercase;margin-bottom:6px">Collected payments</div>' + paidHtml;
@@ -42807,7 +42807,7 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
       + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
       + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
-      + receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
+      + receptionQueueRestoreButtonHtml(t.bmhId, { dept: t.dept, label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
       + '</div>';
   }).join('');
   const groupedByService = {};
