@@ -71,10 +71,19 @@
     if (unlocked()) return Promise.resolve(true);
     return askPin('Needed to review, edit and delete bills. It stays open for 30 minutes on this computer.');
   }
+  function delPin() {
+    if (!isAdmin()) { toast('Only admin can delete bills', 'w'); return Promise.resolve(0); }
+    if (typeof window.bmhReportPinVerify !== 'function') { toast('The PIN check is not available', 'w'); return Promise.resolve(0); }
+    return pinBox('PIN', 'Enter the PIN to delete.', 6).then(function (pin) {
+      if (pin == null || !pin) return 0;
+      var len = pin.length === 6 ? 6 : 4;
+      return window.bmhReportPinVerify(pin, len).then(function (ok) { if (!ok) return 0; grant(SK); return len; });
+    });
+  }
   function needBin() {
     if (!isAdmin()) return Promise.resolve(false);
     if (finOk()) return Promise.resolve(true);
-    return askPin('Enter the 6-digit PIN to see deleted bills.').then(function () { return finOk(); });
+    return askPin('Enter the PIN.').then(function () { return finOk(); });
   }
 
   // ── what kind of bill it is ──
@@ -140,8 +149,10 @@
     entries = (entries || []).filter(Boolean);
     if (!entries.length) { toast('Tick the bills to delete first', 'w'); return Promise.resolve(false); }
     if (!window.FBDB) { toast('Not connected', 'w'); return Promise.resolve(false); }
-    return needPin().then(function (ok) {
-      if (!ok) return false;
+    // every delete asks the PIN: the 4-digit PIN deletes with a hidden copy, the 6-digit PIN deletes for good
+    return delPin().then(function (mode) {
+      if (!mode) return false;
+      var purge = mode === 6;
       var total = entries.reduce(function (s, e) { return s + (e.kind === 'bill' ? Number(e.amount) || 0 : Number(e.amount) || 0); }, 0);
       var later = entries.filter(function (e) { return e.kind === 'bill' && e.later && e.later.length; }).length;
       var reason = opts.reason;
@@ -149,7 +160,7 @@
       if (!window.confirm('Delete ' + entries.length + ' record' + (entries.length === 1 ? '' : 's') + ' totalling ' + rs(total) + '?\n\n'
         + 'They will be removed from billing, collection totals, day summaries, dues and reports on every computer.'
         + (later ? '\n' + later + ' of these bills had balance payments made later — those payments go too.' : '')
-        + '\nThe patient, visit and prescription are not touched. A hidden copy is kept (6-digit PIN to see it).')) return false;
+        + '\nThe patient, visit and prescription are not touched.')) return false;
       var at = new Date().toISOString(), u = me() || {}, by = u.name || u.username || 'Admin';
       return plan(entries).then(function (p) {
         return Promise.all(p.paths.map(function (pth) { return ref(pth).once('value').then(function (s) { return { p: pth, v: s.val() }; }).catch(function () { return { p: pth, v: null }; }); })).then(function (orig) {
@@ -159,12 +170,12 @@
           p.paths.forEach(function (pth) { up[pth] = null; });
           p.days.forEach(function (d) { up['billingDeletions/days/' + d] = at; });
           p.bills.forEach(function (b) { up['billingDeletions/bills/' + b] = at; });
-          up[REC + '/' + rid] = { id: rid, at: at, by: by, reason: String(reason || ''), days: p.days, total: total,
+          if (!purge) up[REC + '/' + rid] = { id: rid, at: at, by: by, reason: String(reason || ''), days: p.days, total: total,
             items: entries.map(function (e) { return { kind: e.kind, no: String(e.no || ''), name: e.name || '', bmhId: e.bmhId || '', amount: Number(e.amount) || 0, label: String(e.label || '').slice(0, 160), dept: e.dept || '', at: e.at || '' }; }),
             restore: JSON.parse(JSON.stringify(restore)) };
           return window.FBDB.ref().update(up).then(function () {
             localDrop(p);
-            try { fbPush && fbPush('auditLog', { user: by, role: 'Admin', action: 'DELETE_BILLS', item: entries.length + ' records ' + rs(total) + ' · ' + (reason || ''), timestamp: at }); } catch (e) {}
+            try { fbPush && fbPush('auditLog', { user: by, role: 'Admin', action: purge ? 'DELETE_BILLS_PERMANENT' : 'DELETE_BILLS', item: entries.length + ' records ' + rs(total) + ' · ' + (reason || ''), timestamp: at }); } catch (e) {}
             toast(entries.length + ' record' + (entries.length === 1 ? '' : 's') + ' deleted ✓', 's');
             return true;
           }, function (err) { console.warn('[bill delete]', err); toast('Could not delete — check the connection', 'w'); return false; });
@@ -232,7 +243,7 @@
         + '<label style="font-size:11px;font-weight:800;color:#555">Centre<br><select id="bdr-centre" style="font-size:13px"><option value="">Both</option><option value="RPR"' + (V.centre === 'RPR' ? ' selected' : '') + '>Ropar</option><option value="CHD"' + (V.centre === 'CHD' ? ' selected' : '') + '>Chandigarh</option></select></label>'
         + '<label style="font-size:11px;font-weight:800;color:#555;flex:1;min-width:180px">Reason for deleting<br><input type="text" id="bdr-reason" value="Entered wrongly" style="font-size:13px;width:100%"></label>'
         + '<button type="button" class="btn btn-sm" id="bdr-del" style="background:#c62828;color:#fff">🗑 Delete selected (0)</button>'
-        + '<button type="button" class="btn btn-sm btn-outline" onclick="bmhDeletedBills()">🗑 Deleted bills</button></div>'
+        + (finOk() ? '<button type="button" class="btn btn-sm btn-outline" onclick="bmhDeletedBills()">🗑 Deleted bills</button>' : '') + '</div>'
         + '<div id="bdr-list"><div style="padding:18px;text-align:center;color:#777">Loading…</div></div>');
       ov.querySelector('#bdr-day').onchange = function () { V.day = this.value; if (!V.to || V.to < V.day) { V.to = V.day; ov.querySelector('#bdr-to').value = V.to; } load(); };
       ov.querySelector('#bdr-to').onchange = function () { V.to = this.value < V.day ? V.day : this.value; this.value = V.to; load(); };
@@ -332,7 +343,7 @@
       var inp = 'width:100%;box-sizing:border-box;font-size:13px;padding:6px 8px';
       var deptOpts = DEPTS.slice(); if (cur.dept && !DEPTS.some(function (d) { return d[0] === cur.dept; })) deptOpts.push([cur.dept, cur.dept]);
       var ov = modal('bdr-edit', '✏️ Edit ' + (e.kind === 'bill' ? 'bill ' : 'receipt ') + esc(e.no) + ' · ' + esc(e.name || '') + ' ' + esc(e.bmhId),
-        '<div style="font-size:12px;color:#555;margin-bottom:6px">Amount ' + rs(e.amount) + (e.kind === 'bill' ? ' · paid ' + rs(e.paid) : '') + ' — amounts cannot be changed here. The old version is kept (6-digit PIN to see it).</div>'
+        '<div style="font-size:12px;color:#555;margin-bottom:6px">Amount ' + rs(e.amount) + (e.kind === 'bill' ? ' · paid ' + rs(e.paid) : '') + ' — amounts cannot be changed here.</div>'
         + '<label style="' + fld + '">Patient name<input id="be-name" style="' + inp + '" value="' + esc(cur.name) + '"></label>'
         + (items.length ? '<div style="' + fld + '">Particulars</div>' + items.map(function (d, i) { return '<input class="be-item" data-i="' + i + '" style="' + inp + ';margin-top:4px" value="' + esc(d) + '">'; }).join('') : '')
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'

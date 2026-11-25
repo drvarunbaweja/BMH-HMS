@@ -273,7 +273,7 @@
     var e = findEntry(key); if (!e || e.kind !== 'bill' || !window.FBDB) return;
     if (typeof window.bmhBillDeleteEntries === 'function') { window.bmhBillDeleteEntries([e]).then(function (ok) { if (ok) { if (S.patient) patientView(S.patient); else search(S.lastQuery || ''); } }); return; }
     var reason = prompt('Delete bill ' + e.no + ' for ' + (e.name || e.bmhId) + '?\n\nBill ' + money(e.amount) + ' · paid ' + money(e.paid) + ' · ' + fmtDate(e.at)
-      + '\n\nThe bill and its ' + e.txns.length + ' payment record' + (e.txns.length === 1 ? '' : 's') + ' will be removed from billing and the collection totals. A copy is kept.\n\nReason:', 'Duplicate bill');
+      + '\n\nThe bill and its ' + e.txns.length + ' payment record' + (e.txns.length === 1 ? '' : 's') + ' will be removed from billing and the collection totals.\n\nReason:', 'Duplicate bill');
     if (reason === null) return;
     if (!confirm('Delete bill ' + e.no + ' (' + money(e.amount) + ') now?')) return;
     var at = new Date().toISOString(), by = (window.CURRENT_USER && CURRENT_USER.name) || 'Admin', id = String(e.billId || e.no), up = {};
