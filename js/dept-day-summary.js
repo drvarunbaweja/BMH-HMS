@@ -1,5 +1,5 @@
 /* BMH — Reception → Charges: per-department day summary print (half A4, two columns).
- * Consultations are shown as counts only (paid / no-fee); investigations, procedures and surgeries are listed with the
+ * Consultations are shown as counts only (paid / no-fee); investigations, surgeries, procedures and medicines are listed with the
  * patient's name and amount; money is split into Cash, UPI / card, cashless (ECHS / TPA) raised and pending dues.
  * One sheet per department, for reconciling with each doctor. Read-only: prints what the Charges screen already holds.
  * Off switch (this browser): localStorage.setItem('bmh_dept_day_print_off','1') then reload.
@@ -15,15 +15,17 @@
   function net(t) { try { return Number(getNetTransactionAmount(t)) || 0; } catch (e) { return Number(t.amount) || 0; } }
   function isIns(t) { try { return !!isInsuranceLikeMode(t.mode || t.ins || ''); } catch (e) { return /insur|tpa|echs|cghs|cashless/i.test(String(t.mode || '')); } }
   function cat(t) {
+    if (t.type === 'due-payment') return 'balance';
+    if (t.type === 'advance') return 'advance';
+    if (typeof window.bmhTxnHead === 'function') {
+      var h = t._head || window.bmhTxnHead(t);
+      return h === 'consultation' ? 'consultation' : h === 'investigation' ? 'investigation' : h === 'surgery' ? 'surgery' : h === 'procedure' ? 'procedure' : h === 'medicine' ? 'medicine' : h === 'balance' ? 'balance' : h === 'advance' ? 'advance' : 'other';
+    }
     try {
       if (transactionHasChargeCategory(t, 'surgery')) return 'surgery';
       if (transactionHasChargeCategory(t, 'diagnostic')) return 'investigation';
       if (transactionHasChargeCategory(t, 'consultation')) return 'consultation';
-      var c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
-      if (c === 'surgery') return 'surgery'; if (c === 'diagnostic') return 'investigation'; if (c === 'consultation') return 'consultation';
     } catch (e) {}
-    if (t.type === 'due-payment') return 'balance';
-    if (t.type === 'advance') return 'advance';
     return 'procedure';
   }
   function build(dept) {
@@ -32,8 +34,9 @@
     var all = (bmhGetCollectionTransactionsForDate(centre, day) || []).filter(function (t) { return t && dk(t.dept) === dept && t.collected !== false; });
     all = all.filter(function (t) { return !(t.type === 'advance-adjustment' || t.source === 'advance-adjustment'); });
     var cashless = all.filter(isIns), paidRows = all.filter(function (t) { return !isIns(t); });
-    var g = { consultation: [], investigation: [], surgery: [], procedure: [], balance: [], advance: [] };
-    paidRows.forEach(function (t) { var c = t.type === 'due-payment' ? 'balance' : t.type === 'advance' ? 'advance' : cat(t); (g[c] || g.procedure).push(t); });
+    var g = { consultation: [], investigation: [], surgery: [], procedure: [], medicine: [], other: [], balance: [], advance: [] };
+    var split = typeof window.bmhSplitTxns === 'function' ? window.bmhSplitTxns(paidRows) : paidRows;
+    split.forEach(function (t) { var c = cat(t); (g[c] || g.other).push(t); });
     var paidConsult = g.consultation.filter(function (t) { return net(t) > 0; }), freeConsult = g.consultation.filter(function (t) { return net(t) <= 0; });
     var sum = function (a) { return a.reduce(function (s, t) { return s + net(t); }, 0); };
     var cash = sum(paidRows.filter(function (t) { return String(t.mode || '') === 'Cash'; }));
@@ -86,7 +89,7 @@
       + '<div class="cols">'
       + '<div class="blk"><div class="bh"><span>Consultations</span><span>' + rs(b.sum(b.paidConsult)) + '</span></div>'
       + '<div class="kv"><span>Paid consultations</span><b>' + b.paidConsult.length + '</b></div><div class="kv"><span>Unpaid / no-fee consultations</span><b>' + b.freeConsult.length + '</b></div></div>'
-      + listBlock('Investigations', b.g.investigation) + listBlock('Surgeries & procedures', b.g.surgery) + listBlock('Other charges', b.g.procedure) + listBlock('Balance payments', b.g.balance) + listBlock('Advances', b.g.advance)
+      + listBlock('Investigations', b.g.investigation) + listBlock('Surgeries', b.g.surgery) + listBlock('Procedures', b.g.procedure) + listBlock('Medicines', b.g.medicine) + listBlock('Other charges', b.g.other) + listBlock('Balance payments', b.g.balance) + listBlock('Advances', b.g.advance)
       + (b.cashless.length ? '<div class="blk"><div class="bh"><span>Cashless — ECHS / TPA raised (' + b.cashless.length + ')</span><span>' + rs(cashlessAmt) + '</span></div>' + b.cashless.map(function (t) { return '<div class="ln"><span class="nm">' + esc(t.patient || '—') + '<i>' + esc(t.service || t.for || '') + '</i></span><span class="md">' + esc(t.ins || t.mode || '') + '</span><span class="am">' + rs(t.claimedAmount != null ? t.claimedAmount : t.amount) + '</span></div>'; }).join('') + '</div>' : '')
       + (b.pend.length ? '<div class="blk"><div class="bh"><span>Pending dues (' + b.pend.length + ')</span><span>' + rs(pendAmt) + '</span></div>' + b.pend.map(function (r) { return '<div class="ln"><span class="nm">' + esc(r.patient || '—') + '<i>' + esc(r.for || '') + '</i></span><span class="am">' + rs(r.amount) + '</span></div>'; }).join('') + '</div>' : '')
       + '</div>'

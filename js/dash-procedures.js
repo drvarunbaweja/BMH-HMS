@@ -1,6 +1,7 @@
 /* BMH — Admin dashboard: "Procedures" counts only real procedures.
  * Counted: procedures lodged by the doctor from patient details (My patient queue) and procedure charges added at
  * Reception / Billing — e.g. Copper-T, Iron drip, Laser hair removal, I/V Mannitol, YAG.
+ * Medicines (pharmacy, stock given, Skin "medicines") are shown on their own line under the Procedures number.
  * Not counted: consultation / follow-up fees (paid or no-fee), investigations / diagnostics / lab, medicines and
  * inventory use, and OT surgeries (those are already in "Surgeries": IOL / phaco / vitrectomy / ICL / LSCS etc., or any
  * charge of a patient who has an OT case that day).
@@ -24,7 +25,8 @@
       if (!c || !c.bmhId) return;
       if ([c.date, c.otDate, c.surgeryDate, c.createdAt].some(function (d) { return d && ldk(d) === day; })) otToday[String(c.bmhId).toUpperCase()] = 1;
     });
-    var seen = {}, out = { ophtho: 0, obg: 0, psych: 0, skin: 0, total: 0 };
+    var seen = {}, out = { ophtho: 0, obg: 0, psych: 0, skin: 0, total: 0 }, meds = { ophtho: 0, obg: 0, psych: 0, skin: 0, total: 0 };
+    out.meds = meds;
     Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bid) {
       var key = String(bid || '').toUpperCase();
       var pt = byBmh && byBmh.get ? byBmh.get(key) : null;
@@ -34,12 +36,19 @@
         if (!l) return;
         var ts = l.ts || l.date; if (!ts || ldk(ts) !== day) return;
         var cat = String(l.cat || '').trim();
-        if (NOT_CAT.test(cat) || /inventory/i.test(String(l.source || ''))) return;
-        var text = [l.desc, l.name, l.parent].join(' ');
-        if (/consult|follow[- ]?up|no fee|registration/i.test(text)) return;
-        if (otToday[key]) return;
-        if (/surgery/i.test(cat) && SURGERY_TXT.test(text)) return;
         var d = dk(l.dept || (pt && (pt.dept || pt.department)) || '');
+        var text = [l.desc, l.name, l.parent].join(' ');
+        var hd = typeof window.bmhReportHead === 'function' ? window.bmhReportHead(l.desc || l.name || '') : '';
+        var isMed = hd === 'medicine' || /^(pharmacy|medicine|medicines|drug)$/i.test(cat) || /inventory/i.test(String(l.source || ''));
+        if (isMed) {
+          var ms = key + '|med'; if (!seen[ms]) { seen[ms] = 1; if (meds[d] != null) meds[d] += 1; meds.total += 1; }
+          return;
+        }
+        if (hd && hd !== 'procedure') return;
+        if (NOT_CAT.test(cat)) return;
+        if (/consult|follow[- ]?up|no fee|registration/i.test(text)) return;
+        if (!hd && otToday[key]) return;
+        if (!hd && /surgery/i.test(cat) && SURGERY_TXT.test(text)) return;
         var name = String(l.desc || l.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
         var sig = key + '|' + name; if (seen[sig]) return; seen[sig] = 1;
         if (out[d] != null) out[d] += 1;
@@ -57,7 +66,11 @@
       var key = i < DEPTS.length ? DEPTS[i] : 'total';
       Array.prototype.forEach.call(cards[i].querySelectorAll('.sc'), function (sc) {
         var lbl = sc.querySelector('.sc-lbl'), val = sc.querySelector('.sc-val');
-        if (lbl && val && /^Procedures$/i.test(lbl.textContent.trim())) { val.textContent = String(c[key] || 0); sc.title = 'Procedures lodged by the doctor (patient details) or added at Reception — consultations, investigations, medicines and OT surgeries are not counted'; }
+        if (lbl && val && /^Procedures$/i.test(lbl.textContent.trim())) {
+          val.textContent = String(c[key] || 0); sc.title = 'Procedures lodged by the doctor (patient details) or added at Reception (drips, injections, YAG, MTP, peels …) — consultations, investigations, medicines and surgeries are not counted';
+          var m = sc.querySelector('.dp-meds'); if (!m) { m = document.createElement('div'); m.className = 'dp-meds'; m.style.cssText = 'font-size:10px;font-weight:800;margin-top:4px;opacity:.85'; sc.appendChild(m); }
+          var mc = (c.meds && c.meds[key]) || 0; m.textContent = mc ? '💊 Medicines: ' + mc + ' patient' + (mc === 1 ? '' : 's') : ''; m.title = 'Patients given medicines — counted separately, not as procedures';
+        }
       });
     }
   }
