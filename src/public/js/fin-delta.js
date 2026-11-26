@@ -19,6 +19,9 @@
  *    A removal note keeps the removed row's content, so it can be put back.
  *  • The billing screens see exactly the same record as before; nothing on screen changes.
  *  • A computer that has never had the record (or whose copy is over 30 days old) downloads it once, as before.
+ *  • Only logins with billing access use this (Admin, Reception, TPA, Inventory roles, or a login given the Billing,
+ *    TPA, Inventory or Reception module). Every other login (doctors, optometrists, lab, OT, staff…) works exactly
+ *    as before and keeps no billing copy from this file (Dr Varun, 26 Nov).
  *
  * Off switch (this browser only): localStorage.setItem('bmh_fin_delta_off','1') then reload.
  */
@@ -344,6 +347,18 @@
     return prev.update.call(db().ref(), upd);
   }
 
+  // ── which logins use this: those with billing access ──
+  var BILLING_ROLES = ['admin', 'reception', 'tpa', 'inventory'];
+  var BILLING_MODULES = ['billing', 'tpa', 'inventory', 'reception', 'payments'];
+  function billingLogin() {
+    var u = window.CURRENT_USER; if (!u) return false;
+    if (u.isAdmin === true) return true;
+    if (BILLING_ROLES.indexOf(String(u.role || '').trim().toLowerCase()) >= 0) return true;
+    var mods = u.access && Array.isArray(u.access.modules) ? u.access.modules.map(function (m) { return String(m || '').toLowerCase(); }) : [];
+    return mods.some(function (m) { return BILLING_MODULES.indexOf(m) >= 0; });
+  }
+  function useDelta() { return !!READY || billingLogin(); }
+
   // ── wrap the database calls for `financials` ──
   function partOf(path) {
     if (path === ROOT) return '';
@@ -359,7 +374,7 @@
 
   R.once = function () {
     var part = partOf(pathOf(this)), a = args(arguments);
-    if (part === null || a.type !== 'value' || this._bmhRaw) return prev.once.apply(this, arguments);
+    if (part === null || a.type !== 'value' || !useDelta()) return prev.once.apply(this, arguments);
     var self = this, rawArgs = arguments;
     return start().then(function () {
       var s = current(part);
@@ -372,7 +387,7 @@
   };
   R.on = function () {
     var path = pathOf(this), part = partOf(path), a = args(arguments);
-    if (part !== '' || a.type !== 'value' || !a.cb) return prev.on.apply(this, arguments);
+    if (part !== '' || a.type !== 'value' || !a.cb || !useDelta()) return prev.on.apply(this, arguments);
     var l = { cb: a.cb, ctx: a.ctx };
     LISTENERS.push(l);
     start().then(function () {
@@ -392,7 +407,7 @@
     return prev.off.apply(this, arguments);
   };
   R.set = function (value, onComplete) {
-    if (pathOf(this) !== ROOT || !value || typeof value !== 'object') return prev.set.apply(this, arguments);
+    if (pathOf(this) !== ROOT || !value || typeof value !== 'object' || !useDelta()) return prev.set.apply(this, arguments);
     var self = this, rawArgs = arguments;
     var p = start().then(function () { return save(value, value.updatedBy); }, function (err) {
       console.warn('[fin-delta] start failed; saving the whole record as before', err);
@@ -403,7 +418,7 @@
   };
 
   window.BMH_FIN_DELTA = {
-    stats: function () { return Object.assign({ lastKey: LASTKEY, copyAt: COPY_AT ? new Date(COPY_AT).toISOString() : null, rows: M ? Object.keys(M.parts).reduce(function (n, k) { return n + (partsCount(M.parts[k]) || 1); }, 0) : 0 }, stats); },
+    stats: function () { return Object.assign({ on: !!READY, billingLogin: billingLogin(), lastKey: LASTKEY, copyAt: COPY_AT ? new Date(COPY_AT).toISOString() : null, rows: M ? Object.keys(M.parts).reduce(function (n, k) { return n + (partsCount(M.parts[k]) || 1); }, 0) : 0 }, stats); },
     // for checking: the record as this computer holds it
     record: function () { return M ? toRecord(M) : null; },
     ready: function () { return start(); }
