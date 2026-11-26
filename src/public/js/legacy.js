@@ -54723,9 +54723,10 @@ window.addEventListener('DOMContentLoaded', function() {
     if (/\boct\b/i.test(t)) out.push('oct');
     if (/visual field|\bfields?\b|\bvf\b|\bhvf\b|\bhfa\b|perimetry|\b(24|30|10)-2\b/i.test(t)) out.push('field');
     if (procFamily(t) === 'yag') out.push('yag');
+    if (procFamily(t) === 'ivt') out.push('ivt');
     return out;
   }
-  function payEligible(proc) { const f = testFam(proc); return f === 'oct' || f === 'field' || procFamily(proc) === 'yag'; }
+  function payEligible(proc) { const f = testFam(proc); return f === 'oct' || f === 'field' || procFamily(proc) === 'yag' || procFamily(proc) === 'ivt'; }
   function loadPayments() {
     if (payIndex || payLoading || !window.bmhBillsHistory || typeof window.bmhBillsHistory.ensureLoaded !== 'function') return;
     payLoading = true;
@@ -54747,9 +54748,10 @@ window.addEventListener('DOMContentLoaded', function() {
     }).catch(function () {}).finally(function () { payLoading = false; });
   }
   function payMatches(proc, desc) {
-    const fam = procFamily(proc) === 'yag' ? 'yag' : testFam(proc);
+    const pf = procFamily(proc);
+    const fam = pf === 'yag' || pf === 'ivt' ? pf : testFam(proc);
     if (payFamilies(desc).indexOf(fam) === -1) return false;
-    if (fam === 'yag' || /work ?-?up|package/i.test(desc)) return true;
+    if (fam === 'yag' || fam === 'ivt' || /work ?-?up|package/i.test(desc)) return true;
     const wa = testWords(proc), wb = testWords(desc);
     if (!wa.size || !wb.size) return true;
     let shared = 0; wa.forEach(function (w) { if (wb.has(w)) shared += 1; });
@@ -54920,9 +54922,15 @@ window.addEventListener('DOMContentLoaded', function() {
         patient: c.patient || c.name || '',
         mobile: c.mobile || '',
         dept: c.caseKind === 'obg' ? 'obg' : (normalizeDeptKeyForQueue(c.dept || c.department || '') || 'ophtho'),
-        id: c.id || ''
+        id: c.id || '',
+        extras: Array.isArray(c.extraProcedures) ? c.extraProcedures : []
       };
-    }).filter(function (o) { return o.bmhId && o.proc && !/^(procedure|\?)$/i.test(o.proc); });
+    }).reduce(function (acc, o) {
+      // a second / third procedure done in the same sitting (e.g. intravitreal injection with cataract surgery)
+      acc.push(o);
+      (o.extras || []).forEach(function (x, i) { x = String(x || '').trim(); if (x) acc.push(Object.assign({}, o, { proc: x, eye: eyeOf(x) || o.eye, id: (o.id || '') + '#x' + i, extras: [] })); });
+      return acc;
+    }, []).filter(function (o) { return o.bmhId && o.proc && !/^(procedure|\?)$/i.test(o.proc); });
   }
   function otDone(o) { return o.status === 'completed' || o.status === 'done'; }
   function findOtMatch(row, ots) {
@@ -54944,6 +54952,24 @@ window.addEventListener('DOMContentLoaded', function() {
   function isDue(rec) {
     return !!(rec && !rec.dropped && rec.status === 'open' && rec.nextDate && rec.nextDate <= today());
   }
+  // ── Calls that led to the procedure (to see how well calling works) ──
+  function callEntries(rec) {
+    if (!rec || !rec.log) return [];
+    return Object.values(rec.log).filter(function (e) { return e && e.at && (e.action === 'call' || e.outcome); })
+      .sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+  }
+  function doneDateOf(r) {
+    if (!r || r.status !== 'done') return '';
+    if (r.ot && otDone(r.ot) && r.ot.date) return r.ot.date;
+    return (r.rx && r.rx.date) || (r.pay && r.pay.date) || '';
+  }
+  // the first call made before the procedure was done (after the advice), or null
+  function callBeforeDone(r) {
+    const d = doneDateOf(r); if (!d) return null;
+    const rec = followups[r.key];
+    return callEntries(rec).find(function (e) { const k = localDateKey(e.at); return k && k <= d && (!r.advisedDate || k >= r.advisedDate); }) || null;
+  }
+  function wasCalled(r) { return callEntries(followups[r.key]).length > 0; }
 
   // ── Creating permanent records ──────────────────────────────────────────
   // Writes only the descriptive fields of records that do not exist yet, so an
@@ -55141,6 +55167,7 @@ window.addEventListener('DOMContentLoaded', function() {
       if (r.dropped) return false;
       if (f.status === 'due') return isDue(followups[r.key]) && r.status !== 'done';
       if (f.status === 'pending') return r.status === 'advised';
+      if (f.status === 'aftercall') return r.status === 'done' && !!callBeforeDone(r);
       if (f.status !== 'all' && r.status !== f.status) return false;
       return true;
     });
@@ -55166,6 +55193,10 @@ window.addEventListener('DOMContentLoaded', function() {
     const bits = [o.eye ? (o.eye === 'Both' ? 'Both eyes' : o.eye + ' eye') : '', otIolText(o), withSurgeon ? o.surgeon : ''].filter(Boolean);
     return bits.length ? '<div style="font-size:10px;color:var(--g1);margin-top:3px;line-height:1.35">' + esc(bits.join(' · ')) + '</div>' : '';
   }
+  function afterCallHtml(r) {
+    const c = callBeforeDone(r);
+    return c ? '<div style="font-size:10px;margin-top:3px;color:#1a6b34;font-weight:800">📞 Came after a call (' + esc(fmt(localDateKey(c.at))) + (c.by ? ', ' + esc(c.by) : '') + ')</div>' : '';
+  }
   function statusCell(r) {
     if (r.dropped) {
       const rec = followups[r.key] || {};
@@ -55173,13 +55204,13 @@ window.addEventListener('DOMContentLoaded', function() {
         + (rec.dropReason ? '<div style="font-size:10px;color:var(--g1);margin-top:3px">' + esc(rec.dropReason) + '</div>' : '');
     }
     if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && !r.rx && r.pay) {
-      return '<span class="badge bd-green">Done ' + esc(fmt(r.pay.date)) + '</span><div style="font-size:10px;color:var(--g1);margin-top:3px">Payment received: ' + esc(r.pay.desc) + (r.pay.amount ? ' · ₹' + esc(Number(r.pay.amount).toLocaleString('en-IN')) : '') + '</div>';
+      return afterCallHtml(r) + '<span class="badge bd-green">Done ' + esc(fmt(r.pay.date)) + '</span><div style="font-size:10px;color:var(--g1);margin-top:3px">Payment received: ' + esc(r.pay.desc) + (r.pay.amount ? ' · ₹' + esc(Number(r.pay.amount).toLocaleString('en-IN')) : '') + '</div>';
     }
     if (r.status === 'done' && (!r.ot || !otDone(r.ot)) && r.rx) {
-      return '<span class="badge bd-green">Done ' + esc(fmt(r.rx.date)) + '</span><div style="font-size:10px;color:var(--g1);margin-top:3px">Per prescription: ' + esc(r.rx.proc) + (r.rx.eye ? ' · ' + esc(r.rx.eye === 'Both' ? 'Both eyes' : r.rx.eye + ' eye') : '') + '</div>';
+      return afterCallHtml(r) + '<span class="badge bd-green">Done ' + esc(fmt(r.rx.date)) + '</span><div style="font-size:10px;color:var(--g1);margin-top:3px">Per prescription: ' + esc(r.rx.proc) + (r.rx.eye ? ' · ' + esc(r.rx.eye === 'Both' ? 'Both eyes' : r.rx.eye + ' eye') : '') + '</div>';
     }
     if (r.status === 'done') {
-      return '<span class="badge bd-green">Done ' + esc(fmt(r.ot.date)) + '</span>' + otDetailHtml(r.ot, true);
+      return '<span class="badge bd-green">Done ' + esc(fmt(r.ot.date)) + '</span>' + otDetailHtml(r.ot, true) + afterCallHtml(r);
     }
     if (r.status === 'scheduled') return '<span class="badge bd-blue">OT booked ' + esc(fmt(r.ot.date)) + '</span>' + otDetailHtml(r.ot, false);
     return '<span class="badge bd-orange">Not done yet</span>';
@@ -55352,7 +55383,9 @@ window.addEventListener('DOMContentLoaded', function() {
       done: live.filter(function (r) { return r.status === 'done'; }).length,
       due: live.filter(function (r) { return isDue(followups[r.key]) && r.status !== 'done'; }).length,
       dropped: base.filter(function (r) { return r.dropped; }).length,
-      all: live.length
+      all: live.length,
+      aftercall: live.filter(function (r) { return r.status === 'done' && !!callBeforeDone(r); }).length,
+      called: live.filter(function (r) { return wasCalled(r); }).length
     };
     const rows = sortRows(applyFilters(all, f, false));
     // Check saved prescriptions for these patients in the background (once per session).
@@ -55386,7 +55419,7 @@ window.addEventListener('DOMContentLoaded', function() {
       + '<button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>'
       + (!followupsLoaded ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Loading saved follow-ups…</div>' : '')
       + (rxPending ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking saved prescriptions for procedures already done… (' + rxPending + ' patients left)</div>' : '')
-      + (payLoading ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking payments for OCT / fields / YAG…</div>' : '')
+      + (payLoading ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking payments for OCT / fields / YAG / injections…</div>' : '')
       + (pinned.length ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff8d6;border:1px solid #f0d878;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
         + '<b>📞 ' + pinned.length + ' patient' + (pinned.length === 1 ? '' : 's') + ' called before today — shown on top until marked Seen</b>'
         + '<button type="button" class="btn btn-xs btn-blue" onclick="bmhAdvisedCallsSeen(' + esc(JSON.stringify(pinned.map(function (r) { return r.key; }))) + ')">✓ Mark all seen</button>'
@@ -55400,6 +55433,8 @@ window.addEventListener('DOMContentLoaded', function() {
       + chip('pending', 'Not done yet', counts.advised) + chip('due', '📞 Calls due', counts.due)
       + chip('scheduled', 'OT booked', counts.scheduled) + chip('done', 'Done', counts.done)
       + chip('all', 'All', counts.all) + chip('dropped', 'Dropped', counts.dropped)
+      + chip('aftercall', '📞✅ Done after a call', counts.aftercall)
+      + (counts.called ? '<span style="font-size:11px;color:var(--g1);margin-left:4px" title="Patients called at least once in this list, and how many of them then had the procedure done">Calling: <b>' + counts.called + '</b> called → <b>' + counts.aftercall + '</b> done (' + Math.round(counts.aftercall * 100 / counts.called) + '%)</span>' : '')
       + '</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">'
       + centreChipsHtml(applyFilters(all, f, false, true), f.centre)
       + '<label style="margin-left:auto;font-size:11.5px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ' + (f.tests ? 'checked' : '') + ' onchange="bmhSetAdvisedFilter(\'tests\',this.checked)"> Include tests (OCT, fields, etc.)</label>'
