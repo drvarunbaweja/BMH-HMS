@@ -19,9 +19,12 @@
  *    A removal note keeps the removed row's content, so it can be put back.
  *  • The billing screens see exactly the same record as before; nothing on screen changes.
  *  • A computer that has never had the record (or whose copy is over 30 days old) downloads it once, as before.
- *  • Only logins with billing access use this (Admin, Reception, TPA, Inventory roles, or a login given the Billing,
- *    TPA, Inventory or Reception module). Every other login (doctors, optometrists, lab, OT, staff…) works exactly
- *    as before and keeps no billing copy from this file (Dr Varun, 26 Nov).
+ *  • Logins with billing access (Admin, Reception, TPA, Inventory roles, or a login given the Billing, TPA, Inventory
+ *    or Reception module) keep the copy permanently, so they download the whole record only once.
+ *  • Every other login (doctors, optometrists, lab, OT…) keeps NO billing copy on the computer (Dr Varun, 26 Nov):
+ *    the first time a screen needs billing (e.g. a charge added or stock used for a patient) the record is downloaded
+ *    once into memory for that page, and from then on only the change notes. Before, such a screen received the
+ *    whole record again every time anyone anywhere saved a bill.
  *
  * Off switch (this browser only): localStorage.setItem('bmh_fin_delta_off','1') then reload.
  */
@@ -171,7 +174,7 @@
   function saveSoon() {
     clearTimeout(saveT);
     saveT = setTimeout(function () {
-      if (!M) return;
+      if (!M || !PERSIST) return;
       var ks = Object.keys(KNOWN_T); if (ks.length > 1000) { ks.sort(function (a, b) { return Number(a) - Number(b); }).slice(0, ks.length - 500).forEach(function (k) { delete KNOWN_T[k]; }); }
       idbPut('copy', { v: 1, at: COPY_AT, lastKey: LASTKEY, rec: toRecord(M), rk: RK, known: KNOWN_T });
     }, 1500);
@@ -181,7 +184,8 @@
   var READY = null;
   function start() {
     if (READY) return READY;
-    READY = idbGet('copy').then(function (c) {
+    PERSIST = billingLogin();
+    READY = (PERSIST ? idbGet('copy') : Promise.resolve(null)).then(function (c) {
       if (c && c.v === 1 && c.rec && c.at && Date.now() - c.at < MAX_COPY_AGE) {
         M = fromRecord(c.rec); RK = c.rk || {}; LASTKEY = c.lastKey || ''; KNOWN_T = c.known || {}; COPY_AT = c.at;
         stats.fromCopy++;
@@ -357,7 +361,8 @@
     var mods = u.access && Array.isArray(u.access.modules) ? u.access.modules.map(function (m) { return String(m || '').toLowerCase(); }) : [];
     return mods.some(function (m) { return BILLING_MODULES.indexOf(m) >= 0; });
   }
-  function useDelta() { return !!READY || billingLogin(); }
+  function useDelta() { return !!READY || !!window.CURRENT_USER; }
+  var PERSIST = true; // decided when billing is first needed on this page
 
   // ── wrap the database calls for `financials` ──
   function partOf(path) {
@@ -418,7 +423,7 @@
   };
 
   window.BMH_FIN_DELTA = {
-    stats: function () { return Object.assign({ on: !!READY, billingLogin: billingLogin(), lastKey: LASTKEY, copyAt: COPY_AT ? new Date(COPY_AT).toISOString() : null, rows: M ? Object.keys(M.parts).reduce(function (n, k) { return n + (partsCount(M.parts[k]) || 1); }, 0) : 0 }, stats); },
+    stats: function () { return Object.assign({ on: !!READY, keepsCopy: !!READY && PERSIST, billingLogin: billingLogin(), lastKey: LASTKEY, copyAt: COPY_AT ? new Date(COPY_AT).toISOString() : null, rows: M ? Object.keys(M.parts).reduce(function (n, k) { return n + (partsCount(M.parts[k]) || 1); }, 0) : 0 }, stats); },
     // for checking: the record as this computer holds it
     record: function () { return M ? toRecord(M) : null; },
     ready: function () { return start(); }
