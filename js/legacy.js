@@ -50586,12 +50586,18 @@ function _renderDashboardImpl() {
       const deptSurgeryCount = function (key) {
         return surgeryCases.filter(function (c) { return String(c.dept || '').toLowerCase() === key; }).length;
       };
+      // real procedures only (consultations, investigations, medicines and surgeries excluded) — dash-procedures.js
+      let dpc = null;
+      try { if (typeof window.bmhDashProcedureCount === 'function') dpc = window.bmhDashProcedureCount(selectedDate); } catch (e) { dpc = null; }
+      const medLine = function (n) { return n ? `<div class="dp-meds" style="font-size:10px;font-weight:800;margin-top:4px;opacity:.85" title="Patients given medicines — counted separately, not as procedures">💊 Medicines: ${n} patient${n === 1 ? '' : 's'}</div>` : ''; };
       const deptProcedureCount = function (key) {
+        if (dpc) return dpc[key] || 0;
         const lines = chargeByDept[key] || [];
         return lines.filter(function (line) {
           const cat = String(line.cat || '').toLowerCase();
           const text = [line.desc, line.name, line.kind, line.parent].join(' ').toLowerCase();
-          if (cat === 'diagnostic' || cat === 'investigation') return false;
+          if (cat === 'diagnostic' || cat === 'investigation' || cat === 'consultation') return false;
+          if (/consult|follow[- ]?up|no fee|registration/i.test(text)) return false;
           if (cat === 'surgery' || /surgery|lscs|pmics|phaco|delivery|labour room|mtp/i.test(text)) return false;
           return true;
         }).length;
@@ -50617,7 +50623,7 @@ function _renderDashboardImpl() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">OPD patients</div><div class="sc-val ${meta.cls}">${deptOpdCount(meta.key)}</div></div>
             <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">Surgeries</div><div class="sc-val ${meta.cls}">${deptSurgeryCount(meta.key)}</div></div>
-            <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">Procedures</div><div class="sc-val ${meta.cls}">${deptProcedureCount(meta.key)}</div></div>
+            <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">Procedures</div><div class="sc-val ${meta.cls}">${deptProcedureCount(meta.key)}</div>${medLine(dpc && dpc.meds ? dpc.meds[meta.key] : 0)}</div>
             <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">Collection</div><div class="sc-val ${meta.cls}">₹${deptCollection(meta.key).toLocaleString('en-IN')}</div></div>
           </div>
           <div style="margin-top:10px;font-size:10px;font-weight:700;color:var(--g1);line-height:1.5">${deptModeText(meta.key)}</div>
@@ -50628,11 +50634,12 @@ function _renderDashboardImpl() {
         const mode = normalizeDashboardPaymentMode(t.mode);
         totalModes[mode] = (totalModes[mode] || 0) + getNetTransactionAmount(t);
       });
-      const totalProcedures = Object.keys(chargeByDept).reduce(function (sum, key) {
+      const totalProcedures = dpc ? (dpc.total || 0) : Object.keys(chargeByDept).reduce(function (sum, key) {
         return sum + (chargeByDept[key] || []).filter(function (line) {
           const cat = String(line.cat || '').toLowerCase();
           const text = [line.desc, line.name, line.kind, line.parent].join(' ').toLowerCase();
-          if (cat === 'diagnostic' || cat === 'investigation') return false;
+          if (cat === 'diagnostic' || cat === 'investigation' || cat === 'consultation') return false;
+          if (/consult|follow[- ]?up|no fee|registration/i.test(text)) return false;
           if (cat === 'surgery' || /surgery|lscs|pmics|phaco|delivery|labour room|mtp/i.test(text)) return false;
           return true;
         }).length;
@@ -50645,7 +50652,7 @@ function _renderDashboardImpl() {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div class="sc green" style="min-height:76px"><div class="sc-lbl">OPD patients</div><div class="sc-val green">${opdCount}</div></div>
           <div class="sc green" style="min-height:76px"><div class="sc-lbl">Surgeries</div><div class="sc-val green">${surgeryCases.length}</div></div>
-          <div class="sc green" style="min-height:76px"><div class="sc-lbl">Procedures</div><div class="sc-val green">${totalProcedures}</div></div>
+          <div class="sc green" style="min-height:76px"><div class="sc-lbl">Procedures</div><div class="sc-val green">${totalProcedures}</div>${medLine(dpc && dpc.meds ? dpc.meds.total : 0)}</div>
           <div class="sc green" style="min-height:76px"><div class="sc-lbl">Collection</div><div class="sc-val green">₹${selectedCollection.toLocaleString('en-IN')}</div></div>
         </div>
         <div style="margin-top:10px;font-size:10px;font-weight:700;color:var(--g1);line-height:1.5">${totalModeText}</div>
