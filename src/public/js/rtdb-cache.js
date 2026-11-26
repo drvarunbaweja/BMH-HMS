@@ -10,6 +10,16 @@
  *    downloaded once and handed to the same code as before.
  * Nothing about what is saved changes. Reads of single entries (e.g. one consent) still go to the server.
  * If anything goes wrong with the saved copy, it simply downloads as before.
+ *
+ * v208 (download saving, step 2):
+ *  • A saved copy whose stamp has not changed is now trusted for 7 days (was 12 hours), so the consent library,
+ *    templates and drug list are no longer downloaded again twice a day on every computer for no change.
+ *  • The drug list was being written back to the server in full by computers that had merely re-sorted or re-merged
+ *    it (no drug actually added, edited or removed). Each such write made every other computer download the whole
+ *    list again. Now a whole-list write is skipped when it holds exactly the same drugs as the server copy this
+ *    computer already has (order ignored); the matching drugLibraryMeta stamp is skipped with it. Any real change —
+ *    a drug added, edited or removed — is saved exactly as before.
+ * Off switch for v208 only (this browser): localStorage.setItem('bmh_drug_skip_off','1') then reload.
  */
 (function () {
   'use strict';
@@ -17,7 +27,10 @@
   var R = firebase.database.Reference.prototype;
   if (R.__bmhCache) return;
   var ROOTS = ['drugLibrary', 'printLetterhead', 'rxTemplates', 'consentDataDb', 'consentLibraryDb', 'consentLibrary', 'consentTemplatesStub', 'deptPlanTemplates', 'ipdRxTemplates'];
-  var MAX_AGE = 12 * 3600e3;
+  var MAX_AGE = 7 * 24 * 3600e3; // v208: was 12 hours; the stamp already tells us when a library changes
+  var SKIP_OFF = false; try { SKIP_OFF = localStorage.getItem('bmh_drug_skip_off') === '1'; } catch (e) {}
+  var SRV = {};        // root -> { ver, data }: what the server holds, as last read or confirmed on this computer
+  var lastDrugSkip = 0; // time of the last skipped whole drug-list write (0 after a real one)
   var orig = { once: R.once, on: R.on, off: R.off, set: R.set, update: R.update, remove: R.remove, push: R.push, transaction: R.transaction, setWithPriority: R.setWithPriority };
   var stats = { hit: 0, miss: 0, saved: 0 };
 
@@ -96,7 +109,7 @@
       if (!verReady()) return null; // stamps unknown: download as before
       var v = ver(root);
       return getCopy(root).then(function (c) {
-        if (c && c.ver === v && (Date.now() - Number(c.at || 0)) < MAX_AGE) { stats.hit++; return { data: c.data }; }
+        if (c && c.ver === v && (Date.now() - Number(c.at || 0)) < MAX_AGE) { stats.hit++; SRV[root] = { ver: v, data: c.data }; return { data: c.data }; }
         return null;
       });
     }).then(function (hit) {
@@ -105,7 +118,7 @@
       return orig.once.call(ref, 'value').then(function (snap) {
         stats.miss++;
         var data = snap.val();
-        if (verReady() && ver(root) === v0) putCopy(root, v0, data);
+        if (verReady() && ver(root) === v0) { putCopy(root, v0, data); SRV[root] = { ver: v0, data: data }; }
         return data;
       });
     });
@@ -151,6 +164,45 @@
     return orig.off.apply(this, arguments);
   };
 
+  // ── v208: is a whole drug-list write the same drugs the server already has? (order ignored) ──
+  // Values are compared the way the database stores them: empty values, empty lists and empty objects are dropped.
+  function norm(x) {
+    if (x === null || x === undefined || typeof x === 'function') return undefined;
+    if (typeof x === 'number' && !isFinite(x)) return undefined;
+    if (Array.isArray(x)) { var a = []; x.forEach(function (y) { var n = norm(y); if (n !== undefined) a.push(n); }); return a.length ? a : undefined; }
+    if (typeof x === 'object') {
+      var o = {}, any = false;
+      Object.keys(x).sort().forEach(function (k) { var n = norm(x[k]); if (n !== undefined) { o[k] = n; any = true; } });
+      return any ? o : undefined;
+    }
+    return x;
+  }
+  function rowsKey(v) {
+    var arr = Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.keys(v).map(function (k) { return v[k]; }) : []);
+    var m = {};
+    arr.forEach(function (r) {
+      var n = norm(r); if (n === undefined) return;
+      var id = String((n && typeof n === 'object' && (n._id || n.trade)) || JSON.stringify(n)).toLowerCase();
+      (m[id] = m[id] || []).push(JSON.stringify(n));
+    });
+    return Object.keys(m).sort().map(function (k) { return k + '\u0001' + m[k].sort().join('\u0002'); }).join('\u0003');
+  }
+  function sameDrugsAsServer(value) {
+    try {
+      if (SKIP_OFF || !verReady()) return false;
+      var c = SRV.drugLibrary;
+      if (!c || c.ver !== ver('drugLibrary')) return false; // only when this computer holds the server's current version
+      var a = Array.isArray(value) ? value : (value && typeof value === 'object' ? Object.keys(value) : null);
+      if (!a || !a.length) return false;                     // never treat an empty list as "the same"
+      return rowsKey(value) === rowsKey(c.data);
+    } catch (e) { return false; }
+  }
+  function doneNoWrite(args) {
+    var cb = args[args.length - 1];
+    if (typeof cb === 'function' && args.length > 1) { try { cb(null); } catch (e) {} }
+    return Promise.resolve();
+  }
+
   // any save to a library → stamp it (after the save), so every device knows to fetch the new version
   function stamp(root) {
     stats.saved++;
@@ -160,6 +212,15 @@
   ['set', 'update', 'remove', 'setWithPriority', 'transaction', 'push'].forEach(function (m) {
     if (typeof orig[m] !== 'function') return;
     R[m] = function () {
+      var path0 = pathOf(this);
+      if (m === 'set' && !SKIP_OFF) {
+        if (path0 === 'drugLibrary') {
+          if (sameDrugsAsServer(arguments[0])) { lastDrugSkip = Date.now(); stats.skippedDrugWrites = (stats.skippedDrugWrites || 0) + 1; return doneNoWrite(arguments); }
+          lastDrugSkip = 0; // a real change goes ahead, and so does its stamp
+        } else if (path0 === 'drugLibraryMeta' && lastDrugSkip && Date.now() - lastDrugSkip < 15000) {
+          stats.skippedDrugStamps = (stats.skippedDrugStamps || 0) + 1; return doneNoWrite(arguments);
+        }
+      }
       var res = orig[m].apply(this, arguments);
       var root = rootOf(pathOf(this));
       // stamped straight after the save is sent: one device's writes reach the server in order, so anyone who
