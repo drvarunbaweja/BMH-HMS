@@ -1,7 +1,7 @@
 /* BMH — Billing → Bills & History: review the bills of a day, and delete wrong ones (admin + 4-digit report PIN).
  * "🗂 Review / delete bills" (admin logins only) asks the 4-digit report PIN; after one correct PIN it stays open
  * for 30 minutes on this computer. Choose a date, or From–To dates (up to 92 days), and a department (or All): the bills and receipts are grouped by department, then
- * Consultations / Investigations / Surgeries / Procedures / Balance payments / Advances & other, each a roll-down list
+ * Consultations / Investigations / Surgeries / Procedures / Medicines / Balance payments / Advances & other, each a roll-down list
  * with sub-headings by name inside (e.g. Investigations → OCT, VF; Psych → EEG; Surgeries → Phaco + IOL)
  * with a tick box per bill (and a tick-all per group). "Delete selected" removes them from billing, collection totals,
  * day summaries, dues, reports and every computer — only money records (the patient, visit and prescription stay).
@@ -87,17 +87,22 @@
   }
 
   // ── what kind of bill it is ──
+  // the heads (low → high): a bill with lines of several heads goes under the highest one
+  // (surgery > procedure > medicine > investigation > consultation); the sub-heading names only that head's lines
+  var CATS = ['Advances, refunds & other', 'Consultations', 'Investigations', 'Medicines', 'Procedures', 'Surgeries', 'Balance payments'];
+  var CAT_ORDER = ['Consultations', 'Investigations', 'Surgeries', 'Procedures', 'Medicines', 'Balance payments', 'Advances, refunds & other'];
+  var HEAD_IX = { other: 0, consultation: 1, investigation: 2, medicine: 3, procedure: 4, surgery: 5 };
   function lineKind(desc) {
-    var d = String(desc || ''), c = 'other';
+    var d = String(desc || '');
+    if (typeof window.bmhReportHead === 'function') return HEAD_IX[window.bmhReportHead(d)] || 0;
+    var c = 'other';
     try { c = inferChargeCategoryFromService(d); } catch (e) {}
     try { if (c !== 'diagnostic' && isLikelySurgeryChargeLabel(d)) c = 'surgery'; } catch (e) {}
-    if (c === 'surgery') return 3;
+    if (c === 'surgery') return 5;
     if (c === 'diagnostic') return 2;
-    if (c === 'consultation' || /consult|follow|registration|review|check.?in|no fee/i.test(d)) return 0;
-    return 1;
+    if (c === 'consultation' || /consult|follow|registration|review|check.?in|no fee/i.test(d)) return 1;
+    return 4;
   }
-  var CATS = ['Consultations', 'Procedures', 'Investigations', 'Surgeries', 'Balance payments', 'Advances, refunds & other'];
-  var CAT_ORDER = ['Consultations', 'Investigations', 'Surgeries', 'Procedures', 'Balance payments', 'Advances, refunds & other'];
   function catOf(e) {
     if (e.balance || e.type === 'due-payment') return 'Balance payments';
     if (e.adj || e.refund || e.type === 'advance' || /advance|refund/i.test(e.label || '')) return 'Advances, refunds & other';
@@ -106,7 +111,7 @@
     (e.txns || []).forEach(function (t) { (t.chargeAllocations || []).forEach(function (a) { if (a) lines.push(a.desc || a.name); }); if (!lines.length && t.service) lines.push(t.service); });
     if (!lines.length) lines.push(e.label);
     var k = lines.reduce(function (m, l) { return Math.max(m, lineKind(l)); }, 0);
-    return CATS[k];
+    return CATS[k] || 'Advances, refunds & other';
   }
   function cashOf(e) { return e.adj ? 0 : (e.kind === 'bill' ? (Number(e.paid) || 0) - (Number(e.paidLater) || 0) : Number(e.amount) || 0); }
 

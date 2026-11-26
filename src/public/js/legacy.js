@@ -42658,6 +42658,18 @@ function renderCollectionDashboard() {
     }
   }, 80);
 }
+// money heads for the Charges view and its prints (Consultations / Investigations / Surgeries / Procedures / Medicines / Other)
+const BMH_RC_HEADS = [['opd', 'consultation', 'OPD', '#166534', 'OPD / consultations'], ['inv', 'investigation', 'Inv', '#1e40af', 'Investigations & diagnostics'], ['sx', 'surgery', 'Surgery', '#6b21a8', 'Surgeries'], ['proc', 'procedure', 'Proc', '#9a3412', 'Procedures'], ['med', 'medicine', 'Medicines', '#0f766e', 'Medicines'], ['other', 'other', 'Other', '#475569', 'Other']];
+function bmhRcHeadKey(t) {
+  let h = t && t._head;
+  if (!h) {
+    if (typeof window.bmhTxnHead === 'function') h = window.bmhTxnHead(t);
+    else h = transactionHasChargeCategory(t, 'consultation') ? 'consultation' : transactionHasChargeCategory(t, 'diagnostic') ? 'investigation' : transactionHasChargeCategory(t, 'surgery') ? 'surgery' : 'other';
+  }
+  const row = BMH_RC_HEADS.find(function (x) { return x[1] === h; });
+  return row ? row[0] : 'other';
+}
+function bmhRcSplit(list) { return typeof window.bmhSplitTxns === 'function' ? window.bmhSplitTxns(list) : (list || []).slice(); }
 function _renderCollectionDashboardImpl() {
   const todayKeyLocal = todayKey();
   const allTxn = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal).filter(function (t) {
@@ -42681,15 +42693,11 @@ function _renderCollectionDashboardImpl() {
   setEl('rc-pending-total2', fmt(0));
   setEl('rc-ins-total', fmt(collected.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+t.amount,0)));
   // OPD / Investigations / Procedures breakdown
-  const opdTotal = collected.filter(function (t) {
-    return transactionHasChargeCategory(t, 'consultation');
-  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-  const invTotal = collected.filter(function (t) {
-    return transactionHasChargeCategory(t, 'diagnostic');
-  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-  const procTotal = collected.filter(function (t) {
-    return transactionHasChargeCategory(t, 'surgery');
-  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const collectedParts = bmhRcSplit(collected);
+  const headTotal = function (k) { return collectedParts.filter(function (t) { return bmhRcHeadKey(t) === k; }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0); };
+  const opdTotal = headTotal('opd');
+  const invTotal = headTotal('inv');
+  const procTotal = headTotal('sx') + headTotal('proc');
   setEl('rc-opd-total', fmt(opdTotal));
   setEl('rc-inv-total', fmt(invTotal));
   setEl('rc-proc-total', fmt(procTotal));
@@ -42703,32 +42711,21 @@ function _renderCollectionDashboardImpl() {
       const dTotal = dTxn.reduce((s,t)=>s+getNetTransactionAmount(t),0);
       const dc = DEPT_COLORS[dept];
       const did = 'dept-txn-'+dept;
-      const sumCat = function (want) {
-        return dTxn.filter(function (t) {
-          return transactionHasChargeCategory(t, want);
-        }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-      };
+      const dParts = bmhRcSplit(dTxn);
+      const sumHead = function (k) { return dParts.filter(function (t) { return bmhRcHeadKey(t) === k; }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0); };
       const hasDeptActivity = dTxn.length;
       if(!hasDeptActivity) return '';
-      const opdD = sumCat('consultation');
-      const invD = sumCat('diagnostic');
-      const sxD = sumCat('surgery');
-      const otherD = dTxn.filter(function (t) {
-        const c = transactionHasChargeCategory(t, 'consultation') ? 'consultation' : transactionHasChargeCategory(t, 'diagnostic') ? 'diagnostic' : transactionHasChargeCategory(t, 'surgery') ? 'surgery' : inferChargeCategoryFromService(t.service || t.for || t.desc || '');
-        return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
-      }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-      const chk = Math.abs(dTotal - (opdD + invD + sxD + otherD)) < 0.5;
+      const headSums = BMH_RC_HEADS.map(function (h) { return { h: h, v: sumHead(h[0]) }; });
+      const chk = Math.abs(dTotal - headSums.reduce(function (s, x) { return s + x.v; }, 0)) < 0.5;
+      const headHtml = headSums.filter(function (x) { return x.v > 0 || x.h[0] === 'opd'; }).map(function (x) {
+        return `<span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','${x.h[0]}')">${x.h[2]} <strong style="color:${x.h[3]}">${fmt(x.v)}</strong></span>`;
+      }).join('<span style="opacity:.35">·</span>');
       return `<div style="border:1.5px solid ${dc.border};border-radius:var(--r);overflow:hidden;background:#fff">
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${dc.bg};cursor:pointer" onclick="toggleDeptDetail('${did}')">
           <div style="flex:1">
             <div style="font-size:13px;font-weight:800;color:${dc.text}">${dc.label}</div>
             <div style="font-size:10.5px;color:var(--g1);margin-top:4px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center">
-              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','opd')">OPD <strong style="color:#166534">${fmt(opdD)}</strong></span>
-              <span style="opacity:.35">·</span>
-              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','inv')">Inv <strong style="color:#1e40af">${fmt(invD)}</strong></span>
-              <span style="opacity:.35">·</span>
-              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','sx')">Sx/Proc <strong style="color:#6b21a8">${fmt(sxD)}</strong></span>
-              ${otherD > 0 ? `<span style="opacity:.35">·</span><span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','other')">Other <strong>${fmt(otherD)}</strong></span>` : ''}
+              ${headHtml}
             </div>
             ${!chk ? '<div style="font-size:9px;color:var(--orange);margin-top:4px">Note: category split may not match total if service text is unclear.</div>' : ''}
             <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} transaction${dTxn.length>1?'s':''} today</div>
@@ -42776,28 +42773,17 @@ function _renderCollectionDashboardImpl() {
 function openRcCollectionDetailModal(dept, catKey) {
   const todayKeyLocal = todayKey();
   const collected = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal).filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept; });
-  let list = [];
-  if (catKey === 'other') {
-    list = collected.filter(function (t) {
-      const c = transactionHasChargeCategory(t, 'consultation') ? 'consultation' : transactionHasChargeCategory(t, 'diagnostic') ? 'diagnostic' : transactionHasChargeCategory(t, 'surgery') ? 'surgery' : inferChargeCategoryFromService(t.service || t.for || t.desc || '');
-      return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
-    });
-  } else {
-    const want = catKey === 'opd' ? 'consultation' : catKey === 'inv' ? 'diagnostic' : catKey === 'sx' ? 'surgery' : '';
-    list = collected.filter(function (t) {
-      return transactionHasChargeCategory(t, want);
-    });
-  }
+  const list = bmhRcSplit(collected).filter(function (t) { return bmhRcHeadKey(t) === catKey; });
   const fmt = function (n) { return '₹' + n.toLocaleString('en-IN'); };
   const dc = DEPT_COLORS[dept];
-  const title = (dc?.label || dept) + ' — ' + ({ opd: 'OPD / consultations', inv: 'Investigations & diagnostics', sx: 'Procedures & surgery', other: 'Other' }[catKey] || catKey);
+  const title = (dc?.label || dept) + ' — ' + ((BMH_RC_HEADS.find(function (h) { return h[0] === catKey; }) || [])[4] || catKey);
   const bodyEl = document.getElementById('m-rc-collection-detail-body');
   const titleEl = document.getElementById('m-rc-collection-detail-title');
   if (titleEl) titleEl.innerHTML = escapeHtmlConsent(title) + ' <button type="button" class="btn btn-xs btn-outline" style="margin-left:8px" onclick="printRcCollectionDetail(\'' + String(dept).replace(/'/g, "\\'") + '\',\'' + String(catKey).replace(/'/g, "\\'") + '\')">🖨️ Print</button>';
   if (!bodyEl) return;
   const paidTotal = list.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
   const paidPatients = new Set(list.map(function (t) { return t.bmhId || ''; }).filter(Boolean)).size;
-  const wantCat = catKey === 'opd' ? 'consultation' : catKey === 'inv' ? 'diagnostic' : catKey === 'sx' ? 'surgery' : null;
+  const wantCat = catKey !== 'other' && BMH_RC_HEADS.some(function (h) { return h[0] === catKey; }) ? catKey : null;
   const paidRows = list.map(function (t) {
     const rowStyle = 'display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px';
     const attrs = t.bmhId
@@ -42921,13 +42907,14 @@ function printDayCollectionByDept() {
   const deptBlocks = depts.map(function (dept) {
     const arr = txns.filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept; });
     if (!arr.length) return '';
-    const consult = arr.filter(function (t) { return transactionHasChargeCategory(t, 'consultation'); });
-    const inv = arr.filter(function (t) { return transactionHasChargeCategory(t, 'diagnostic'); });
-    const sx = arr.filter(function (t) { return transactionHasChargeCategory(t, 'surgery'); });
-    const other = arr.filter(function (t) {
-      const c = transactionHasChargeCategory(t, 'consultation') ? 'consultation' : transactionHasChargeCategory(t, 'diagnostic') ? 'diagnostic' : transactionHasChargeCategory(t, 'surgery') ? 'surgery' : inferChargeCategoryFromService(t.service || t.for || t.desc || '');
-      return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
-    });
+    const arrParts = bmhRcSplit(arr);
+    const ofHead = function (k) { return arrParts.filter(function (t) { return bmhRcHeadKey(t) === k; }); };
+    const consult = ofHead('opd');
+    const inv = ofHead('inv');
+    const sx = ofHead('sx');
+    const procs = ofHead('proc');
+    const meds = ofHead('med');
+    const other = ofHead('other');
     const consultPts = new Set((PATIENTS || []).filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === dept
         && isConsultPurpose(p.purpose || '')
@@ -42957,6 +42944,10 @@ function printDayCollectionByDept() {
       + (inv.length ? byName(inv) : '<div style="font-size:11px;margin-top:3px;color:#666">No investigation entries</div>')
       + '<div style="margin-top:8px;font-size:12px"><strong>Surgery:</strong></div>'
       + sxLines
+      + '<div style="margin-top:8px;font-size:12px"><strong>Procedures:</strong></div>'
+      + (procs.length ? byName(procs) : '<div style="font-size:11px;margin-top:3px;color:#666">No procedure entries</div>')
+      + '<div style="margin-top:8px;font-size:12px"><strong>Medicines:</strong></div>'
+      + (meds.length ? byName(meds) : '<div style="font-size:11px;margin-top:3px;color:#666">No medicine entries</div>')
       + '<div style="margin-top:8px;font-size:12px"><strong>Other charges:</strong></div>'
       + (other.length ? byName(other) : '<div style="font-size:11px;margin-top:3px;color:#666">No other entries</div>')
       + '<div style="margin-top:9px;padding-top:7px;border-top:1px solid #e5e7eb;text-align:right;font-size:13px;font-weight:900">Department Total: ' + fmt(deptTotal) + '</div>'
@@ -42978,14 +42969,7 @@ function printRcCollectionDetail(dept, catKey) {
   const txns = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal).filter(function (t) {
     return normalizeDeptKeyForQueue(t.dept || '') === normalizeDeptKeyForQueue(dept || '');
   });
-  const rows = (catKey === 'all' ? txns : txns.filter(function (t) {
-    const c = transactionHasChargeCategory(t, 'consultation') ? 'consultation' : transactionHasChargeCategory(t, 'diagnostic') ? 'diagnostic' : transactionHasChargeCategory(t, 'surgery') ? 'surgery' : inferChargeCategoryFromService(t.service || t.for || t.desc || '');
-    if (catKey === 'opd') return c === 'consultation';
-    if (catKey === 'inv') return c === 'diagnostic';
-    if (catKey === 'sx') return c === 'surgery';
-    if (catKey === 'other') return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
-    return true;
-  }));
+  const rows = (catKey === 'all' ? txns : bmhRcSplit(txns).filter(function (t) { return bmhRcHeadKey(t) === catKey; }));
   const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
   const total = rows.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
   const bodyRows = rows.map(function (t, i) {
@@ -42997,7 +42981,7 @@ function printRcCollectionDetail(dept, catKey) {
       + '<td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:800">' + fmt(getNetTransactionAmount(t)) + '</td></tr>';
   }).join('');
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;padding:12mm}table{width:100%;border-collapse:collapse}th{background:#1A3C6E;color:#fff;padding:7px;font-size:11px}</style></head><body>'
-    + '<h2 style="margin:0;color:#1A3C6E">Collection Detail - ' + escapeHtmlConsent((DEPT_COLORS[dept]?.label || dept) + (catKey && catKey !== 'all' ? (' / ' + catKey.toUpperCase()) : '')) + '</h2>'
+    + '<h2 style="margin:0;color:#1A3C6E">Collection Detail - ' + escapeHtmlConsent((DEPT_COLORS[dept]?.label || dept) + (catKey && catKey !== 'all' ? (' / ' + ((BMH_RC_HEADS.find(function (h) { return h[0] === catKey; }) || [])[4] || catKey)) : '')) + '</h2>'
     + '<div style="margin:6px 0 10px;color:#555">' + todayLabel + '</div>'
     + '<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Service</th><th>Mode</th><th>Amount</th></tr></thead><tbody>'
     + (bodyRows || '<tr><td colspan="6" style="border:1px solid #ddd;padding:8px">No rows</td></tr>')
@@ -50795,7 +50779,10 @@ function _renderDashboardImpl() {
     setEl('db-apts', String(diagToday));
     setEl('db-cl-checked', String(todaySurgeries));
     setEl('db-cl-collection', '₹' + deptTxnsToday.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0).toLocaleString('en-IN'));
-    setEl('db-pending', '₹' + deptSurgeryTxnsToday.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0).toLocaleString('en-IN'));
+    const deptSurgeryAmt = typeof window.bmhSplitTxns === 'function'
+      ? window.bmhSplitTxns(deptTxnsToday).filter(function (t) { return t._head === 'surgery'; }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0)
+      : deptSurgeryTxnsToday.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+    setEl('db-pending', '₹' + deptSurgeryAmt.toLocaleString('en-IN'));
     setEl('db-stock-dup', String((window.IPD_PATIENTS || IPD_PATIENTS || []).filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && (p.status || 'admitted') !== 'discharged';
     }).length));
