@@ -426,6 +426,7 @@
     stats: function () { return Object.assign({ on: !!READY, keepsCopy: !!READY && PERSIST, billingLogin: billingLogin(), lastKey: LASTKEY, copyAt: COPY_AT ? new Date(COPY_AT).toISOString() : null, rows: M ? Object.keys(M.parts).reduce(function (n, k) { return n + (partsCount(M.parts[k]) || 1); }, 0) : 0 }, stats); },
     // for checking: the record as this computer holds it
     record: function () { return M ? toRecord(M) : null; },
+    billingLogin: billingLogin,
     ready: function () { return start(); }
   };
 })();
