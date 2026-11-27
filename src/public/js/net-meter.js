@@ -8,6 +8,9 @@
  *  • Totals are kept per day on this computer and sent every 10 minutes as one tiny record to
  *    security/usage/<date>/<device>. Only Dr Varun's admin login sees them (Settings → "Download meter").
  *  • Figures are close estimates: they count the data as received by the browser, before any compression.
+ * v2.2 (27 Nov): patient downloads are also split by kind, with counts — whole list, query (today's queue /
+ *   search), queue change, single patient, single field — and each record carries the HMS version this page runs
+ *   (app), so computers stuck on an old version show up.
  * Off switch (this browser): localStorage.setItem('bmh_netmeter_off','1') then reload.
  */
 (function () {
@@ -28,16 +31,26 @@
 
   // ── totals for today (kept across reloads on this computer) ──
   var T = null;
-  function fresh() { return { day: dayKey(), total: 0, msgs: 0, roots: {}, pages: {}, rest: {}, since: new Date().toISOString() }; }
+  function fresh() { return { day: dayKey(), total: 0, msgs: 0, roots: {}, pages: {}, rest: {}, pk: {}, pc: {}, since: new Date().toISOString() }; }
+  // what kind of patient download: path + whether it belongs to a query (tagged reply)
+  function patientKind(path, tagged) {
+    var parts = String(path || '').replace(/^\/+/, '').split('/');
+    if (parts[0] !== 'patients') return '';
+    if (parts.length === 1 || !parts[1]) return tagged ? 'query' : 'wholeList';
+    if (parts.length === 2) return tagged ? 'queueChange' : 'single';
+    return 'field';
+  }
+  function appTag() { try { var sc = document.querySelector('script[src*="js/legacy.js?v="]'); var m = sc && /\?v=([^"'&\s>]+)/.exec(sc.getAttribute('src')); return m ? m[1] : ''; } catch (e) { return ''; } }
   function load() {
     try { var o = JSON.parse(localStorage.getItem(LS) || 'null'); if (o && o.day === dayKey()) return o; } catch (e) {}
     return fresh();
   }
   T = load();
   var dirty = false;
-  function add(bytes, root, kind) {
+  function add(bytes, root, kind, pkind) {
     if (!bytes) return;
     if (T.day !== dayKey()) { flush(true); T = fresh(); }
+    if (pkind) { T.pk = T.pk || {}; T.pc = T.pc || {}; T.pk[pkind] = (T.pk[pkind] || 0) + bytes; T.pc[pkind] = (T.pc[pkind] || 0) + 1; }
     var r = safeKey(root), pg = safeKey(pageName());
     T.total += bytes; T.msgs++;
     T.roots[r] = (T.roots[r] || 0) + bytes;
@@ -57,20 +70,21 @@
       var ws = protocols === undefined ? new NativeWS(url) : new NativeWS(url, protocols);
       try {
         if (/firebasedatabase\.app|firebaseio\.com/i.test(String(url))) {
-          var pending = 0, pendBytes = 0, pendRoot = '';
+          var pending = 0, pendBytes = 0, pendRoot = '', pendPath = '';
+          var tagRe = /"t":\d+/;
           ws.addEventListener('message', function (ev) {
             try {
               var d = ev.data; var n = typeof d === 'string' ? d.length : (d && (d.byteLength || d.size)) || 0;
               if (typeof d !== 'string') { add(n, '(binary)', 'ws'); saveLocal(); return; }
               if (pending > 0) {
-                if (!pendRoot) { var m0 = /"p":"([^"]*)"/.exec(d.slice(0, 400)); if (m0) pendRoot = rootOf(m0[1]); }
+                if (!pendRoot) { var m0 = /"p":"([^"]*)"/.exec(d.slice(0, 400)); if (m0) { pendRoot = rootOf(m0[1]); pendPath = m0[1]; } }
                 pendBytes += n; pending--;
-                if (pending === 0) { add(pendBytes, pendRoot || '(unknown)', 'ws'); pendBytes = 0; pendRoot = ''; saveLocal(); }
+                if (pending === 0) { add(pendBytes, pendRoot || '(unknown)', 'ws', patientKind(pendPath, tagRe.test(d.slice(-60)))); pendBytes = 0; pendRoot = ''; pendPath = ''; saveLocal(); }
                 return;
               }
-              if (n <= 6 && /^\d+$/.test(d)) { pending = parseInt(d, 10) || 0; pendBytes = n; pendRoot = ''; return; }
+              if (n <= 6 && /^\d+$/.test(d)) { pending = parseInt(d, 10) || 0; pendBytes = n; pendRoot = ''; pendPath = ''; return; }
               var m = /"p":"([^"]*)"/.exec(d.slice(0, 400));
-              add(n, m ? rootOf(m[1]) : '(connection)', 'ws'); saveLocal();
+              add(n, m ? rootOf(m[1]) : '(connection)', 'ws', m ? patientKind(m[1], tagRe.test(d.slice(-60))) : ''); saveLocal();
             } catch (e) {}
           });
         }
@@ -119,8 +133,9 @@
       saveLocal();
       if (!dirty && !force) return;
       var u = me(); if (!u || !u.username || !window.FBDB) return;
-      var row = { login: String(u.username), device: deviceLabel(), host: String(location.host || ''), ver: VER,
+      var row = { login: String(u.username), device: deviceLabel(), host: String(location.host || ''), ver: VER, app: appTag(),
         total: Math.round(T.total), msgs: T.msgs, roots: top(T.roots, 40), pages: top(T.pages, 30), rest: top(T.rest, 20),
+        pk: top(T.pk || {}, 10), pc: top(T.pc || {}, 10),
         since: T.since, at: new Date().toISOString() };
       dirty = false;
       window.FBDB.ref(PATH + '/' + T.day + '/' + safeKey(deviceId())).set(row).catch(function () { dirty = true; });
