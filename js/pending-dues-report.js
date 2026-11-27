@@ -4,8 +4,8 @@
  *   2. Patients who owe the hospital — balances left on saved bills (any date), per patient with each bill. Clicking a
  *      patient opens Billing for that patient, where the balance can be collected.
  *   3. Charges sent to reception and not collected yet (any date) — as before, with Delete.
- * Centre filter (Reports → centre) applies. Reads only, except Delete on an uncollected charge, which marks it
- * cancelled (kept on record, no longer due).
+ * Centre filter (Reports → centre) applies. Reads only, except Delete on an uncollected charge (admin logins only),
+ * which marks it cancelled (kept on record, no longer due).
  * Off switch (this browser): localStorage.setItem('bmh_pending_dues_report_off','1') then reload.
  */
 (function () {
@@ -85,7 +85,7 @@
           return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800;cursor:pointer;color:var(--bmh-blue);text-decoration:underline" onclick="bmhPendingDuesOpenBilling(\'' + ja(r.bmhId || '') + '\')">' + esc(r.patient || '—') + '<div style="font-family:var(--mono);font-size:10px;color:var(--g1);font-weight:400">' + esc(r.bmhId || '') + '</div></td>'
             + '<td>' + esc(r.for || r.service || r.desc || '—') + '</td><td>' + esc(dl(r.dept)) + '</td><td>' + esc(cen(r.centre)) + '</td><td style="font-size:10.5px">' + esc(fd(r.date || r.createdAt)) + '</td>'
             + '<td style="font-weight:900;color:var(--orange);text-align:right">' + rs(r.amount) + '</td>'
-            + '<td><button class="btn btn-xs btn-gray" onclick="bmhPendingDuesRemove(\'' + ja(r.id) + '\')" title="Remove this charge">🗑️ Delete</button></td></tr>';
+            + '<td>' + (isAdmin() ? '<button class="btn btn-xs btn-gray" onclick="bmhPendingDuesRemove(\'' + ja(r.id) + '\')" title="Remove this charge (admin only)">🗑️ Delete</button>' : '') + '</td></tr>';
         }).join('') + '</tbody></table>'
         : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">' + (OLDREQ ? 'None' : 'Loading…') + '</div>');
     el.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
@@ -98,7 +98,9 @@
     if ((loadingDues || !claims.length) && tries++ < 6) again(); 
   }
   // remove an uncollected charge (any date): kept on record as cancelled, so it no longer shows anywhere as due
+  function isAdmin() { try { return !!(CURRENT_USER && (CURRENT_USER.isAdmin || String(CURRENT_USER.role || '').toLowerCase() === 'admin')); } catch (e) { return false; } }
   window.bmhPendingDuesRemove = function (id) {
+    if (!isAdmin()) { try { showToast('Only an admin can remove a charge', 'w'); } catch (e) {} return; }
     var r = null; (OLDREQ || []).concat((function () { try { return PAY_REQUESTS || []; } catch (e) { return []; } })()).forEach(function (x) { if (x && x.id === id) r = x; });
     if (!r) { try { showToast('Charge not found', 'w'); } catch (e) {} return; }
     if (!confirm('Remove this uncollected charge?\n' + (r.patient || '') + ' — ' + (r.for || r.service || '') + ' ' + rs(r.amount))) return;
