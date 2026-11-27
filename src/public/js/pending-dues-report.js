@@ -1,10 +1,11 @@
 /* BMH — Settings → Reports → 💸 Pending Dues: every amount still owed, not only today's.
- *   1. TPA / Cashless dues — every open insurance / ECHS / CGHS / PMJAY / cashless claim (pending or part-received, any
- *      date). The total and each claim open the TPA / Cashless screen.
+ *   1. TPA / Cashless dues — one heading with the number of open claims and the amount still due (any date); clicking
+ *      it opens the TPA / Cashless dues screen, where the claims are listed.
  *   2. Patients who owe the hospital — balances left on saved bills (any date), per patient with each bill. Clicking a
  *      patient opens Billing for that patient, where the balance can be collected.
  *   3. Charges sent to reception and not collected yet (any date) — as before, with Delete.
- * Centre filter (Reports → centre) applies. Reads only; writes nothing (Delete is the existing button).
+ * Centre filter (Reports → centre) applies. Reads only, except Delete on an uncollected charge, which marks it
+ * cancelled (kept on record, no longer due).
  * Off switch (this browser): localStorage.setItem('bmh_pending_dues_report_off','1') then reload.
  */
 (function () {
@@ -48,15 +49,8 @@
     }).map(function (r) { r._left = Math.max(0, num(r.approvedAmount || r.cashlessApprovedAmount || r.claimedAmount || r.amount) - num(r.receivedAmount)); return r; })
       .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
     var tpaTotal = claims.reduce(function (s, r) { return s + r._left; }, 0);
-    var tpaHtml = box('🏥 TPA / Cashless dues — ' + claims.length + ' claim' + (claims.length === 1 ? '' : 's'),
-      'Outstanding from insurers / ECHS / CGHS / PMJAY: <b style="cursor:pointer;color:var(--bmh-blue);text-decoration:underline" onclick="nav(\'tpa\',null)">' + rs(tpaTotal) + ' → open TPA / Cashless</b>', '',
-      claims.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Scheme / insurer</th><th>For</th><th>Date</th><th>Centre</th><th class="r">Due ₹</th></tr></thead><tbody>'
-        + claims.map(function (r, i) {
-          return '<tr style="cursor:pointer" title="Open TPA / Cashless" onclick="nav(\'tpa\',null)"><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(r.patient || '—') + '<div style="font-family:var(--mono);font-size:10px;color:var(--g1)">' + esc(r.bmhId || '') + '</div></td>'
-            + '<td>' + esc(r.ins && r.ins !== r.mode ? r.ins : (r.mode || '')) + '</td><td>' + esc(r.procedure || r.for || '') + '</td><td style="font-size:10.5px">' + esc(fd(r.date || r.createdAt)) + '</td><td>' + esc(cen(r.centre)) + '</td>'
-            + '<td style="font-weight:900;color:var(--orange);text-align:right">' + rs(r._left) + (num(r.receivedAmount) > 0 ? '<div style="font-size:9.5px;font-weight:600;color:var(--g1)">part received ' + rs(r.receivedAmount) + '</div>' : '') + '</td></tr>';
-        }).join('') + '</tbody></table>'
-        : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">' + (window.bmhTpaDues ? 'No open TPA / cashless claims' : 'Loading…') + '</div>');
+    // only the heading here (total + number of claims); the list itself is on the TPA / Cashless screen
+    var tpaHtml = '<div class="card" style="margin-bottom:12px;cursor:pointer" title="Open TPA / Cashless dues" onclick="nav(\'tpa\',null)"><div class="card-hd" style="margin:0"><div><div class="card-title">🏥 TPA / Cashless dues — ' + claims.length + ' claim' + (claims.length === 1 ? '' : 's') + ' · ' + rs(tpaTotal) + '</div><div class="card-sub">Outstanding from insurers / ECHS / CGHS / PMJAY · click to open TPA / Cashless dues →</div></div></div></div>';
     // 2. patients who owe on bills
     var owe = [];
     try { owe = typeof window.bmhDuesList === 'function' ? window.bmhDuesList() : []; } catch (e) { owe = []; }
@@ -91,7 +85,7 @@
           return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800;cursor:pointer;color:var(--bmh-blue);text-decoration:underline" onclick="bmhPendingDuesOpenBilling(\'' + ja(r.bmhId || '') + '\')">' + esc(r.patient || '—') + '<div style="font-family:var(--mono);font-size:10px;color:var(--g1);font-weight:400">' + esc(r.bmhId || '') + '</div></td>'
             + '<td>' + esc(r.for || r.service || r.desc || '—') + '</td><td>' + esc(dl(r.dept)) + '</td><td>' + esc(cen(r.centre)) + '</td><td style="font-size:10.5px">' + esc(fd(r.date || r.createdAt)) + '</td>'
             + '<td style="font-weight:900;color:var(--orange);text-align:right">' + rs(r.amount) + '</td>'
-            + '<td><button class="btn btn-xs btn-gray" onclick="deletePayRequest(\'' + ja(r.id) + '\');setTimeout(generatePendingDuesReport,600)" title="Delete due">🗑️ Delete</button></td></tr>';
+            + '<td><button class="btn btn-xs btn-gray" onclick="bmhPendingDuesRemove(\'' + ja(r.id) + '\')" title="Remove this charge">🗑️ Delete</button></td></tr>';
         }).join('') + '</tbody></table>'
         : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">' + (OLDREQ ? 'None' : 'Loading…') + '</div>');
     el.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
@@ -103,6 +97,22 @@
     // the claim list and dues list arrive a moment after the first open — redraw a few times while they load
     if ((loadingDues || !claims.length) && tries++ < 6) again(); 
   }
+  // remove an uncollected charge (any date): kept on record as cancelled, so it no longer shows anywhere as due
+  window.bmhPendingDuesRemove = function (id) {
+    var r = null; (OLDREQ || []).concat((function () { try { return PAY_REQUESTS || []; } catch (e) { return []; } })()).forEach(function (x) { if (x && x.id === id) r = x; });
+    if (!r) { try { showToast('Charge not found', 'w'); } catch (e) {} return; }
+    if (!confirm('Remove this uncollected charge?\n' + (r.patient || '') + ' — ' + (r.for || r.service || '') + ' ' + rs(r.amount))) return;
+    var who = ''; try { who = (CURRENT_USER && CURRENT_USER.name) || ''; } catch (e) {}
+    var at = new Date().toISOString(), up = {};
+    up['payRequests/' + id + '/status'] = 'cancelled'; up['payRequests/' + id + '/cancelledAt'] = at; up['payRequests/' + id + '/cancelledBy'] = who; up['payRequests/' + id + '/cancelReason'] = 'Removed from Reports → Pending dues';
+    window.FBDB.ref().update(up).then(function () {
+      r.status = 'cancelled';
+      try { var i = PAY_REQUESTS.findIndex(function (x) { return x && x.id === id; }); if (i > -1) PAY_REQUESTS.splice(i, 1); } catch (e) {}
+      try { fbPush && fbPush('auditLog', { user: who, action: 'CANCEL_CHARGE', item: (r.patient || '') + ' — ' + (r.for || '') + ' ₹' + (r.amount || 0), timestamp: at }); } catch (e) {}
+      try { showToast('Charge removed', 's'); } catch (e) {}
+      report();
+    }).catch(function () { try { showToast('Could not remove — check the connection', 'w'); } catch (e) {} });
+  };
   window.bmhPendingDuesOpenBilling = function (id) {
     if (!id) { try { nav('billing', null); } catch (e) {} return; }
     try { if (typeof rcOpenBillingFor === 'function') { rcOpenBillingFor(id); return; } } catch (e) {}
