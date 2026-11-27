@@ -81,7 +81,7 @@
         var sameProc = dup.some(function (b) { return sameItems(draft, b); });
         var bal = typeof window.bmhDuesBalance === 'function' ? Number(window.bmhDuesBalance(id)) || 0 : 0;
         var lines = dup.slice(0, 3).map(function (b) {
-          var paid = (Number(b.amountReceived) || 0) + (Number(b.advanceApplied) || 0), left = Math.max(0, (Number(b.netPayable) || 0) - (Number(b.tpaAmount) || 0) - paid);
+          var paid = (Number(b.amountReceived) || 0) + (Number(b.advanceApplied) || 0), left = Math.max(0, (Number(b.netPayable) || 0) - (Number(b.tpaAmount) || 0) - (Number(b.amountReceived) || 0));
           var its = itemsOf(b).map(function (i) { return i.desc || i.name; }).filter(Boolean).join(', ');
           return (b.billNo || b.id) + ' · ' + fmtD(billTime(b) || b.createdAt || b.date) + ' · bill ' + rs(b.netPayable) + ' · paid ' + rs(paid) + (left > 0 ? ' · balance ' + rs(left) : '') + (its ? ' · ' + its : '');
         });
