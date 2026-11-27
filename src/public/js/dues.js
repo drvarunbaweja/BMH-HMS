@@ -47,6 +47,16 @@
     return Math.max(a, num(p.advance));
   }
   window.bmhDuesBalance = balanceOf;
+  // every patient who still owes on a bill: [{ id, name, bal, rows:[{ desc, billNo, date, left }] }] (Reports → Pending dues)
+  window.bmhDuesList = function () {
+    start();
+    return Object.keys(D).filter(function (id) { return id !== '_meta'; }).map(function (id) {
+      var rec = D[id] || {}, rows = billRows(rec).filter(function (r) { return r.left > 0; });
+      return { id: id, name: rec.name || (patient(id) || {}).name || '', bal: rows.reduce(function (s, r) { return s + r.left; }, 0),
+        rows: rows.map(function (r) { return { desc: r.item.desc || '', billNo: r.item.billNo || r.item.id, date: r.item.date || r.item.createdAt || '', left: r.left, centre: r.item.centre || '', dept: r.item.dept || '' }; }) };
+    }).filter(function (x) { return x.bal > 0; });
+  };
+  window.bmhDuesLoaded = function () { return loaded; };
 
   // ── data ──
   function start() {
