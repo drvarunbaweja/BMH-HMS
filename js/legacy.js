@@ -55186,22 +55186,20 @@ window.addEventListener('DOMContentLoaded', function() {
   function procLabel(p) {
     return String(p || '').replace(/\(?\b(right|left|both)\s*eyes?\b\)?|\((od|os|ou)\)|\b(OD|OS|OU|RE|LE|BE)\b/gi, ' ').replace(/\s*[-–,]\s*$/, '').replace(/\s+/g, ' ').trim() || String(p || '');
   }
+  // type a few letters → the matching advised procedures are offered; pick one (or press Enter) to see only those patients
   function procSelectHtml(rows, cur) {
     const by = {};
     rows.forEach(function (r) { const k = procKey(r.proc); if (!k) return; (by[k] = by[k] || { label: procLabel(r.proc), n: 0 }).n += 1; });
     const keys = Object.keys(by).sort(function (a, b) { return by[a].label.localeCompare(by[b].label); });
-    if (cur && !by[cur]) keys.unshift(cur), by[cur] = { label: cur, n: 0 };
     return '<label style="font-size:11.5px;display:flex;gap:5px;align-items:center">Procedure '
-      + '<select style="font-size:11.5px;padding:3px 6px;max-width:320px" onchange="bmhSetAdvisedFilter(\'proc\',this.value)">'
-      + '<option value="">All procedures</option>'
-      + keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(by[k].label) + ' (' + by[k].n + ')</option>'; }).join('')
-      + '</select></label>'
+      + '<input id="bmh-adv-proc-q" list="bmh-adv-proc-dl" value="' + esc(cur ? (by[cur] ? by[cur].label : cur) : '') + '" placeholder="Type to search, e.g. trab, IPL" autocomplete="off" style="font-size:11.5px;padding:3px 7px;width:230px" onchange="bmhSetAdvisedFilter(\'proc\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();bmhSetAdvisedFilter(\'proc\',this.value)}">'
+      + '<datalist id="bmh-adv-proc-dl">' + keys.map(function (k) { return '<option value="' + esc(by[k].label) + '">' + by[k].n + ' patient' + (by[k].n === 1 ? '' : 's') + '</option>'; }).join('') + '</datalist></label>'
       + (cur ? '<button type="button" class="btn btn-xs btn-outline" onclick="bmhSetAdvisedFilter(\'proc\',\'\')">✕ Clear</button>' : '');
   }
   function applyFilters(rows, f, ignoreStatus, ignoreCentre) {
     return rows.filter(function (r) {
       if (!f.tests && r.isTest) return false;
-      if (f.proc && procKey(r.proc) !== f.proc) return false;
+      if (f.proc && procKey(r.proc).indexOf(procKey(f.proc)) < 0) return false;
       if (f.dept && r.dept !== f.dept) return false;
       if (f.centre && !ignoreCentre && centreKeyOf(r.centre) !== f.centre) return false;
       const d = r.advisedDate || (r.ot && r.ot.date) || '';
