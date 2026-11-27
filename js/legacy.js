@@ -42669,6 +42669,11 @@ function bmhRcHeadKey(t) {
   const row = BMH_RC_HEADS.find(function (x) { return x[1] === h; });
   return row ? row[0] : 'other';
 }
+// display only: sub-option charges with their main name ("Iron Sucrose – Single Dose") — report-heads.js
+function bmhSvcLabel(t) {
+  const raw = String((t && (t.service || t.for || t.desc)) || '');
+  try { return typeof window.bmhChargeLabel === 'function' ? window.bmhChargeLabel(raw, t && t.dept) : raw; } catch (e) { return raw; }
+}
 function bmhRcSplit(list) { return typeof window.bmhSplitTxns === 'function' ? window.bmhSplitTxns(list) : (list || []).slice(); }
 function _renderCollectionDashboardImpl() {
   const todayKeyLocal = todayKey();
@@ -42739,7 +42744,7 @@ function _renderCollectionDashboardImpl() {
         <div id="${did}" style="display:none;padding:8px 12px">
           ${dTxn.length ? dTxn.map(t=>`
             <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5);font-size:12px">
-              <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div></div>
+              <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${escapeHtmlConsent(bmhSvcLabel(t)||'—')} · ${t.time||'—'}</div></div>
               <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
               ${receptionQueueRestoreButtonHtml(t.bmhId, { dept: t.dept, label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
@@ -42758,7 +42763,7 @@ function _renderCollectionDashboardImpl() {
         <div style="font-size:16px">${DEPT_COLORS[normalizeDeptKeyForQueue(t.dept || '')]?.label?.split(' ')[0]||'🏥'}</div>
         <div style="flex:1">
           <div style="font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue)">Advance</span>' : ''} <span style="font-family:monospace;font-size:10px;color:var(--bmh-teal)">${t.bmhId||''}</span></div>
-          <div style="font-size:11px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div>
+          <div style="font-size:11px;color:var(--g1)">${escapeHtmlConsent(bmhSvcLabel(t)||'—')} · ${t.time||'—'}</div>
         </div>
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
         <div style="font-weight:900;color:${t.collected!==false?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
@@ -42790,7 +42795,7 @@ function openRcCollectionDetailModal(dept, catKey) {
       ? ' style="' + rowStyle + ';cursor:pointer" onclick="openPatient(\'' + String(t.bmhId).replace(/'/g, "\\'") + '\')"'
       : ' style="' + rowStyle + '"';
     return '<div' + attrs + '>'
-      + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
+      + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(bmhSvcLabel(t) || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
       + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
       + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
       + receptionQueueRestoreButtonHtml(t.bmhId, { dept: t.dept, label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
@@ -42798,7 +42803,7 @@ function openRcCollectionDetailModal(dept, catKey) {
   }).join('');
   const groupedByService = {};
   list.forEach(function (t) {
-    const key = String(t.service || t.for || t.desc || 'Consultation').trim() || 'Consultation';
+    const key = String(bmhSvcLabel(t) || 'Consultation').trim() || 'Consultation';
     if (!groupedByService[key]) groupedByService[key] = { count: 0, amount: 0, bmhId: t.bmhId || '' };
     groupedByService[key].count += 1;
     groupedByService[key].amount += getNetTransactionAmount(t);
@@ -42875,7 +42880,7 @@ ${lhSrc?`<img src="${lhSrc}" style="width:100%;height:auto;margin-bottom:12px">`
 <table>
   <thead><tr><th>#</th><th>Time</th><th>Patient</th><th>BMSH ID</th><th>Department</th><th>Service</th><th>Mode</th><th>Amount</th></tr></thead>
   <tbody>
-    ${collected.map((t,i)=>`<tr><td>${i+1}</td><td>${t.time}</td><td style="font-weight:700">${t.patient}</td><td style="font-family:monospace;font-size:10px">${t.bmhId}</td><td>${{ophtho:'Ophthalmology',obg:'OBG',psych:'Psychiatry',skin:'Skin'}[t.dept]||t.dept}</td><td>${t.service}${isEEGTransaction(t)?' <span style="font-size:10px;color:#8a4200">(50% concession applied)</span>':''}</td><td>${t.mode}</td><td style="font-weight:700;text-align:right">${fmt(getNetTransactionAmount(t))}</td></tr>`).join('')}
+    ${collected.map((t,i)=>`<tr><td>${i+1}</td><td>${t.time}</td><td style="font-weight:700">${t.patient}</td><td style="font-family:monospace;font-size:10px">${t.bmhId}</td><td>${{ophtho:'Ophthalmology',obg:'OBG',psych:'Psychiatry',skin:'Skin'}[t.dept]||t.dept}</td><td>${escapeHtmlConsent(bmhSvcLabel(t))}${isEEGTransaction(t)?' <span style="font-size:10px;color:#8a4200">(50% concession applied)</span>':''}</td><td>${t.mode}</td><td style="font-weight:700;text-align:right">${fmt(getNetTransactionAmount(t))}</td></tr>`).join('')}
     <tr class="total-row"><td colspan="7" style="text-align:right;border:1px solid #1A3C6E">TOTAL COLLECTED</td><td style="text-align:right;border:1px solid #1A3C6E">${fmt(total)}</td></tr>
   </tbody>
 </table>
@@ -42925,14 +42930,14 @@ function printDayCollectionByDept() {
     const byName = function (items) {
       const map = {};
       items.forEach(function (t) {
-        const k = String(t.service || t.for || t.desc || 'Service').trim() || 'Service';
+        const k = String(bmhSvcLabel(t) || 'Service').trim() || 'Service';
         if (!map[k]) map[k] = [];
         map[k].push(t);
       });
       return Object.keys(map).sort().map(function (k) { return groupedLine(k, map[k]); }).join('');
     };
     const sxLines = sx.map(function (t) {
-      return '<div style="font-size:11px;margin-top:3px">- ' + escapeHtmlConsent(String(t.service || 'Surgery')) + ' - <strong>' + fmt(getNetTransactionAmount(t)) + '</strong></div>';
+      return '<div style="font-size:11px;margin-top:3px">- ' + escapeHtmlConsent(String(bmhSvcLabel(t) || 'Surgery')) + ' - <strong>' + fmt(getNetTransactionAmount(t)) + '</strong></div>';
     }).join('') || '<div style="font-size:11px;margin-top:3px;color:#666">No surgery entries</div>';
     const deptTotal = arr.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
     const consultTotal = consult.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
@@ -42976,7 +42981,7 @@ function printRcCollectionDetail(dept, catKey) {
     return '<tr><td style="border:1px solid #ddd;padding:6px">' + (i + 1) + '</td>'
       + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.patient || '') + '</td>'
       + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.bmhId || '') + '</td>'
-      + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.service || '') + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(bmhSvcLabel(t) || '') + '</td>'
       + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.mode || '') + '</td>'
       + '<td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:800">' + fmt(getNetTransactionAmount(t)) + '</td></tr>';
   }).join('');
