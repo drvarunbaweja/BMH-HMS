@@ -5,7 +5,8 @@
  *   – the screen is the Dashboard, My patient queue, Two-Centre View, or Reception with the registration form empty, and
  *   – no pop-up window is open and no box is being typed in.
  * Patient files, billing, OT, IPD, lab and every other screen are never reloaded; they update as soon as the user is back
- * on one of the screens above and idle. The page comes back on the same screen (the address keeps it).
+ * on one of the screens above and idle. The page comes back on the same screen it was on (made sure of after login,
+ * so the Two-Centre View stays the Two-Centre View).
  * Also after midnight: a page left open from the day before switches its live receipts to today at once and reloads at
  * the next safe moment (1 idle minute), so the Two-Centre View and Charges show today's totals, not yesterday's.
  * Off switch (this browser): localStorage.setItem('bmh_auto_reload_off','1') then reload.
@@ -68,8 +69,23 @@
     }).catch(function () {});
   }
   setInterval(function () {
-    if (pending && (safeNow() || (dayPending && safeDayNow()))) { try { sessionStorage.setItem('bmh_auto_reloaded_at', new Date().toISOString()); } catch (e) {} location.reload(); }
+    if (pending && (safeNow() || (dayPending && safeDayNow()))) { try { sessionStorage.setItem('bmh_auto_reloaded_at', new Date().toISOString()); sessionStorage.setItem('bmh_reload_return', JSON.stringify({ page: activePage(), at: Date.now() })); } catch (e) {} location.reload(); }
   }, 20000);
+  // after an automatic reload: come back to the same screen (e.g. the Two-Centre View), not the Dashboard
+  (function returnToPage() {
+    var want = null; try { want = JSON.parse(sessionStorage.getItem('bmh_reload_return') || 'null'); sessionStorage.removeItem('bmh_reload_return'); } catch (e) { want = null; }
+    if (!want || !want.page || Date.now() - Number(want.at || 0) > 5 * 60 * 1000) return;
+    var key = String(want.page).replace(/^pg-/, ''), tries = 0, okFor = 0, act0 = lastAct;
+    var t = setInterval(function () {
+      if (++tries > 90 || okFor >= 8) { clearInterval(t); return; }
+      var gate = document.getElementById('login-gate'); if (gate && visible(gate)) return;
+      var u = null; try { u = CURRENT_USER; } catch (e) {} if (!u) return;
+      if (activePage() === want.page) { okFor += 1; return; }
+      okFor = 0;
+      if (lastAct > act0 + 1500) { clearInterval(t); return; } // someone has started using the screen — leave it
+      try { var navEl = document.querySelector('#sbnav .ni[onclick*="nav(\'' + key + '\'"]'); if (navEl || key === 'dashboard') nav(key, navEl || null); else clearInterval(t); } catch (e) { clearInterval(t); }
+    }, 1000);
+  })();
   setTimeout(check, 60000);
   setInterval(check, CHECK_MS);
   window.bmhAutoReloadStatus = function () { return { mine: myTag(), pending: pending, idleSec: Math.round((Date.now() - lastAct) / 1000), page: activePage(), popup: popupOpen(), typing: typing(), safe: safeNow() }; };
