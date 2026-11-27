@@ -53932,7 +53932,7 @@ function loadPastVisits(bmhId, dept) {
         { label: 'Positive Findings', get: function (v) { return cleanStoredOphthoPositiveFindings(v.positiveFindings) || '—'; } },
         { label: 'Diagnosis', get: function (v) { return Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—'); } },
         // procedure name and eye only (no steps / notes / consumables) — the OT history alongside has the IOL
-        { label: 'Procedure done', get: function (v) { return bmhShortProcedureDone(v) || '—'; } },
+        { label: 'Procedure done', get: function (v) { const pd = bmhShortProcedureDone(v); return [pd, (typeof window.bmhVisitBilledDone === 'function' ? window.bmhVisitBilledDone(bmhId, v, pd) : '')].filter(Boolean).join('; ') || '—'; } },
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
       ];
       const historyByDate = {};
@@ -53996,6 +53996,17 @@ function loadPastVisits(bmhId, dept) {
               ${bmhOtComplicationText(c) ? `<div style="color:#b42318;font-weight:800">Complication: ${String(bmhOtComplicationText(c)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
             </div>`;
           }).join('') : '<div style="font-size:11px;color:var(--g1)">No OT module entries saved for this patient.</div>'}
+          ${(function () {
+            // procedures / tests charged on days with no visit shown here (YAG, OCT, foreign body removal …) — visit-procs.js
+            if (typeof window.bmhBilledProcs !== 'function') return '';
+            const shown = new Set(recentVisits.map(function (v) { return localDateKey(v.date || v.createdAt || ''); }).filter(Boolean));
+            const byDay = {};
+            window.bmhBilledProcs(bmhId).filter(function (x) { return !shown.has(x.day) && (!x.dept || x.dept === 'ophtho'); }).forEach(function (x) { (byDay[x.day] = byDay[x.day] || []).push(x); });
+            const days = Object.keys(byDay).sort().reverse().slice(0, 12);
+            if (!days.length) return '';
+            return '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin:10px 0 5px">Procedures &amp; tests on other days</div>'
+              + days.map(function (d) { return '<div style="font-size:11px;padding:5px 7px;border:1px solid var(--g5,#eee);border-radius:7px;margin-bottom:4px"><b>' + formatDateIN(d) + '</b> · ' + escapeHtmlConsent(window.bmhBilledProcsText(byDay[d])) + '</div>'; }).join('');
+          })()}
         </div>
       </div>`;
       return;
@@ -54011,7 +54022,7 @@ function loadPastVisits(bmhId, dept) {
         { label: 'Diagnosis', get: function (v) { return (v['skin-primary-dx'] || v.dx || '').trim() || '—'; } },
         { label: 'Prescription', get: function (v) { return summarizeVisitPrescription(v) || '—'; } },
         { label: 'Procedures Advised', get: function (v) { return summarizeVisitProcedures(v) || '—'; } },
-        { label: 'Procedure Done', get: function (v) { return summarizeProcedureDoneLine(v) || '—'; } },
+        { label: 'Procedure Done', get: function (v) { const pd = summarizeProcedureDoneLine(v); return [pd, (typeof window.bmhVisitBilledDone === 'function' ? window.bmhVisitBilledDone(bmhId, v, pd) : '')].filter(Boolean).join('; ') || '—'; } },
         { label: 'Follow-up Date', get: function (v) { return summarizeVisitFollowup(v, 'skin') || '—'; } },
         { label: 'Instructions', get: function (v) { return summarizeVisitAdvice(v) || '—'; } }
       ];
@@ -54049,7 +54060,7 @@ function loadPastVisits(bmhId, dept) {
       const adviceSummary = summarizeVisitAdvice(v);
       const followupSummary = summarizeVisitFollowup(v, dept);
       const procSummary = summarizeVisitProcedures(v);
-      const procDoneLine = summarizeProcedureDoneLine(v);
+      const procDoneLine = [summarizeProcedureDoneLine(v), (typeof window.bmhVisitBilledDone === 'function' ? window.bmhVisitBilledDone(bmhId, v, summarizeProcedureDoneLine(v)) : '')].filter(Boolean).join('; ');
       const consumablesSummary = summarizeProcedureDoneConsumables(v);
       const obgMeta = dept === 'obg'
         ? `<div style="font-size:11px;margin-bottom:5px"><strong>Summary:</strong> ${(v.gravida || '—')} · ${v.ga || 'GA —'} · EDD ${v.edd || '—'}</div>
@@ -55332,6 +55343,7 @@ window.addEventListener('DOMContentLoaded', function() {
           ['Medicines', medicinesText(v)],
           ['Procedures advised', Array.from(new Set(procs)).join(', ')],
           ['Procedure done', pdone.join('; ')],
+          ['Procedures & tests (charged)', typeof window.bmhVisitBilledDone === 'function' ? window.bmhVisitBilledDone(id, v, pdone.join('; ')) : ''],
           ['Reports attached', asList(v.investigations).map(function (x) { return x && (x.name || x.title) ? String(x.name || x.title).slice(0, 60) : ''; }).filter(Boolean).join(', ')],
           ['EDD', dk === 'obg' ? visitText(v, ['obg-obs-edd-usg', 'obg-obs-edd-date', 'edd']) : ''],
           ['Follow-up', localDateKey(v.rxFuDate || v.followupDate || '') ? fmt(localDateKey(v.rxFuDate || v.followupDate)) : ''],
@@ -55341,7 +55353,17 @@ window.addEventListener('DOMContentLoaded', function() {
           + '<div style="display:flex;justify-content:space-between;gap:8px"><b style="color:var(--bmh-blue)">' + esc(fmt(localDateKey(v.date || v.visitDate || v.createdAt || ''))) + ' · ' + esc(deptLabel(dk) || '') + '</b><span style="color:var(--g1);font-size:10.5px">' + esc(v.doctor || v.savedBy || '') + '</span></div>'
           + lines.map(function (x) { return '<div><b>' + esc(x[0]) + ':</b> ' + esc(x[1]) + '</div>'; }).join('') + '</div>';
       }).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No saved visits found.</div>';
-      body.innerHTML = headHtml + otHtml + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Visits (' + visits.length + ')</div>' + visitHtml + '<div id="adv-hist-reports">' + reportsHtml + '</div>';
+      // procedures / tests charged on days with no saved visit (e.g. YAG or OCT done without a visit note)
+      let billedHtml = '';
+      if (typeof window.bmhBilledProcs === 'function') {
+        const visitDays = new Set(visits.map(function (v) { return localDateKey(v.date || v.visitDate || v.createdAt || ''); }).filter(Boolean));
+        const byDay = {};
+        window.bmhBilledProcs(id).filter(function (x) { return !visitDays.has(x.day); }).forEach(function (x) { (byDay[x.day] = byDay[x.day] || []).push(x); });
+        const days = Object.keys(byDay).sort().reverse();
+        if (days.length) billedHtml = '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Procedures & tests on other days</div>'
+          + days.map(function (d) { return '<div style="border:1px solid var(--g5,#eee);border-radius:8px;padding:6px 9px;margin-bottom:5px;font-size:11.5px"><b>' + esc(fmt(d)) + '</b> · ' + esc(window.bmhBilledProcsText(byDay[d])) + '</div>'; }).join('');
+      }
+      body.innerHTML = headHtml + otHtml + billedHtml + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Visits (' + visits.length + ')</div>' + visitHtml + '<div id="adv-hist-reports">' + reportsHtml + '</div>';
       rerenderReportIfOpen();
     };
     // Uploaded reports (OCT, fields, lab) — read-only list with a View link.
