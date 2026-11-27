@@ -4281,7 +4281,7 @@ function setVisualAcuityScale(scale, opts) {
     const val = el ? el.value : '';
     rebuildVisualAcuitySelect(id, options, convert ? convertVisualAcuityValue(val, prev, next) : val);
   });
-  ['ucva-od-near','ucva-os-near'].forEach(function (id) {
+  ['ucva-od-near','ucva-os-near','va-od-nsp','va-os-nsp'].forEach(function (id) {
     const el = document.getElementById(id);
     const val = el ? el.value : '';
     rebuildVisualAcuitySelect(id, nearOptions, convert ? convertNearAcuityValue(val, prev, next) : val);
@@ -4978,6 +4978,8 @@ function populateOphthoForm(v) {
 	  setSel('va-od-bc', v.bcvaOD);
 	  setSel('va-os-bc', v.bcvaOS);
 	  setSel('va-od-ph', v.phOD);
+	  setSel('va-od-nsp', v.nearSpecOD || '');
+	  setSel('va-os-nsp', v.nearSpecOS || '');
 	  setSel('va-os-ph', v.phOS);
 	  setV('kerat-od-k1', v.keratOdK1 || v.keratometry?.od?.k1 || v.k1OD || '');
 	  setV('kerat-od-k2', v.keratOdK2 || v.keratometry?.od?.k2 || v.k2OD || '');
@@ -6355,6 +6357,8 @@ function buildOphthoCaseSheetHtml(opts) {
   const bcvaOD = readVal('va-od-bc', 'bcvaOD', '—') || '—';
   const bcvaOS = readVal('va-os-bc', 'bcvaOS', '—') || '—';
   const phOD = readVal('va-od-ph', 'phOD', '—') || '—';
+  // own spectacles: distance · near in one cell ("6/9 · N8")
+  const specVa = function (d, n) { d = d && d !== '—' ? d : ''; n = n && n !== '—' ? n : ''; return [d, n].filter(Boolean).join(' · ') || '—'; };
   const phOS = readVal('va-os-ph', 'phOS', '—') || '—';
 
   // ── refraction ────────────────────────────────────────────────────────
@@ -6516,7 +6520,7 @@ function buildOphthoCaseSheetHtml(opts) {
 </tr>
 <tr>
   ${examHead('UCVA','#dfeeff','#0f4c81')}
-  ${examHead('BCVA','#dfeeff','#0f4c81')}
+  ${examHead('Own specs','#dfeeff','#0f4c81')}
   ${examHead('PH','#dfeeff','#0f4c81')}
   ${examHead('Near','#dfeeff','#0f4c81')}
   ${examHead('Sph','#e8f5e9','#165b2f')}
@@ -6536,14 +6540,14 @@ function buildOphthoCaseSheetHtml(opts) {
 <tbody>
 <tr>
   <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#eef5ff;color:#0f4c81">OD</td>
-  ${examCell(ucvaOD)}${examCell(bcvaOD)}${examCell(phOD)}${examCell(readVal('ucva-od-near', 'vaODNear', '—') || '—')}
+  ${examCell(ucvaOD)}${examCell(specVa(bcvaOD, readVal('va-od-nsp', 'nearSpecOD', '')))}${examCell(phOD)}${examCell(readVal('ucva-od-near', 'vaODNear', '—') || '—')}
   ${examCell(rf.odSph2)}${examCell(rf.odCyl2)}${examCell(rf.odAx2)}${examCell(rf.odAddSpec)}
   ${examCell(rf.cycODsph)}${examCell(rf.cycODcyl)}${examCell(rf.cycODax)}
   ${examCell(rf.subjODsph)}${examCell(rf.subjODcyl)}${examCell(rf.subjODax)}${examCell(readVal('subj-od-va', 'subjODva', '—') || '—')}${examCell(nvFinOD)}
 </tr>
 <tr>
   <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#edf9f0;color:#165b2f">OS</td>
-  ${examCell(ucvaOS)}${examCell(bcvaOS)}${examCell(phOS)}${examCell(readVal('ucva-os-near', 'vaOSNear', '—') || '—')}
+  ${examCell(ucvaOS)}${examCell(specVa(bcvaOS, readVal('va-os-nsp', 'nearSpecOS', '')))}${examCell(phOS)}${examCell(readVal('ucva-os-near', 'vaOSNear', '—') || '—')}
   ${examCell(rf.osSph2)}${examCell(rf.osCyl2)}${examCell(rf.osAx2)}${examCell(rf.osAddSpec)}
   ${examCell(rf.cycOSsph)}${examCell(rf.cycOScyl)}${examCell(rf.cycOSax)}
   ${examCell(rf.subjOSsph)}${examCell(rf.subjOScyl)}${examCell(rf.subjOSax)}${examCell(readVal('subj-os-va', 'subjOSva', '—') || '—')}${examCell(nvFinOS)}
@@ -53201,6 +53205,8 @@ function saveVisit(dept, opts) {
     visit.bcvaOD = document.getElementById('va-od-bc')?.value || '';
     visit.bcvaOS = document.getElementById('va-os-bc')?.value || '';
     visit.phOD   = document.getElementById('va-od-ph')?.value || '';
+    visit.nearSpecOD = document.getElementById('va-od-nsp')?.value || '';
+    visit.nearSpecOS = document.getElementById('va-os-nsp')?.value || '';
 	    visit.phOS   = document.getElementById('va-os-ph')?.value || '';
 	    visit.keratOdK1 = document.getElementById('kerat-od-k1')?.value || '';
 	    visit.keratOdK2 = document.getElementById('kerat-od-k2')?.value || '';
