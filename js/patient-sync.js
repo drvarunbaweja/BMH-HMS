@@ -63,8 +63,10 @@
   function ownStamp(ids) { var t = Date.now(); ids.forEach(function (id) { recentOwn[id] = t; }); }
   if (!ON) return;
 
-  // v2.3 (Dr Varun 27 Nov): the saved list is kept 30 days (was 3); in between only changed patients are downloaded
-  var MAX_AGE = 30 * 24 * 3600e3, MARGIN = 5 * 60e3, MAX_DELTA = 3000;
+  // v2.4 (Dr Varun 27 Nov): the saved list is kept for good (was 3 days, then 30); only changed patients are
+  // downloaded (every save, edit, merge and removal leaves a patientsChanged stamp). A full download happens only on
+  // a computer's first use, if its saved copy is lost, or if more than MAX_DELTA patients changed while it was off.
+  var MAX_AGE = Infinity, MARGIN = 5 * 60e3, MAX_DELTA = 3000;
   var dbp = null;
   function db() {
     if (dbp) return dbp;
