@@ -4276,18 +4276,18 @@ function setVisualAcuityScale(scale, opts) {
   const options = next === 'logmar' ? BMH_VA_LOGMAR_OPTIONS : BMH_VA_SNELLEN_OPTIONS;
   const nearOptions = next === 'logmar' ? BMH_VA_NEAR_LOGMAR_OPTIONS : BMH_VA_NEAR_SNELLEN_OPTIONS;
   const convert = !(opts && opts.preserveValues === true);
-  ['va-od-uc','va-od-bc','va-od-ph','va-os-uc','va-os-bc','va-os-ph','ucva-od-dist','ucva-os-dist','subj-od-va','subj-os-va'].forEach(function (id) {
+  ['va-od-uc','va-od-bc','va-od-ph','va-os-uc','va-os-bc','va-os-ph','ucva-od-dist','ucva-os-dist','subj-od-va','subj-os-va','rf-od-va2','rf-os-va2'].forEach(function (id) {
     const el = document.getElementById(id);
     const val = el ? el.value : '';
     rebuildVisualAcuitySelect(id, options, convert ? convertVisualAcuityValue(val, prev, next) : val);
   });
-  ['ucva-od-near','ucva-os-near','va-od-nsp','va-os-nsp'].forEach(function (id) {
+  ['ucva-od-near','ucva-os-near'].forEach(function (id) {
     const el = document.getElementById(id);
     const val = el ? el.value : '';
     rebuildVisualAcuitySelect(id, nearOptions, convert ? convertNearAcuityValue(val, prev, next) : val);
   });
   updateNearVisionDatalist(next);
-  ['nv-od-final','nv-os-final','nv-od-final-manual','nv-os-final-manual'].forEach(function (id) {
+  ['nv-od-final','nv-os-final','nv-od-final-manual','nv-os-final-manual','rf-od-nv2','rf-os-nv2'].forEach(function (id) {
     updateNearVisionInput(id, prev, next, convert);
   });
   window.BMH_VA_SCALE = next;
@@ -4978,8 +4978,6 @@ function populateOphthoForm(v) {
 	  setSel('va-od-bc', v.bcvaOD);
 	  setSel('va-os-bc', v.bcvaOS);
 	  setSel('va-od-ph', v.phOD);
-	  setSel('va-od-nsp', v.nearSpecOD || '');
-	  setSel('va-os-nsp', v.nearSpecOS || '');
 	  setSel('va-os-ph', v.phOS);
 	  setV('kerat-od-k1', v.keratOdK1 || v.keratometry?.od?.k1 || v.k1OD || '');
 	  setV('kerat-od-k2', v.keratOdK2 || v.keratometry?.od?.k2 || v.k2OD || '');
@@ -5022,6 +5020,9 @@ function populateOphthoForm(v) {
   setRfField('rf-os-sph2', v.rfOSsph); setRfField('rf-os-cyl2', v.rfOScyl); setRfField('rf-os-ax2', v.rfOSax);
   setRfField('rf-od-add-spec', v.rfODaddSpec);
   setRfField('rf-os-add-spec', v.rfOSaddSpec);
+  // VA / NV with current spectacles
+  setRfField('rf-od-va2', v.rfODva); setRfField('rf-os-va2', v.rfOSva);
+  setRfField('rf-od-nv2', v.rfODnv); setRfField('rf-os-nv2', v.rfOSnv);
   // Refraction — Cycloplegic
   setRfField('cyc-od-sph', v.cycODsph); setRfField('cyc-od-cyl', v.cycODcyl); setRfField('cyc-od-ax', v.cycODax);
   setRfField('cyc-os-sph', v.cycOSsph); setRfField('cyc-os-cyl', v.cycOScyl); setRfField('cyc-os-ax', v.cycOSax);
@@ -6357,8 +6358,6 @@ function buildOphthoCaseSheetHtml(opts) {
   const bcvaOD = readVal('va-od-bc', 'bcvaOD', '—') || '—';
   const bcvaOS = readVal('va-os-bc', 'bcvaOS', '—') || '—';
   const phOD = readVal('va-od-ph', 'phOD', '—') || '—';
-  // own spectacles: distance · near in one cell ("6/9 · N8")
-  const specVa = function (d, n) { d = d && d !== '—' ? d : ''; n = n && n !== '—' ? n : ''; return [d, n].filter(Boolean).join(' · ') || '—'; };
   const phOS = readVal('va-os-ph', 'phOS', '—') || '—';
 
   // ── refraction ────────────────────────────────────────────────────────
@@ -6372,6 +6371,10 @@ function buildOphthoCaseSheetHtml(opts) {
     osCyl2: readVal('rf-os-cyl2', 'rfOScyl', '—') || '—',
     osAx2:  readVal('rf-os-ax2', 'rfOSax', '—') || '—',
     osAddSpec: readVal('rf-os-add-spec', 'rfOSaddSpec', '—') || '—',
+    odVa2: readVal('rf-od-va2', 'rfODva', '—') || '—',
+    osVa2: readVal('rf-os-va2', 'rfOSva', '—') || '—',
+    odNv2: readVal('rf-od-nv2', 'rfODnv', '—') || '—',
+    osNv2: readVal('rf-os-nv2', 'rfOSnv', '—') || '—',
     // Cycloplegic / AR
     cycODsph: readVal('cyc-od-sph', 'cycODsph', '—') || '—',
     cycODcyl: readVal('cyc-od-cyl', 'cycODcyl', '—') || '—',
@@ -6506,7 +6509,7 @@ function buildOphthoCaseSheetHtml(opts) {
   const examTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:3px">
 <colgroup>
   <col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:6%">
-  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6%">
+  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:5%"><col style="width:6%"><col style="width:5%">
   <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%">
   <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%"><col style="width:6.5%">
 </colgroup>
@@ -6514,19 +6517,21 @@ function buildOphthoCaseSheetHtml(opts) {
 <tr>
   <th rowspan="2" style="border:1px solid #555;padding:5px 3px;font-size:8px;background:#e9edf3">Eye</th>
   <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#dfeeff;color:#0f4c81">VA</th>
-  <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#e8f5e9;color:#165b2f">Current Glasses</th>
+  <th colspan="6" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#e8f5e9;color:#165b2f">Current Glasses</th>
   <th colspan="3" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#efe6ff;color:#5c2a9d">AR / Cycloplegic</th>
   <th colspan="5" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#fff1df;color:#8a4200">Subjective Refraction</th>
 </tr>
 <tr>
   ${examHead('UCVA','#dfeeff','#0f4c81')}
-  ${examHead('Own specs','#dfeeff','#0f4c81')}
+  ${examHead('BCVA','#dfeeff','#0f4c81')}
   ${examHead('PH','#dfeeff','#0f4c81')}
   ${examHead('Near','#dfeeff','#0f4c81')}
   ${examHead('Sph','#e8f5e9','#165b2f')}
   ${examHead('Cyl','#e8f5e9','#165b2f')}
   ${examHead('Axis','#e8f5e9','#165b2f')}
+  ${examHead('VA','#e8f5e9','#165b2f')}
   ${examHead('Near add','#e8f5e9','#165b2f')}
+  ${examHead('NV','#e8f5e9','#165b2f')}
   ${examHead('Sph','#efe6ff','#5c2a9d')}
   ${examHead('Cyl','#efe6ff','#5c2a9d')}
   ${examHead('Axis','#efe6ff','#5c2a9d')}
@@ -6540,15 +6545,15 @@ function buildOphthoCaseSheetHtml(opts) {
 <tbody>
 <tr>
   <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#eef5ff;color:#0f4c81">OD</td>
-  ${examCell(ucvaOD)}${examCell(specVa(bcvaOD, readVal('va-od-nsp', 'nearSpecOD', '')))}${examCell(phOD)}${examCell(readVal('ucva-od-near', 'vaODNear', '—') || '—')}
-  ${examCell(rf.odSph2)}${examCell(rf.odCyl2)}${examCell(rf.odAx2)}${examCell(rf.odAddSpec)}
+  ${examCell(ucvaOD)}${examCell(bcvaOD)}${examCell(phOD)}${examCell(readVal('ucva-od-near', 'vaODNear', '—') || '—')}
+  ${examCell(rf.odSph2)}${examCell(rf.odCyl2)}${examCell(rf.odAx2)}${examCell(rf.odVa2)}${examCell(rf.odAddSpec)}${examCell(rf.odNv2)}
   ${examCell(rf.cycODsph)}${examCell(rf.cycODcyl)}${examCell(rf.cycODax)}
   ${examCell(rf.subjODsph)}${examCell(rf.subjODcyl)}${examCell(rf.subjODax)}${examCell(readVal('subj-od-va', 'subjODva', '—') || '—')}${examCell(nvFinOD)}
 </tr>
 <tr>
   <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#edf9f0;color:#165b2f">OS</td>
-  ${examCell(ucvaOS)}${examCell(specVa(bcvaOS, readVal('va-os-nsp', 'nearSpecOS', '')))}${examCell(phOS)}${examCell(readVal('ucva-os-near', 'vaOSNear', '—') || '—')}
-  ${examCell(rf.osSph2)}${examCell(rf.osCyl2)}${examCell(rf.osAx2)}${examCell(rf.osAddSpec)}
+  ${examCell(ucvaOS)}${examCell(bcvaOS)}${examCell(phOS)}${examCell(readVal('ucva-os-near', 'vaOSNear', '—') || '—')}
+  ${examCell(rf.osSph2)}${examCell(rf.osCyl2)}${examCell(rf.osAx2)}${examCell(rf.osVa2)}${examCell(rf.osAddSpec)}${examCell(rf.osNv2)}
   ${examCell(rf.cycOSsph)}${examCell(rf.cycOScyl)}${examCell(rf.cycOSax)}
   ${examCell(rf.subjOSsph)}${examCell(rf.subjOScyl)}${examCell(rf.subjOSax)}${examCell(readVal('subj-os-va', 'subjOSva', '—') || '—')}${examCell(nvFinOS)}
 </tr>
@@ -53205,8 +53210,6 @@ function saveVisit(dept, opts) {
     visit.bcvaOD = document.getElementById('va-od-bc')?.value || '';
     visit.bcvaOS = document.getElementById('va-os-bc')?.value || '';
     visit.phOD   = document.getElementById('va-od-ph')?.value || '';
-    visit.nearSpecOD = document.getElementById('va-od-nsp')?.value || '';
-    visit.nearSpecOS = document.getElementById('va-os-nsp')?.value || '';
 	    visit.phOS   = document.getElementById('va-os-ph')?.value || '';
 	    visit.keratOdK1 = document.getElementById('kerat-od-k1')?.value || '';
 	    visit.keratOdK2 = document.getElementById('kerat-od-k2')?.value || '';
@@ -53250,6 +53253,10 @@ function saveVisit(dept, opts) {
     visit.rfOScyl  = document.getElementById('rf-os-cyl2')?.value || '';
     visit.rfOSax   = document.getElementById('rf-os-ax2')?.value  || '';
     visit.rfOSaddSpec = document.getElementById('rf-os-add-spec')?.value || '';
+    visit.rfODva = document.getElementById('rf-od-va2')?.value || '';
+    visit.rfOSva = document.getElementById('rf-os-va2')?.value || '';
+    visit.rfODnv = document.getElementById('rf-od-nv2')?.value || '';
+    visit.rfOSnv = document.getElementById('rf-os-nv2')?.value || '';
     visit.cycODsph = document.getElementById('cyc-od-sph')?.value || '';
     visit.cycODcyl = document.getElementById('cyc-od-cyl')?.value || '';
     visit.cycODax  = document.getElementById('cyc-od-ax')?.value  || '';
