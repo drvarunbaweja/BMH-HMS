@@ -63,7 +63,8 @@
   function ownStamp(ids) { var t = Date.now(); ids.forEach(function (id) { recentOwn[id] = t; }); }
   if (!ON) return;
 
-  var MAX_AGE = 3 * 24 * 3600e3, MARGIN = 5 * 60e3, MAX_DELTA = 3000;
+  // v2.3 (Dr Varun 27 Nov): the saved list is kept 30 days (was 3); in between only changed patients are downloaded
+  var MAX_AGE = 30 * 24 * 3600e3, MARGIN = 5 * 60e3, MAX_DELTA = 3000;
   var dbp = null;
   function db() {
     if (dbp) return dbp;
