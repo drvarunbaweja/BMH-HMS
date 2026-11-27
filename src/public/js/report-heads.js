@@ -116,6 +116,42 @@
     });
     return out;
   }
+  // display only: a charge chosen as a sub-option shows with its main name — "Single Dose" → "Iron Sucrose – Single Dose".
+  // Works on one name or a comma list ("New Consultation, Single Dose"); the department settles names used under two
+  // main charges ("36+3 weeks"); if it still can't tell, the name is left as it is. Nothing saved changes.
+  var DEPT_CATS = { ophtho: /^eye/i, obg: /^obg/i, skin: /^skin/i, psych: /^psych/i };
+  function deptKey(d) { try { return normalizeDeptKeyForQueue(d || ''); } catch (e) { return String(d || '').toLowerCase(); } }
+  function chargeRows() { try { return (window.CHARGES_DATA || (typeof CHARGES_DATA !== 'undefined' ? CHARGES_DATA : [])) || []; } catch (e) { return []; } }
+  function labelOne(name, dept, parentHint) {
+    var n = low(name); if (!n) return n;
+    var p = low(parentHint);
+    if (!p) {
+      var nn = norm(n), dk = deptKey(dept), re = DEPT_CATS[dk];
+      var hits = chargeRows().filter(function (r) { return r && r.parent && norm(r.name) === nn; });
+      if (hits.length > 1 && re) { var mine = hits.filter(function (r) { return re.test(String(r.cat || '')); }); if (mine.length) hits = mine; }
+      var parents = hits.map(function (r) { return low(r.parent); }).filter(function (v, i, a) { return v && a.map(norm).indexOf(norm(v)) === i; });
+      if (parents.length !== 1) return n;
+      p = parents[0];
+    }
+    if (norm(n).indexOf(norm(p)) >= 0 || norm(p).indexOf(norm(n)) >= 0) return n; // already says it
+    return p + ' – ' + n;
+  }
+  function chargeLabel(text, dept, parentHint) {
+    var t = low(text); if (!t) return t;
+    var pre = '', m = t.match(/^(Balance payment — )(.*)$/); if (m) { pre = m[1]; t = m[2]; }
+    var whole = labelOne(t, dept, parentHint);
+    if (whole !== t || parentHint || t.indexOf(',') < 0) return pre + whole;
+    // a comma list: join neighbouring pieces when together they are one charge name ("Sl, Chin, Cheeks, neck")
+    var bits = t.split(/\s*,\s*/), out = [], i = 0, names = {};
+    chargeRows().forEach(function (r) { if (r && r.name) names[norm(r.name)] = 1; });
+    while (i < bits.length) {
+      var took = 1;
+      for (var j = bits.length; j > i + 1; j -= 1) { if (names[norm(bits.slice(i, j).join(', '))]) { took = j - i; break; } }
+      out.push(labelOne(bits.slice(i, i + took).join(', '), dept)); i += took;
+    }
+    return pre + out.join(', ');
+  }
+  window.bmhChargeLabel = chargeLabel;
   window.bmhTxnParts = parts;
   window.bmhSplitTxns = splitTxns;
   window.bmhReportHead = head;

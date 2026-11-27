@@ -49,7 +49,7 @@
     if (!rows.length) return '';
     var tot = rows.reduce(function (s, t) { return s + net(t); }, 0);
     return '<div class="blk"><div class="bh"><span>' + esc(title) + ' (' + rows.length + ')</span><span>' + rs(tot) + '</span></div>'
-      + rows.map(function (t) { return '<div class="ln"><span class="nm">' + esc(t.patient || t.patientName || '—') + '<i>' + esc(String(t.service || t.for || '').replace(/^Balance payment — /, 'Balance: ')) + (t.billNo ? ' · ' + esc(t.billNo) : '') + '</i></span><span class="md">' + esc(t.mode || '') + '</span><span class="am">' + rs(net(t)) + '</span></div>'; }).join('') + '</div>';
+      + rows.map(function (t) { return '<div class="ln"><span class="nm">' + esc(t.patient || t.patientName || '—') + '<i>' + esc(String(typeof window.bmhChargeLabel === 'function' ? window.bmhChargeLabel(t.service || t.for || '', t.dept) : (t.service || t.for || '')).replace(/^Balance payment — /, 'Balance: ')) + (t.billNo ? ' · ' + esc(t.billNo) : '') + '</i></span><span class="md">' + esc(t.mode || '') + '</span><span class="am">' + rs(net(t)) + '</span></div>'; }).join('') + '</div>';
   }
   // every change made today to a receipt of this department (deleted, amount / mode changed, marked not collected, refunds)
   function changesBlock(dept, centre) {

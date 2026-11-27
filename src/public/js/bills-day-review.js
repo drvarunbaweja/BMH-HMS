@@ -226,7 +226,7 @@
     var k = CATS.indexOf(cat), lines = linesOf(e), mine = lines.filter(function (l) { return lineKind(l) === k; });
     if (!mine.length) mine = lines;
     var seen = {}, names = [];
-    mine.forEach(function (l) { var n = l.replace(/\s*[x×]\s*\d+\s*$/i, ''); var key = n.toLowerCase(); if (!seen[key]) { seen[key] = 1; names.push(n); } });
+    mine.forEach(function (l) { var n = l.replace(/\s*[x×]\s*\d+\s*$/i, ''); try { if (typeof window.bmhChargeLabel === 'function') n = window.bmhChargeLabel(n, e.dept); } catch (er) {} var key = n.toLowerCase(); if (!seen[key]) { seen[key] = 1; names.push(n); } });
     return names.sort().join(' + ') || 'Other';
   }
   function modal(id, title, inner) {
