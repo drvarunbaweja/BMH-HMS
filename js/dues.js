@@ -59,13 +59,15 @@
   }
   var rt = null;
   function rerender() { clearTimeout(rt); rt = setTimeout(function () { try { renderDocQueue && renderDocQueue({ immediate: true }); } catch (e) {} try { typeof renderReceptionQueue === 'function' && renderReceptionQueue(); } catch (e) {} }, 300); }
-  function billBalance(b) { return Math.max(0, num(b.netPayable) - num(b.tpaAmount) - num(b.amountReceived) - num(b.advanceApplied)); }
+  // a bill's netPayable is already after the advance used (Billing: net = total − discount − advance), so the advance
+  // is not taken off again: balance = net payable − TPA − received; the item keeps the full bill and counts the advance as paid
+  function billBalance(b) { return Math.max(0, num(b.netPayable) - num(b.tpaAmount) - num(b.amountReceived)); }
   function lineKeys(items) { return (Array.isArray(items) ? items : []).map(function (i) { return i && (i.lineId || String(i.desc || '').trim().toLowerCase()); }).filter(Boolean); }
   function itemFromBill(b) {
     var items = Array.isArray(b.items) ? b.items : [];
     return { id: String(b.id || b.billNo), billId: String(b.id || ''), billNo: String(b.billNo || b.id || ''), date: b.createdAt || b.date || nowIso(), createdAt: b.createdAt || nowIso(),
       desc: items.map(function (i) { return i && i.desc; }).filter(Boolean).join(', ').slice(0, 200) || 'Bill', lines: lineKeys(items),
-      billed: Math.max(0, num(b.netPayable) - num(b.tpaAmount)), paidAtBill: num(b.amountReceived) + num(b.advanceApplied),
+      billed: Math.max(0, num(b.netPayable) + num(b.advanceApplied) - num(b.tpaAmount)), paidAtBill: num(b.amountReceived) + num(b.advanceApplied),
       centre: b.centre || '', dept: b.dept || '', by: b.createdBy || who() };
   }
   // a bill was saved in Billing

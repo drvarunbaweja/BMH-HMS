@@ -12791,7 +12791,8 @@ function bmhQueueLoadSavedBillsInto(bmhId, hostId) {
     el.innerHTML = '<div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.3px;margin:6px 0 2px">Bills</div>' + bills.map(function (b, idx) {
       const items = Array.isArray(b.items) ? b.items : [];
       const desc = items.map(function (i) { return i && i.desc; }).filter(Boolean).join(', ') || 'Bill';
-      const net = Number(b.netPayable || 0), tpa = Number(b.tpaAmount || 0), paid = Number(b.amountReceived || 0) + Number(b.advanceApplied || 0);
+      // netPayable is after the advance used: the bill total adds it back, and the advance counts as paid (not taken off twice)
+      const net = Number(b.netPayable || 0) + Number(b.advanceApplied || 0), tpa = Number(b.tpaAmount || 0), paid = Number(b.amountReceived || 0) + Number(b.advanceApplied || 0);
       const bal = Math.max(0, net - tpa - paid);
       const when = b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (b.date || '');
       return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5)">'
