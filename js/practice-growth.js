@@ -3,7 +3,10 @@
  * Reads transactions/<day> (through the Bills & History cache when present), otCases,
  * procedureFollowups, payRequests, iolCatalog and practiceGrowth/*. PIN-locked (15 minutes).
  * Writes ONLY when you press a button: "Mark OT completed"/"Undo" (otCases/<id> status fields +
- * practiceGrowth/otMarks), "✏️ amount" (practiceGrowth/amounts) and the PIN (practiceGrowth/pin).
+ * practiceGrowth/otMarks), "✏️ amount" (practiceGrowth/amounts; for an ECHS / CGHS / TPA patient with no claim on record
+ * it also adds / updates a pending claim payRequests/TPAPG-<OT id> in TPA / Cashless dues), "🗑️" (removes a test / wrong
+ * OT entry: copy kept in otCasesRemoved/<id>, then otCases/<id> taken off) and the PIN (practiceGrowth/pin).
+ * An amount entered where no bill or claim was found counts as paid for that case. 🧾 opens the patient's billing history.
  * Nothing is read until "Show report" is pressed. Tick-box choices are kept in this browser only.
  * Off switch (this browser): localStorage.setItem('bmh_disable_practice_growth','1') then reload.
  */
@@ -270,6 +273,8 @@
     data.txns.forEach(function (t) { if (t.bmhId && /\bcamp\b/i.test(String(t.service || '') + ' ' + String(t.purpose || ''))) campPatients[t.bmhId] = String(t.campName || t.camp || t.referredBy || t.service || 'Camp').trim(); });
     data.txns.forEach(function (t) { if (t.bmhId && isIns((t.mode || '') + ' ' + (t.ins || ''))) insPatients[t.bmhId] = String(t.ins || t.mode || 'ECHS / TPA'); });
     data.pr.forEach(function (r) { if (r.bmhId && String(r.status || '').toLowerCase() !== 'cancelled' && isIns((r.mode || '') + ' ' + (r.ins || ''))) insPatients[r.bmhId] = String(r.ins || r.mode || 'ECHS / TPA'); });
+    // the scheme marked on the patient's registration (e.g. ECHS) also counts
+    try { (data.ot || []).forEach(function (c) { var id = String(c && c.bmhId || '').trim(); if (!id || insPatients[id]) return; var p = (PATIENTS || []).find(function (x) { return x && x.bmhId === id; }); if (p && p.ins && isIns(String(p.ins))) insPatients[id] = String(p.ins); }); } catch (e) {}
     var rows = data.ot.map(function (c) {
       var day = dayOf(c.date || c.scheduledDate || c.otDate || c.surgeryDate || c.completedAt || c.createdAt);
       var dk = c.caseKind === 'obg' ? 'obg' : (deptKey(c.dept || c.department) || 'ophtho');
@@ -368,6 +373,9 @@
       var ov = data.amounts && data.amounts[r.id];
       r.override = ov && ov.amount != null && ov.amount !== '' ? Number(ov.amount) : null;
       r.mark = data.marks && data.marks[r.id] || null;
+      // an amount entered by hand where no bill or claim was found: counted as paid for this case (Paid column, totals)
+      if (r.override != null && r.override > 0 && r.cls === 'none') { r.paid = r.override; r.manualPaid = true; r.paidItems.push('Amount entered by hand'); r.cls = 'paid'; }
+      if (r.override != null && r.override > 0 && r.cls === 'ins-noclaim') { r.claim = r.override; r.claimStatus = 'pending'; r.cls = 'cashless'; }
     });
     return { rows: rows, insPatients: insPatients };
   }
@@ -859,7 +867,8 @@
             + (sid ? ' <a href="javascript:void(0)" title="Correct the amount for this surgery" onclick="bmhPracticeGrowth.editAmount(\'' + sid + '\')">✏️</a>' : '') + '</span>';
           return [fmtDay(r.day), ptLink(r.bmhId, r.patient), esc(r.proc).slice(0, 60), status,
             '<span style="color:' + CLS[r.cls][1] + ';font-weight:700">' + CLS[r.cls][0] + '</span>', r.paid ? money(r.paid) : '–', r.claim ? money(r.claim) + (r.echs && !r.claimFromRequest ? '<div style="font-size:9.5px;color:var(--g1)">ECHS rate</div>' : '') : (r.cls === 'ins-noclaim' ? '—' : '–'),
-            amtCell, action,
+            amtCell, action + (r.bmhId ? ' <a href="javascript:void(0)" title="Billing history of this patient" onclick="bmhPracticeGrowth.bills(\'' + String(r.bmhId).replace(/[^A-Za-z0-9-]/g, '') + '\')" style="text-decoration:none;font-size:14px">🧾</a>' : '')
+              + (sid ? ' <a href="javascript:void(0)" id="pg-rm-' + sid + '" title="Remove this OT entry (test / wrong entry) — admin only, kept in an archive" onclick="bmhPracticeGrowth.removeCase(\'' + sid + '\')" style="text-decoration:none;font-size:13px;color:#b42318">🗑️</a>' : ''),
             esc([r.source ? 'Source: ' + r.source : '', r.insurer ? r.insurer + (r.claimStatus ? ' (' + r.claimStatus + ')' : '') : '', r.unpaidBill ? 'Unpaid bill ' + money(r.unpaidBill) : '', r.paidItems.join('; ')].filter(Boolean).join(' · ')).slice(0, 160)];
         }), { leftCols: 5, wrap: true }) : '<div style="font-size:12px;color:var(--g1);padding:6px">Nothing in this view.</div>')
         + (list.length > shown.length ? '<div style="font-size:11px;color:var(--g1);margin-top:4px">Showing the latest 300 of ' + num(list.length) + '.</div>' : ''),
@@ -1140,10 +1149,73 @@
       var ref = dbRef('practiceGrowth/amounts/' + id);
       (clear ? ref.remove() : ref.set({ amount: v, by: who(), at: new Date().toISOString() })).then(function () {
         if (clear) delete G.data.amounts[id]; else G.data.amounts[id] = { amount: v };
-        toast(clear ? 'Amount reset to what was found' : 'Amount saved for this report ✓', 's');
+        return syncClaim(id, clear ? 0 : v);
+      }).then(function (claimMsg) {
+        toast(clear ? 'Amount reset to what was found' : ('Amount saved ✓' + (claimMsg ? ' · ' + claimMsg : '')), 's');
         rebuild();
       }).catch(function (e) { toast('Could not save: ' + (e && e.message || 'error'), 'e'); });
     } catch (e) { toast(e.message, 'e'); }
+  }
+
+  // ECHS / CGHS / TPA patient with no claim of its own: the amount entered goes to TPA / Cashless dues as a pending
+  // claim (one per OT entry, id TPAPG-<OT id>; changing the amount updates it, 0 / reset cancels it)
+  function schemeOf(r) {
+    var n = String(r.insurer || '');
+    if (!n && G.recon && G.recon.insPatients) n = String(G.recon.insPatients[r.bmhId] || '');
+    if (!n) return '';
+    if (/echs/i.test(n)) return 'ECHS'; if (/cghs/i.test(n)) return 'CGHS'; if (/pmjay|ayushman/i.test(n)) return 'PMJAY';
+    return n;
+  }
+  function syncClaim(id, v) {
+    var r = findRow(id); if (!r) return Promise.resolve('');
+    var sch = schemeOf(r); if (!sch) return Promise.resolve('');
+    var cid = 'TPAPG-' + String(id).replace(/[^A-Za-z0-9_-]/g, '');
+    var own = (G.data.pr || []).filter(function (p) { return p && p.id === cid; })[0];
+    if (r.claimFromRequest && !own) return Promise.resolve(''); // a claim is already on record for this surgery
+    var now = new Date().toISOString();
+    if (!(v > 0)) {
+      if (!own) return Promise.resolve('');
+      return dbRef('payRequests/' + cid).update({ status: 'cancelled', cancelledAt: now, cancelledBy: who(), cancelReason: 'Amount reset in Practice Growth' }).then(function () { own.status = 'cancelled'; return 'claim cancelled'; });
+    }
+    var mode = /^(ECHS|CGHS|PMJAY)$/.test(sch) ? sch : 'Insurance/TPA';
+    var claim = { id: cid, patient: r.patient, bmhId: r.bmhId, for: r.proc, procedure: r.proc, amount: v, approvedAmount: v, claimedAmount: v, status: own && own.status === 'paid' ? 'paid' : 'pending',
+      mode: mode, ins: sch, policy: '', dept: r.dept || 'ophtho', centre: String(r.c.centre || 'RPR'), date: r.day + 'T12:00:00+05:30', from: 'Practice Growth', receivedAmount: own ? Number(own.receivedAmount || 0) : 0,
+      patientDue: 0, notes: 'Amount entered in Practice Growth for OT ' + r.day, createdBy: who(), updatedAt: now, otCaseId: r.id };
+    if (!own) claim.createdAt = now;
+    return dbRef('payRequests/' + cid).update(claim).then(function () {
+      if (own) Object.assign(own, claim); else G.data.pr.push(claim);
+      try { if (typeof PAY_REQUESTS !== 'undefined' && !PAY_REQUESTS.some(function (x) { return x && x.id === cid; })) PAY_REQUESTS.push(claim); } catch (e) {}
+      try { fbPush && fbPush('auditLog', { user: who(), action: 'TPA_CLAIM_FROM_PRACTICE_GROWTH', item: sch + ' ₹' + v + ' — ' + r.patient + ' (' + r.proc + ', OT ' + r.day + ')', timestamp: now }); } catch (e) {}
+      return sch + ' claim ' + money(v) + ' in TPA / Cashless dues';
+    });
+  }
+  // remove a test / wrong OT entry: copied to otCasesRemoved/<id> (with who and when), then taken off the OT list
+  function removeCase(id) {
+    if (!allowed() || !isUnlocked()) { lockNow(); return; }
+    var r = findRow(id); if (!r) return;
+    var a = document.getElementById('pg-rm-' + id);
+    if (a && a.dataset.armed !== '1') {
+      a.dataset.armed = '1'; a.textContent = 'Tap again to remove'; a.style.fontSize = '11px'; a.style.fontWeight = '800';
+      setTimeout(function () { if (a && a.isConnected) { a.dataset.armed = ''; a.textContent = '🗑️'; a.style.fontSize = '13px'; } }, 4000);
+      return;
+    }
+    var now = new Date().toISOString(), up = {};
+    var copy = JSON.parse(JSON.stringify(r.c)); copy.removedAt = now; copy.removedBy = who(); copy.removedVia = 'practice-growth';
+    up['otCasesRemoved/' + id] = copy; up['otCases/' + id] = null;
+    try {
+      dbRef('').update(up).then(function () {
+        G.data.ot = G.data.ot.filter(function (c) { return String(c.id) !== String(id); });
+        try { if (typeof OT_CASES !== 'undefined' && Array.isArray(OT_CASES)) { var i = OT_CASES.findIndex(function (c) { return c && String(c.id) === String(id); }); if (i > -1) OT_CASES.splice(i, 1); } } catch (e) {}
+        try { fbPush && fbPush('auditLog', { user: who(), action: 'OT_ENTRY_REMOVED', item: (r.patient || '') + ' [' + r.bmhId + '] ' + r.proc + ' · ' + r.day + ' (copy in otCasesRemoved/' + id + ')', timestamp: now }); } catch (e) {}
+        toast((r.patient || 'Entry') + ' removed from the OT list ✓', 's');
+        rebuild();
+      }).catch(function (e) { toast('Could not remove: ' + (e && e.message || 'error'), 'e'); });
+    } catch (e) { toast(e.message, 'e'); }
+  }
+  function openBills(bmhId) {
+    if (!bmhId) return;
+    if (typeof window.bmhOpenPatientBillHistory === 'function') { window.bmhOpenPatientBillHistory(bmhId); return; }
+    if (typeof window.bmhBillHistoryPopup === 'function') window.bmhBillHistoryPopup(bmhId);
   }
 
   // ── PIN lock ──────────────────────────────────────────────────────────────
@@ -1518,7 +1590,7 @@
     generate: generate, refresh: refresh, preset: preset, print: printReport,
     opened: opened, lock: lockNow, unlock: unlock,
     grant: function (ms) { G.unlockedUntil = Date.now() + Math.max(60000, Number(ms) || UNLOCK_MS); }, setPin: setPin, changePin: changePin, cancelChange: function () { G.changingPin = false; if (isUnlocked()) showMain(); else lockNow(); },
-    markDone: markDone, undoDone: undoDone, editAmount: editAmount, saveAmount: saveAmount,
+    markDone: markDone, undoDone: undoDone, editAmount: editAmount, saveAmount: saveAmount, removeCase: removeCase, bills: openBills,
     csv: function () { if (G.last) csv(G.last); else { try { showToast('Show the report first', 'i'); } catch (e) {} } },
     otFilter: function (k) { G.otFilter = k; draw(); },
     otAgency: function (k) { G.otAgency = k; draw(); }, otPrint: otPrint,
