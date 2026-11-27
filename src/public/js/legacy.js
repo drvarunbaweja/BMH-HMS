@@ -55166,12 +55166,34 @@ window.addEventListener('DOMContentLoaded', function() {
       to: document.getElementById('rep-surg-to')?.value || '',
       centre: f.centre != null ? f.centre : (document.getElementById('rep-centre')?.value || ''),
       dept: normalizeDeptKeyForQueue(document.getElementById('rep-surg-dept')?.value || ''),
-      status: f.status, tests: f.tests
+      status: f.status, tests: f.tests, proc: f.proc || ''
     };
+  }
+  // procedure filter: one entry per procedure, whichever eye ("Trabeculectomy with MMC Right Eye" = "… Left Eye")
+  function procKey(p) {
+    return String(p || '').toLowerCase()
+      .replace(/\(?\b(right|left|both)\s*eyes?\b\)?|\((od|os|ou)\)|\b(od|os|ou|re|le|be)\b/g, ' ')
+      .replace(/[^a-z0-9+]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function procLabel(p) {
+    return String(p || '').replace(/\(?\b(right|left|both)\s*eyes?\b\)?|\((od|os|ou)\)|\b(OD|OS|OU|RE|LE|BE)\b/gi, ' ').replace(/\s*[-–,]\s*$/, '').replace(/\s+/g, ' ').trim() || String(p || '');
+  }
+  function procSelectHtml(rows, cur) {
+    const by = {};
+    rows.forEach(function (r) { const k = procKey(r.proc); if (!k) return; (by[k] = by[k] || { label: procLabel(r.proc), n: 0 }).n += 1; });
+    const keys = Object.keys(by).sort(function (a, b) { return by[a].label.localeCompare(by[b].label); });
+    if (cur && !by[cur]) keys.unshift(cur), by[cur] = { label: cur, n: 0 };
+    return '<label style="font-size:11.5px;display:flex;gap:5px;align-items:center">Procedure '
+      + '<select style="font-size:11.5px;padding:3px 6px;max-width:320px" onchange="bmhSetAdvisedFilter(\'proc\',this.value)">'
+      + '<option value="">All procedures</option>'
+      + keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(by[k].label) + ' (' + by[k].n + ')</option>'; }).join('')
+      + '</select></label>'
+      + (cur ? '<button type="button" class="btn btn-xs btn-outline" onclick="bmhSetAdvisedFilter(\'proc\',\'\')">✕ Clear</button>' : '');
   }
   function applyFilters(rows, f, ignoreStatus, ignoreCentre) {
     return rows.filter(function (r) {
       if (!f.tests && r.isTest) return false;
+      if (f.proc && procKey(r.proc) !== f.proc) return false;
       if (f.dept && r.dept !== f.dept) return false;
       if (f.centre && !ignoreCentre && centreKeyOf(r.centre) !== f.centre) return false;
       const d = r.advisedDate || (r.ot && r.ot.date) || '';
@@ -55464,6 +55486,7 @@ window.addEventListener('DOMContentLoaded', function() {
       + (counts.called ? '<span style="font-size:11px;color:var(--g1);margin-left:4px" title="Patients called at least once in this list, and how many of them then had the procedure done">Calling: <b>' + counts.called + '</b> called → <b>' + counts.aftercall + '</b> done (' + Math.round(counts.aftercall * 100 / counts.called) + '%)</span>' : '')
       + '</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">'
       + centreChipsHtml(applyFilters(all, f, false, true), f.centre)
+      + procSelectHtml(applyFilters(all, Object.assign({}, f, { proc: '' }), true).filter(function (r) { return !r.dropped; }), f.proc)
       + '<label style="margin-left:auto;font-size:11.5px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" ' + (f.tests ? 'checked' : '') + ' onchange="bmhSetAdvisedFilter(\'tests\',this.checked)"> Include tests (OCT, fields, etc.)</label>'
       + '</div>'
       + (rows.length || pinned.length ? '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Advised on</th><th>Patient</th><th>Centre</th><th>Dept</th><th>Procedure advised</th><th>Doctor</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>'
