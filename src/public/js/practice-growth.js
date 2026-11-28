@@ -74,7 +74,8 @@
     if (RX.injection.test(s)) return 'injection';
     if (/lasik\s*work/i.test(s)) return 'minor';
     if (RX.investigation.test(s) && !/\b(pmics|cataract|implantation)\b/i.test(s)) return 'investigation';
-    if (RX.minor.test(s)) return 'minor';
+    // a bill with both (e.g. "YAG Capsulotomy, Indian Multifocal IOL Implantation") is a surgery bill
+    if (RX.minor.test(s) && !/\biol\b|implant|cataract|pmics|phaco|\bsics\b|surgery/i.test(s)) return 'minor';
     if (RX.surgery.test(s)) return 'surgery';
     if (RX.opd.test(s)) return 'opd';
     var cats = txn && txn.billCats ? (Array.isArray(txn.billCats) ? txn.billCats : Object.values(txn.billCats)) : [];
@@ -106,7 +107,25 @@
         return { stream: st, label: d, amount: Number(a.amount || 0) };
       });
     }
-    return [{ stream: classifyText(svc, t, amount), label: svc || 'Payment', amount: amount }];
+    var st0 = classifyText(svc, t, amount);
+    // a part / balance payment on a bill that includes a surgery is surgery money, whatever its first line says
+    if (st0 !== 'surgery' && st0 !== 'injection' && st0 !== 'opd' && surgBill(t)) st0 = 'surgery';
+    return [{ stream: st0, label: svc || 'Payment', amount: amount }];
+  }
+  // bills (by bill no.) that include a surgery, from all receipts loaded
+  var SB = { of: null, set: {} };
+  function surgBill(t) {
+    var no = String(t && (t.billNo || t.billId) || ''); if (!no || !G.data || !G.data.txns) return false;
+    if (SB.of !== G.data.txns) {
+      SB.of = G.data.txns; SB.set = {};
+      G.data.txns.forEach(function (x) {
+        var b = String(x && (x.billNo || x.billId) || ''); if (!b) return;
+        var al = Array.isArray(x.chargeAllocations) ? x.chargeAllocations : (x.chargeAllocations ? Object.values(x.chargeAllocations) : []);
+        var txt = String(x.service || x.for || '') + ' ' + al.map(function (a) { return a && a.desc || ''; }).join(' ');
+        if (/\biol\b|implant|cataract|pmics|phaco|\bsics\b|surgery|lscs|caesar|delivery|vitrectomy|\bicl\b|trab|keratoplast|pterygium|\bdcr\b|ptosis|squint/i.test(txt)) SB.set[b] = 1;
+      });
+    }
+    return !!SB.set[no];
   }
   function cleanLabel(s) {
     var x = String(s || '').replace(/\s*\((no fee|both eyes|ou|od|os)\)\s*/ig, ' ').replace(/\s+(right|left|both)\s+eyes?\b.*$/i, '').replace(/\s+/g, ' ').trim();
@@ -296,12 +315,19 @@
       if (twin && r.byDischarge) { r.done = false; r.byDischarge = false; r.dupOf = twin; return; }
       (seen[k] = seen[k] || []).push(r);
     });
+    // Cataract: an eye is operated only once. If the same eye has two completed entries and one was only marked here
+    // (Practice Growth) while the other was completed in the OT module, the marked one is a repeat entry of it.
+    rows.filter(function (r) { return r.done && !r.dupOf && r.group === 'Cataract (IOL)' && r.eye && r.c && r.c.completedVia === 'practice-growth'; }).forEach(function (r) {
+      var real = rows.filter(function (o) { return o !== r && o.bmhId === r.bmhId && o.done && !o.dupOf && o.group === r.group && o.eye === r.eye && o.c && o.c.completedVia !== 'practice-growth' && Math.abs((new Date(o.day + 'T12:00:00') - new Date(r.day + 'T12:00:00')) / 864e5) <= 120; })[0];
+      if (real) { r.done = false; r.dupOf = real; }
+    });
     var byPt = {};
     rows.forEach(function (r) { if (r.bmhId && !r.cancelled) (byPt[r.bmhId] = byPt[r.bmhId] || []).push(r); });
     function nearest(id, day, lo, hi) {
       var list = byPt[id]; if (!list) return null;
       var best = null, bestScore = 1e9;
       list.forEach(function (r) {
+        if (r.dupOf) return; // a repeat entry never takes the money — the real entry does
         var diff = (new Date(r.day + 'T12:00:00') - new Date(day + 'T12:00:00')) / 864e5; // OT date minus bill date
         if (diff < lo || diff > hi) return;
         var score = Math.abs(diff) + (diff < 0 ? 0.25 : 0) - (r.done ? 0.5 : 0) + (r._hit ? 3 : 0);
@@ -1203,7 +1229,7 @@
     var copy = JSON.parse(JSON.stringify(r.c)); copy.removedAt = now; copy.removedBy = who(); copy.removedVia = 'practice-growth';
     up['otCasesRemoved/' + id] = copy; up['otCases/' + id] = null;
     try {
-      dbRef('').update(up).then(function () {
+      window.FBDB.ref().update(up).then(function () {
         G.data.ot = G.data.ot.filter(function (c) { return String(c.id) !== String(id); });
         try { if (typeof OT_CASES !== 'undefined' && Array.isArray(OT_CASES)) { var i = OT_CASES.findIndex(function (c) { return c && String(c.id) === String(id); }); if (i > -1) OT_CASES.splice(i, 1); } } catch (e) {}
         try { fbPush && fbPush('auditLog', { user: who(), action: 'OT_ENTRY_REMOVED', item: (r.patient || '') + ' [' + r.bmhId + '] ' + r.proc + ' · ' + r.day + ' (copy in otCasesRemoved/' + id + ')', timestamp: now }); } catch (e) {}
