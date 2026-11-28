@@ -351,6 +351,32 @@
       var r = nearest(t.bmhId, day, -90, 60);
       if (r) { r._hit = true; r.paid += amt; r.paidItems.push(lines.map(function (l) { return l.label; }).join(', ') + ' ' + money(amt) + ' (' + day + ')'); }
     });
+    // Minor procedures done in OT (punctoplasty, chalazion …): a payment naming the same procedure, within 30 days
+    // Advances "on account" of ₹5,000 or more paid up to 45 days before (or 5 days after) an OT entry are for that surgery
+    function words(x) { return String(x || '').toLowerCase().replace(/[^a-z ]+/g, ' ').split(/\s+/).filter(function (w) { return w.length >= 5 && !/^(right|left|surgery|procedure|implantation|injection|package)$/.test(w); }); }
+    data.txns.forEach(function (t) {
+      if (!t.bmhId || !byPt[t.bmhId]) return;
+      if (isIns((t.mode || '') + ' ' + (t.ins || ''))) return;
+      var day = String(t._day || dayOf(t.date || t.createdAt));
+      txnLines(t).forEach(function (l) {
+        if (!(l.amount > 0)) return;
+        if (l.stream === 'minor') {
+          var lw = words(l.label); if (!lw.length) return;
+          var best = null, bd = 1e9;
+          byPt[t.bmhId].forEach(function (r) {
+            if (r.dupOf || r.cancelled) return;
+            var diff = Math.abs((new Date(r.day + 'T12:00:00') - new Date(day + 'T12:00:00')) / 864e5); if (diff > 30) return;
+            var rw = words(r.proc + ' ' + (r.c && r.c.procedure || ''));
+            if (!lw.some(function (w) { return rw.indexOf(w) >= 0; })) return;
+            if (diff < bd) { bd = diff; best = r; }
+          });
+          if (best) { best._hit = true; best.paid += l.amount; best.paidItems.push(l.label + ' ' + money(l.amount) + ' (' + day + ')'); }
+        } else if (l.stream === 'advance' && l.amount >= 5000) {
+          var r2 = nearest(t.bmhId, day, -5, 45);
+          if (r2) { r2._hit = true; r2.paid += l.amount; r2.paidItems.push('Advance ' + money(l.amount) + ' (' + day + ')'); }
+        }
+      });
+    });
     // Payment requests: ECHS / TPA claims, and bills raised but not yet paid
     data.pr.forEach(function (p) {
       var st = String(p.status || '').toLowerCase();
