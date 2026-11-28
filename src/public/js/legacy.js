@@ -3264,6 +3264,7 @@ function nav(id, el, opts) {
   syncTopbarHeaderForPage(pageKey);
   const ensureRealtimeDataForPage = function () {
     try {
+      if (bmhIsAttendanceOnlyLogin()) return;
       ensureRoleScopedDataForPage(pageKey);
       if (pageKey === 'appointments' || pageKey === 'dashboard') {
         listenAppointments && listenAppointments();
@@ -37861,15 +37862,23 @@ function loginUser() {
   }
 }
 
+// Attendance-only logins (housekeeping / staff who only punch in and out): role Staff, or a login whose only module is
+// Attendance. They load nothing but attendance — no patient list, receipts, dues or appointments.
+function bmhIsAttendanceOnlyLogin(p) {
+  if (p === undefined) { try { p = CURRENT_USER; } catch (e) { p = window.CURRENT_USER; } }
+  if (!p || p.isAdmin || p.canSeeAllCentres) return false;
+  const role = String(p.role || '').trim().toLowerCase();
+  const modules = Array.isArray(p.access?.modules) ? p.access.modules.map(function (m) { return String(m || '').toLowerCase(); }) : [];
+  if (modules.length === 1 && modules[0] === 'attendance') return true;
+  if (role !== 'staff') return false;
+  return p.attendanceEnabled === true || modules.length === 0;
+}
+window.bmhIsAttendanceOnlyLogin = bmhIsAttendanceOnlyLogin;
+// 'none' before anyone has signed in, 'attendance' for attendance-only logins, 'full' for everyone else
+window.bmhLoginKind = function () { let u = null; try { u = CURRENT_USER; } catch (e) { u = window.CURRENT_USER; } return !(u && (u.name || u.username)) ? 'none' : (bmhIsAttendanceOnlyLogin(u) ? 'attendance' : 'full'); };
 function activateUserSession(user, profile, opts) {
   opts = opts || {};
-  function isAttendanceOnlyProfile(p) {
-    if (!p || p.isAdmin || p.canSeeAllCentres) return false;
-    const role = String(p.role || '').trim().toLowerCase();
-    if (role !== 'staff') return false;
-    const modules = Array.isArray(p.access?.modules) ? p.access.modules.map(function (m) { return String(m || '').toLowerCase(); }) : [];
-    return p.attendanceEnabled === true || modules.length === 0 || (modules.length === 1 && modules[0] === 'attendance');
-  }
+  function isAttendanceOnlyProfile(p) { return bmhIsAttendanceOnlyLogin(p); }
   function deferBootstrap(fn, delay) {
     const runner = function(){ try { fn(); } catch (e) { console.warn('Deferred bootstrap error:', e); } };
     if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -43600,6 +43609,7 @@ function applyPatientsPayload(data, opts) {
   pump();
 }
 function refreshPatientsFromFirebase() {
+  if (bmhIsAttendanceOnlyLogin()) return Promise.resolve([]);
   const scope = 'ALL';
   if (!window.FBDB) return Promise.resolve();
   if (shouldUseScopedPatientBootstrap()) return refreshTodayQueuePatientsFromFirebase();
@@ -43938,6 +43948,7 @@ function schedulePatientsRefreshLoop() {
 window.refreshPatientsFromFirebase = refreshPatientsFromFirebase;
 
 function loadPatientsFromFirebase() {
+  if (bmhIsAttendanceOnlyLogin()) return;
   const scope = effectivePatientListCentreScope();
   if(window._bmhRtdbPatientsListening && window._bmhRtdbPatientsScope === scope) return;
   window._bmhRtdbPatientsListening = true;

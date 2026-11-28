@@ -251,5 +251,5 @@
     try { start(); setTimeout(function () { window.bmhDuesOpen(bmhId, { silent: true, from: 'reception' }); }, 350); } catch (e) {}
     return r;
   };
-  var tries = 0, iv = setInterval(function () { if (window.FBDB && (function () { try { return !!(CURRENT_USER && CURRENT_USER.name); } catch (e) { return false; } })()) { clearInterval(iv); start(); } else if (++tries > 120) clearInterval(iv); }, 1000);
+  var tries = 0, iv = setInterval(function () { if (window.FBDB && (function () { try { return !!(CURRENT_USER && CURRENT_USER.name); } catch (e) { return false; } })()) { clearInterval(iv); if (!(typeof window.bmhLoginKind === 'function' && window.bmhLoginKind() === 'attendance')) start(); } else if (++tries > 120) clearInterval(iv); }, 1000);
 })();
