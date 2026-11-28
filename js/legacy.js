@@ -55178,10 +55178,32 @@ window.addEventListener('DOMContentLoaded', function() {
     };
   }
   // procedure filter: one entry per procedure, whichever eye ("Trabeculectomy with MMC Right Eye" = "… Left Eye")
-  function procKey(p) {
+  function procKeyRaw(p) {
     return String(p || '').toLowerCase()
       .replace(/\(?\b(right|left|both)\s*eyes?\b\)?|\((od|os|ou)\)|\b(od|os|ou|re|le|be)\b/g, ' ')
       .replace(/[^a-z0-9+]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  // full names and their short forms are one procedure (e.g. "Pinhole Microincision Cataract Surgery" = "PMICS")
+  const PROC_SYN = [
+    [/\bpin\s*hole\s*micro\s*incision\s*cataract\s*surgery\b/g, 'pmics'],
+    [/\bmanual\s*small\s*incision\s*cataract\s*surgery\b|\bsmall\s*incision\s*cataract\s*surgery\b|\bmsics\b/g, 'sics'],
+    [/\bphaco\s*emulsification\b/g, 'phaco'],
+    [/\btrabeculectomy\b/g, 'trab'],
+    [/\bintra\s*vitreal\s*(anti\s*v\s*e\s*g\s*f\s*)?injection\b|\bivt\s*injection\b/g, 'ivt'],
+    [/\blaser\s*peripheral\s*iridotomy\b/g, 'lpi'],
+    [/\bdacryo\s*cysto\s*rhinostomy\b/g, 'dcr'],
+    [/\bintense\s*pulsed\s*light\b/g, 'ipl']
+  ];
+  const PROC_SYN_FULL = { pmics: 'pinhole microincision cataract surgery', sics: 'small incision cataract surgery', phaco: 'phacoemulsification', trab: 'trabeculectomy', ivt: 'intravitreal injection anti vegf', lpi: 'laser peripheral iridotomy', dcr: 'dacryocystorhinostomy', ipl: 'intense pulsed light' };
+  // typing part of a full name ("pinhole") also finds the short form ("PMICS")
+  function procSynHit(k, q) {
+    if (!q || q.length < 4) return false;
+    return Object.keys(PROC_SYN_FULL).some(function (ab) { return PROC_SYN_FULL[ab].indexOf(q) >= 0 && (' ' + k + ' ').indexOf(' ' + ab + ' ') >= 0; });
+  }
+  function procKey(p) {
+    let k = procKeyRaw(p);
+    PROC_SYN.forEach(function (x) { k = k.replace(x[0], x[1]); });
+    return k.replace(/\s+/g, ' ').trim();
   }
   function procLabel(p) {
     return String(p || '').replace(/\(?\b(right|left|both)\s*eyes?\b\)?|\((od|os|ou)\)|\b(OD|OS|OU|RE|LE|BE)\b/gi, ' ').replace(/\s*[-–,]\s*$/, '').replace(/\s+/g, ' ').trim() || String(p || '');
@@ -55225,7 +55247,7 @@ window.addEventListener('DOMContentLoaded', function() {
   function applyFilters(rows, f, ignoreStatus, ignoreCentre) {
     return rows.filter(function (r) {
       if (!f.tests && r.isTest) return false;
-      if (f.proc) { const q = procKey(f.proc), k = procKey(r.proc); if (k.indexOf(q) < 0 && !procGroupHas(procRep(k), q) && editRatio(procRep(k), q) < 0.85) return false; }
+      if (f.proc) { const q = procKey(f.proc), k = procKey(r.proc); if (k.indexOf(q) < 0 && procKeyRaw(r.proc).indexOf(procKeyRaw(f.proc)) < 0 && !procSynHit(k, procKeyRaw(f.proc)) && !procGroupHas(procRep(k), q) && editRatio(procRep(k), q) < 0.85) return false; }
       if (f.dept && r.dept !== f.dept) return false;
       if (f.centre && !ignoreCentre && centreKeyOf(r.centre) !== f.centre) return false;
       const d = r.advisedDate || (r.ot && r.ot.date) || '';
