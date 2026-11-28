@@ -83,6 +83,8 @@
   // today's receipts: keep the last confirmed copy of each, and log changes this computer made
   function watchDay() {
     var d = today(); if (d === curDay || !window.FBDB) return;
+    // only once someone has signed in, and never for attendance-only logins
+    var kind = typeof window.bmhLoginKind === 'function' ? window.bmhLoginKind() : 'none'; if (kind !== 'full') return;
     try { if (dayRef) dayRef.off(); if (logRef) logRef.off(); } catch (e) {}
     curDay = d; PREV = {}; ADDED = {}; TODAY_LOG = {};
     dayRef = window.FBDB.ref('transactions/' + d);
@@ -114,7 +116,7 @@
   var tries = 0, iv = setInterval(function () {
     var ok = patch();
     if (window.FBDB) watchDay();
-    if ((ok && window.FBDB) || ++tries > 60) clearInterval(iv);
+    if ((ok && window.FBDB && curDay) || ++tries > 600) clearInterval(iv);
   }, 1000);
   setInterval(function () { try { watchDay(); } catch (e) {} }, 60000);
 })();
