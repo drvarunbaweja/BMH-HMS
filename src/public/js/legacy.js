@@ -55186,10 +55186,36 @@ window.addEventListener('DOMContentLoaded', function() {
   function procLabel(p) {
     return String(p || '').replace(/\(?\b(right|left|both)\s*eyes?\b\)?|\((od|os|ou)\)|\b(OD|OS|OU|RE|LE|BE)\b/gi, ' ').replace(/\s*[-–,]\s*$/, '').replace(/\s+/g, ' ').trim() || String(p || '');
   }
+  // names that differ only by a typo or small edit ("adivsed ipl for dry eyes" / "advsed ipl …" / "advised ipl …")
+  // are one procedure: same group when ≥ 85 % alike (edit distance)
+  function editRatio(a, b) {
+    if (a === b) return 1; if (!a || !b) return 0;
+    if (Math.abs(a.length - b.length) > Math.max(a.length, b.length) * 0.2) return 0;
+    let prev = []; for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return 1 - prev[b.length] / Math.max(a.length, b.length);
+  }
+  const PROC_REP = {}, PROC_REPS = [];
+  function procRep(k) {
+    if (!k) return k;
+    if (PROC_REP[k]) return PROC_REP[k];
+    const hit = PROC_REPS.find(function (r) { return editRatio(r, k) >= 0.85; });
+    PROC_REP[k] = hit || k; if (!hit) PROC_REPS.push(k);
+    return PROC_REP[k];
+  }
+  function procGroupHas(rep, q) { return Object.keys(PROC_REP).some(function (k) { return PROC_REP[k] === rep && k.indexOf(q) >= 0; }); }
   // type a few letters → the matching advised procedures are offered; pick one (or press Enter) to see only those patients
   function procSelectHtml(rows, cur) {
     const by = {};
-    rows.forEach(function (r) { const k = procKey(r.proc); if (!k) return; (by[k] = by[k] || { label: procLabel(r.proc), n: 0 }).n += 1; });
+    rows.forEach(function (r) {
+      const k0 = procKey(r.proc); if (!k0) return; const k = procRep(k0);
+      const g = by[k] = by[k] || { labels: {}, n: 0 }; g.n += 1; const lb = procLabel(r.proc); g.labels[lb] = (g.labels[lb] || 0) + 1;
+    });
+    Object.keys(by).forEach(function (k) { const L = by[k].labels; by[k].label = Object.keys(L).sort(function (a, b) { return L[b] - L[a]; })[0]; });
     const keys = Object.keys(by).sort(function (a, b) { return by[a].label.localeCompare(by[b].label); });
     return '<label style="font-size:11.5px;display:flex;gap:5px;align-items:center">Procedure '
       + '<input id="bmh-adv-proc-q" list="bmh-adv-proc-dl" value="' + esc(cur ? (by[cur] ? by[cur].label : cur) : '') + '" placeholder="Type to search, e.g. trab, IPL" autocomplete="off" style="font-size:11.5px;padding:3px 7px;width:230px" onchange="bmhSetAdvisedFilter(\'proc\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();bmhSetAdvisedFilter(\'proc\',this.value)}">'
@@ -55199,7 +55225,7 @@ window.addEventListener('DOMContentLoaded', function() {
   function applyFilters(rows, f, ignoreStatus, ignoreCentre) {
     return rows.filter(function (r) {
       if (!f.tests && r.isTest) return false;
-      if (f.proc && procKey(r.proc).indexOf(procKey(f.proc)) < 0) return false;
+      if (f.proc) { const q = procKey(f.proc), k = procKey(r.proc); if (k.indexOf(q) < 0 && !procGroupHas(procRep(k), q) && editRatio(procRep(k), q) < 0.85) return false; }
       if (f.dept && r.dept !== f.dept) return false;
       if (f.centre && !ignoreCentre && centreKeyOf(r.centre) !== f.centre) return false;
       const d = r.advisedDate || (r.ot && r.ot.date) || '';
