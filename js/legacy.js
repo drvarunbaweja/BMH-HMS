@@ -54782,9 +54782,36 @@ window.addEventListener('DOMContentLoaded', function() {
     if (/visual field|\bfields?\b|\bvf\b|\bhvf\b|\bhfa\b|perimetry|\b(24|30|10)-2\b/i.test(t)) out.push('field');
     if (procFamily(t) === 'yag') out.push('yag');
     if (procFamily(t) === 'ivt') out.push('ivt');
+    if (sitFam(t)) out.push('sit');
     return out;
   }
-  function payEligible(proc) { const f = testFam(proc); return f === 'oct' || f === 'field' || procFamily(proc) === 'yag' || procFamily(proc) === 'ivt'; }
+  // ── Procedures done in sittings (IPL, laser hair reduction, peels, PRP, hydrafacial, microneedling …) ──
+  // Sittings = the different days the procedure was done (marked "Procedure done" in the visit, or paid at reception).
+  // Planned sittings (default 4) and the gap to the next sitting (default 30 days) can be changed per patient.
+  const SIT_FAMS = [
+    ['ipl', /\bipl\b|intense\s*pulsed/i], ['lhr', /laser\s*hair|hair\s*(reduction|removal)|\blhr\b/i], ['peel', /\bpeel/i],
+    ['prp', /\bprp\b|platelet\s*rich|\bgfc\b/i], ['hydra', /hydra\s*facial/i], ['mneedle', /micro\s*needl|derma\s*pen|derma\s*roll|\bmnrf\b/i],
+    ['qsw', /q[\s-]*switch|carbon\s*(laser|peel)|tattoo\s*removal|laser\s*toning/i], ['meso', /meso\s*therap/i]
+  ];
+  function sitFam(name) { const t = String(name || ''); for (let i = 0; i < SIT_FAMS.length; i++) if (SIT_FAMS[i][1].test(t)) return SIT_FAMS[i][0]; return ''; }
+  function sittingInfo(row) {
+    const fam = sitFam(row.proc); if (!fam) return null;
+    const rec = followups[row.key] || {};
+    const earliest = row.advisedDate ? shiftDate(row.advisedDate, -2) : '';
+    const days = {};
+    (rxIndex.get(row.bmhId) || []).forEach(function (e) { if (e && e.date && sitFam(e.proc) === fam && (!earliest || e.date >= earliest)) days[e.date] = days[e.date] || 'Procedure done'; });
+    ((payIndex && payIndex.get(row.bmhId)) || []).forEach(function (e) { if (e && e.date && sitFam(e.desc) === fam && (!earliest || e.date >= earliest)) days[e.date] = days[e.date] || 'Paid'; });
+    const dates = Object.keys(days).sort();
+    const extra = Number(rec.sittingsExtra || 0) || 0;
+    const done = Math.max(0, dates.length + extra);
+    const planned = Math.max(1, Number(rec.sittingsPlanned || 0) || 4);
+    const gap = Math.max(1, Number(rec.sittingGap || 0) || 30);
+    const last = dates.length ? dates[dates.length - 1] : '';
+    const next = done >= planned ? '' : (last ? shiftDate(last, gap) : '');
+    return { fam: fam, dates: dates, src: days, done: done, planned: planned, gap: gap, last: last, next: next, extra: extra, complete: done >= planned };
+  }
+  function sittingDue(r) { return !!(r && r.sit && !r.sit.complete && r.sit.done > 0 && r.sit.next && r.sit.next <= today()); }
+  function payEligible(proc) { const f = testFam(proc); return f === 'oct' || f === 'field' || procFamily(proc) === 'yag' || procFamily(proc) === 'ivt' || !!sitFam(proc); }
   function loadPayments() {
     if (payIndex || payLoading || !window.bmhBillsHistory || typeof window.bmhBillsHistory.ensureLoaded !== 'function') return;
     payLoading = true;
@@ -55166,6 +55193,14 @@ window.addEventListener('DOMContentLoaded', function() {
       if (ot) usedOt.add(ot);
       row.ot = ot;
       row.status = statusFromOt(ot);
+      row.sit = row.isTest ? null : sittingInfo(row);
+      if (row.sit) {
+        // a sitting procedure stays on the list (Not done yet) until all planned sittings are done
+        row.rx = null; row.pay = null;
+        if (row.sit.complete && row.status !== 'done') row.status = 'done';
+        else if (!row.sit.complete && row.status === 'done' && !(row.ot && otDone(row.ot))) row.status = 'advised';
+        return;
+      }
       row.rx = findRxDone(row);
       row.pay = row.rx ? null : findPayDone(row);
       if ((row.rx || row.pay) && row.status !== 'done') row.status = 'done';
@@ -55291,7 +55326,8 @@ window.addEventListener('DOMContentLoaded', function() {
       if (ignoreStatus) return true;
       if (f.status === 'dropped') return r.dropped;
       if (r.dropped) return false;
-      if (f.status === 'due') return isDue(followups[r.key]) && r.status !== 'done';
+      if (f.status === 'due') return (isDue(followups[r.key]) || sittingDue(r)) && r.status !== 'done';
+      if (f.status === 'sittings') return !!r.sit && !r.sit.complete;
       if (f.status === 'pending') return r.status === 'advised';
       if (f.status === 'aftercall') return r.status === 'done' && !!callBeforeDone(r);
       if (f.status !== 'all' && r.status !== f.status) return false;
@@ -55301,8 +55337,9 @@ window.addEventListener('DOMContentLoaded', function() {
   function sortRows(rows) {
     const order = { advised: 0, scheduled: 1, done: 2 };
     return rows.sort(function (a, b) {
-      const da = isDue(followups[a.key]) ? 0 : 1, db = isDue(followups[b.key]) ? 0 : 1;
+      const da = (isDue(followups[a.key]) || sittingDue(a)) ? 0 : 1, db = (isDue(followups[b.key]) || sittingDue(b)) ? 0 : 1;
       if (da !== db) return da - db;
+      if (a.sit && b.sit && (a.sit.next || b.sit.next) && a.sit.next !== b.sit.next) return String(a.sit.next || '9999').localeCompare(String(b.sit.next || '9999'));
       if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
       const ka = a.advisedDate || (a.ot && a.ot.date) || '', kb = b.advisedDate || (b.ot && b.ot.date) || '';
       return kb.localeCompare(ka) || String(a.patient).localeCompare(String(b.patient));
@@ -55323,7 +55360,19 @@ window.addEventListener('DOMContentLoaded', function() {
     const c = callBeforeDone(r);
     return c ? '<div style="font-size:10px;margin-top:3px;color:#1a6b34;font-weight:800">📞 Came after a call (' + esc(fmt(localDateKey(c.at))) + (c.by ? ', ' + esc(c.by) : '') + ')</div>' : '';
   }
+  function sittingCell(r) {
+    const s = r.sit, k = esc(r.key);
+    const dots = Array.from({ length: Math.max(s.planned, s.done) }).map(function (_, i) { return '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:2px;background:' + (i < s.done ? '#1a8c3c' : '#d8dee6') + '"></span>'; }).join('');
+    const list = s.dates.map(function (d, i) { return (i + 1) + ') ' + fmt(d) + (s.src[d] === 'Paid' ? ' (paid)' : ''); }).join(' · ');
+    return '<div style="font-weight:800;font-size:11.5px">' + (s.complete ? '<span class="badge bd-green">All ' + s.planned + ' sittings done</span>' : (s.done ? 'Sitting ' + s.done + ' of ' + s.planned + ' done' : 'No sitting yet (' + s.planned + ' planned)')) + '</div>'
+      + '<div style="margin-top:3px">' + dots + '</div>'
+      + (list ? '<div style="font-size:10px;color:var(--g1);margin-top:3px;line-height:1.35">' + esc(list) + (s.extra ? ' · ' + (s.extra > 0 ? '+' : '') + s.extra + ' entered by hand' : '') + '</div>' : (s.extra ? '<div style="font-size:10px;color:var(--g1)">' + s.extra + ' entered by hand</div>' : ''))
+      + (s.next ? '<div style="font-size:10.5px;margin-top:3px;font-weight:800;color:' + (s.next <= today() ? '#b42318' : '#1a3c6e') + '">Sitting ' + (s.done + 1) + ' due ' + esc(fmt(s.next)) + '</div>' : '')
+      + '<div style="margin-top:4px"><a href="javascript:void(0)" style="font-size:10.5px" onclick="bmhAdvisedSittingsEdit(\'' + k + '\')">✏️ Sittings / gap</a></div>'
+      + '<div id="adv-sit-ed-' + k + '"></div>';
+  }
   function statusCell(r) {
+    if (r.sit && !r.dropped && !(r.ot && otDone(r.ot))) return sittingCell(r);
     if (r.dropped) {
       const rec = followups[r.key] || {};
       return '<span class="badge bd-gray">Dropped ' + esc(fmt(localDateKey(rec.droppedAt || ''))) + '</span>'
@@ -55518,7 +55567,8 @@ window.addEventListener('DOMContentLoaded', function() {
       advised: live.filter(function (r) { return r.status === 'advised'; }).length,
       scheduled: live.filter(function (r) { return r.status === 'scheduled'; }).length,
       done: live.filter(function (r) { return r.status === 'done'; }).length,
-      due: live.filter(function (r) { return isDue(followups[r.key]) && r.status !== 'done'; }).length,
+      due: live.filter(function (r) { return (isDue(followups[r.key]) || sittingDue(r)) && r.status !== 'done'; }).length,
+      sittings: live.filter(function (r) { return !!r.sit && !r.sit.complete; }).length,
       dropped: base.filter(function (r) { return r.dropped; }).length,
       all: live.length,
       aftercall: live.filter(function (r) { return r.status === 'done' && !!callBeforeDone(r); }).length,
@@ -55526,7 +55576,7 @@ window.addEventListener('DOMContentLoaded', function() {
     };
     const rows = sortRows(applyFilters(all, f, false));
     // Check saved prescriptions for these patients in the background (once per session).
-    queueRxLoad(Array.from(new Set(all.filter(function (r) { return !r.dropped && r.status !== 'done'; }).map(function (r) { return r.bmhId; }))));
+    queueRxLoad(Array.from(new Set(all.filter(function (r) { return !r.dropped && (r.status !== 'done' || r.sit); }).map(function (r) { return r.bmhId; }))));
     const rxPending = rxQueue.length + (rxRunning ? 1 : 0);
     loadPayments();
     // Calls logged before today and not yet marked Seen: pinned on top, with their usual number.
@@ -55534,7 +55584,7 @@ window.addEventListener('DOMContentLoaded', function() {
     const pinned = sortRows(base.filter(function (r) { return unseenCallEntries(followups[r.key]).length; }));
     const pinnedKeys = new Set(pinned.map(function (r) { return r.key; }));
     const rowHtml = function (r, n, pin) {
-      return '<tr' + (pin ? ' style="background:#fff8d6"' : (isDue(followups[r.key]) && r.status !== 'done' ? ' style="background:#fff1f0"' : '')) + '><td>' + (n || '—') + '</td>'
+      return '<tr' + (pin ? ' style="background:#fff8d6"' : ((isDue(followups[r.key]) || sittingDue(r)) && r.status !== 'done' ? ' style="background:#fff1f0"' : '')) + '><td>' + (n || '—') + '</td>'
         + '<td style="white-space:nowrap">' + (r.advisedDate ? esc(fmt(r.advisedDate)) : '<span style="color:var(--g1);font-size:10px">from OT register</span>') + '</td>'
         + '<td><div>' + patientNameHtml(r) + '</div><div style="font-size:10px;color:var(--g1)">' + esc(r.bmhId) + (r.mobile ? ' · ' + esc(r.mobile) : '') + '</div></td>'
         + '<td>' + centreBadge(r.centre) + '</td><td>' + esc(deptLabel(r.dept)) + '</td><td style="font-weight:700">' + esc(r.proc) + '</td><td>' + esc(r.doctor || '—') + '</td>'
@@ -55556,7 +55606,7 @@ window.addEventListener('DOMContentLoaded', function() {
       + '<button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>'
       + (!followupsLoaded ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Loading saved follow-ups…</div>' : '')
       + (rxPending ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking saved prescriptions for procedures already done… (' + rxPending + ' patients left)</div>' : '')
-      + (payLoading ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking payments for OCT / fields / YAG / injections…</div>' : '')
+      + (payLoading ? '<div style="margin:0 0 10px;font-size:11.5px;color:var(--g1)">Checking payments for OCT / fields / YAG / injections / sittings…</div>' : '')
       + (pinned.length ? '<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff8d6;border:1px solid #f0d878;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
         + '<b>📞 ' + pinned.length + ' patient' + (pinned.length === 1 ? '' : 's') + ' called before today — shown on top until marked Seen</b>'
         + '<button type="button" class="btn btn-xs btn-blue" onclick="bmhAdvisedCallsSeen(' + esc(JSON.stringify(pinned.map(function (r) { return r.key; }))) + ')">✓ Mark all seen</button>'
@@ -55567,7 +55617,7 @@ window.addEventListener('DOMContentLoaded', function() {
         + '<button type="button" class="btn btn-xs btn-blue" onclick="bmhFillAdvisedFromHistory()">Fill from visit history</button>'
         + '<span id="adv-fill-status" style="color:var(--g1)"></span></div>' : '')
       + '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">'
-      + chip('pending', 'Not done yet', counts.advised) + chip('due', '📞 Calls due', counts.due)
+      + chip('pending', 'Not done yet', counts.advised) + chip('due', '📞 Calls due', counts.due) + chip('sittings', '🔁 Sittings in progress', counts.sittings)
       + chip('scheduled', 'OT booked', counts.scheduled) + chip('done', 'Done', counts.done)
       + chip('all', 'All', counts.all) + chip('dropped', 'Dropped', counts.dropped)
       + chip('aftercall', '📞✅ Done after a call', counts.aftercall)
@@ -55872,6 +55922,40 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 
   window.bmhRenderAdvisedProcedureReport = renderReport;
+  // edit planned sittings, the gap to the next sitting, and sittings done but not recorded (per patient)
+  function sittingsEdit(key) {
+    const box = document.getElementById('adv-sit-ed-' + key); if (!box) return;
+    if (box.innerHTML) { box.innerHTML = ''; return; }
+    const row = findRow(key); if (!row || !row.sit) return;
+    const s = row.sit;
+    box.innerHTML = '<div style="margin-top:5px;padding:6px;border:1px solid var(--g4);border-radius:7px;background:#fff;font-size:10.5px;display:grid;gap:4px">'
+      + '<label>Planned sittings <input id="adv-sit-pl-' + key + '" type="number" min="1" max="20" value="' + s.planned + '" style="width:52px"></label>'
+      + '<label>Next sitting after <input id="adv-sit-gap-' + key + '" type="number" min="1" max="365" value="' + s.gap + '" style="width:52px"> days</label>'
+      + '<label title="Sittings done but not recorded as procedure done or payment (or minus to remove a wrong one)">Add by hand <input id="adv-sit-ex-' + key + '" type="number" min="-10" max="10" value="' + s.extra + '" style="width:52px"></label>'
+      + '<div><button type="button" class="btn btn-xs btn-gold" onclick="bmhAdvisedSittingsSave(\'' + key + '\')">Save</button></div></div>';
+  }
+  function sittingsSave(key) {
+    const row = findRow(key); if (!row || !window.FBDB) return;
+    const v = function (id, d) { const n = Math.round(Number((document.getElementById(id + key) || {}).value)); return isFinite(n) ? n : d; };
+    const planned = Math.max(1, Math.min(20, v('adv-sit-pl-', 4))), gap = Math.max(1, Math.min(365, v('adv-sit-gap-', 30))), extra = Math.max(-10, Math.min(10, v('adv-sit-ex-', 0)));
+    const base = 'procedureFollowups/' + key, existing = followups[key] || {}, now = new Date().toISOString(), by = (currentUser() && currentUser().name) || 'Staff';
+    const updates = {};
+    if (!existing.bmhId) {
+      META_FIELDS.forEach(function (k) { updates[base + '/' + k] = row[k] == null ? '' : String(row[k]); });
+      updates[base + '/createdAt'] = now; updates[base + '/createdFrom'] = 'sittings'; updates[base + '/status'] = 'open';
+    }
+    updates[base + '/sittingsPlanned'] = planned; updates[base + '/sittingGap'] = gap; updates[base + '/sittingsExtra'] = extra;
+    updates[base + '/updatedAt'] = now; updates[base + '/updatedBy'] = by;
+    window.FBDB.ref().update(updates).then(function () {
+      const rec = Object.assign({}, existing);
+      Object.keys(updates).forEach(function (pth) { rec[pth.slice(base.length + 1)] = updates[pth]; });
+      followups[key] = rec;
+      showToast('Sittings saved ✓', 's');
+      rerenderReportIfOpen();
+    }).catch(function () { showToast('Could not save — please try again', 'e'); });
+  }
+  window.bmhAdvisedSittingsEdit = sittingsEdit;
+  window.bmhAdvisedSittingsSave = sittingsSave;
   window.bmhAdvisedReportPrintHtml = printHtml;
   window.bmhOpenAdvisedFollowup = openFollowup;
   window.bmhAdvisedPickDate = pickDate;
