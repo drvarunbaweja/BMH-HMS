@@ -7096,6 +7096,10 @@ function doLogin(name, dept, role, centre) {
 
 function buildSidebarForRole(role, dept, name) {
   const nav_el = document.getElementById('sbnav'); if(!nav_el) return;
+  // start every login from the full default menu (kept from the first build), so switching from e.g. a doctor login
+  // to the admin login shows the admin menu straight away, without a page refresh
+  if (!window._bmhDefaultSidebarHtml) window._bmhDefaultSidebarHtml = nav_el.innerHTML;
+  else nav_el.innerHTML = window._bmhDefaultSidebarHtml;
   const accessModules = Array.isArray(CURRENT_USER?.access?.modules) ? CURRENT_USER.access.modules : null;
   const allowNav = function(key, html) {
     return (!accessModules || !accessModules.length || accessModules.includes(key)) ? html : '';
