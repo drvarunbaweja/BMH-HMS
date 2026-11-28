@@ -115,7 +115,10 @@
         if (window._bmhPatientsRefreshToken !== token) return;
         ids.forEach(function (id) { if (rows[id] == null) delete CACHE.map[id]; else CACHE.map[id] = rows[id]; });
         CACHE.syncAt = at; save(CACHE); stats.delta++; stats.lastMs = Date.now() - t0;
-        if (ids.length || applyFirst) applyPatientsPayload(CACHE.map, { fullHistory: true });
+        // later refreshes: apply only the changed patients (not the whole saved list again — less memory and work,
+        // and the saved copy can't overwrite a newer live record, e.g. today's check-in)
+        if (applyFirst) applyPatientsPayload(CACHE.map, { fullHistory: true });
+        else ids.forEach(function (id) { if (rows[id] == null) removeRealtimePatientRecord(id); else applyRealtimePatientRecord(rows[id], id); });
       });
     });
   }
