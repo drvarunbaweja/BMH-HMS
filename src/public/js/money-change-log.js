@@ -90,7 +90,7 @@
     dayRef.once('value').then(function () { ready = true; }).catch(function () { ready = true; });
     dayRef.on('child_added', function (s) {
       var v = s.val(); PREV[s.key] = clone(v); if (ready) ADDED[s.key] = Date.now();
-      if (ready && v && (v.isRefund || net(v) < 0) && recent(d, s.key)) write(null, v, ['Refund of ' + rs(Math.abs(net(v)))], d, s.key);
+      if (ready && v && (v.isRefund || net(v) < 0) && recent(d, s.key)) write(null, v, [(v.refundFor === 'discount' ? 'Discount refunded ' : v.refundFor === 'consultation' ? 'Consultation fee refunded ' : 'Refund of ') + rs(Math.abs(Number(v.amount) || 0)) + (v.refundReason ? ' — reason: ' + String(v.refundReason).slice(0, 80) : '')], d, s.key);
     }, function () {});
     dayRef.on('child_changed', function (s) {
       var v = s.val(), a = PREV[s.key]; PREV[s.key] = clone(v);

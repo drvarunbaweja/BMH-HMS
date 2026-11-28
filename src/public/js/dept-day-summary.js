@@ -37,13 +37,14 @@
     var g = { consultation: [], investigation: [], surgery: [], procedure: [], medicine: [], other: [], balance: [], advance: [] };
     var split = typeof window.bmhSplitTxns === 'function' ? window.bmhSplitTxns(paidRows) : paidRows;
     split.forEach(function (t) { var c = cat(t); (g[c] || g.other).push(t); });
-    var paidConsult = g.consultation.filter(function (t) { return net(t) > 0; }), freeConsult = g.consultation.filter(function (t) { return net(t) <= 0; });
+    var paidConsult = g.consultation.filter(function (t) { return net(t) > 0; }), freeConsult = g.consultation.filter(function (t) { return net(t) <= 0 && !(t._refundedAmount > 0); }), refConsult = g.consultation.filter(function (t) { return net(t) <= 0 && t._refundedAmount > 0; });
+    var refunded = paidRows.filter(function (t) { return t._refundedAmount > 0; });
     var sum = function (a) { return a.reduce(function (s, t) { return s + net(t); }, 0); };
     var cash = sum(paidRows.filter(function (t) { return String(t.mode || '') === 'Cash'; }));
     var upi = sum(paidRows.filter(function (t) { return String(t.mode || '') !== 'Cash'; }));
     var pend = [];
     try { pend = (PAY_REQUESTS || []).filter(function (r) { return r && r.status === 'pending' && dk(getReceptionPayRequestDeptKey ? getReceptionPayRequestDeptKey(r) : r.dept) === dept && isTodayReceptionPayRequest(r, { centre: (typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : centre), today: day }); }); } catch (e) { pend = []; }
-    return { day: day, centre: centre, g: g, paidConsult: paidConsult, freeConsult: freeConsult, cashless: cashless, cash: cash, upi: upi, total: sum(paidRows), pend: pend, sum: sum };
+    return { day: day, centre: centre, g: g, paidConsult: paidConsult, freeConsult: freeConsult, refConsult: refConsult, refunded: refunded, cashless: cashless, cash: cash, upi: upi, total: sum(paidRows), pend: pend, sum: sum };
   }
   function listBlock(title, rows) {
     if (!rows.length) return '';
@@ -88,8 +89,9 @@
       + '<div class="money"><div><span>Cash</span><b>' + rs(b.cash) + '</b></div><div><span>UPI / card</span><b>' + rs(b.upi) + '</b></div><div><span>Cashless raised</span><b>' + rs(cashlessAmt) + '</b></div><div><span>Pending dues</span><b>' + rs(pendAmt) + '</b></div></div>'
       + '<div class="cols">'
       + '<div class="blk"><div class="bh"><span>Consultations</span><span>' + rs(b.sum(b.paidConsult)) + '</span></div>'
-      + '<div class="kv"><span>Paid consultations</span><b>' + b.paidConsult.length + '</b></div><div class="kv"><span>Unpaid / no-fee consultations</span><b>' + b.freeConsult.length + '</b></div></div>'
+      + '<div class="kv"><span>Paid consultations</span><b>' + b.paidConsult.length + '</b></div><div class="kv"><span>Unpaid / no-fee consultations</span><b>' + b.freeConsult.length + '</b></div>' + (b.refConsult.length ? '<div class="kv"><span>Consultation fee refunded</span><b>' + b.refConsult.length + '</b></div>' : '') + '</div>'
       + listBlock('Investigations', b.g.investigation) + listBlock('Surgeries', b.g.surgery) + listBlock('Procedures', b.g.procedure) + listBlock('Medicines', b.g.medicine) + listBlock('Other charges', b.g.other) + listBlock('Balance payments', b.g.balance) + listBlock('Advances', b.g.advance)
+      + (b.refunded.length ? '<div class="blk"><div class="bh"><span>Refunds / discounts given back (' + b.refunded.length + ')</span><span>− ' + rs(b.refunded.reduce(function (s, t) { return s + Number(t._refundedAmount || 0); }, 0)) + '</span></div>' + b.refunded.map(function (t) { return '<div class="ln"><span class="nm">' + esc(t.patient || '—') + '<i>' + esc((t._refundNotes || []).join('; ')) + '</i></span><span class="md">' + esc(t.mode || '') + '</span><span class="am">− ' + rs(t._refundedAmount) + '</span></div>'; }).join('') + '</div>' : '')
       + (b.cashless.length ? '<div class="blk"><div class="bh"><span>Cashless — ECHS / TPA raised (' + b.cashless.length + ')</span><span>' + rs(cashlessAmt) + '</span></div>' + b.cashless.map(function (t) { return '<div class="ln"><span class="nm">' + esc(t.patient || '—') + '<i>' + esc(t.service || t.for || '') + '</i></span><span class="md">' + esc(t.ins || t.mode || '') + '</span><span class="am">' + rs(t.claimedAmount != null ? t.claimedAmount : t.amount) + '</span></div>'; }).join('') + '</div>' : '')
       + (b.pend.length ? '<div class="blk"><div class="bh"><span>Pending dues (' + b.pend.length + ')</span><span>' + rs(pendAmt) + '</span></div>' + b.pend.map(function (r) { return '<div class="ln"><span class="nm">' + esc(r.patient || '—') + '<i>' + esc(r.for || '') + '</i></span><span class="am">' + rs(r.amount) + '</span></div>'; }).join('') + '</div>' : '')
       + '</div>'
