@@ -13740,6 +13740,50 @@ function bmhIsRealSameDayConsultationCollection(txn, patient, dateKey, fee) {
   const amount = Math.max(0, Number(txn.amount || 0));
   return fee > 0 && Math.abs(amount - fee) < 0.5 && !/advance|deposit|surgery|procedure|investigation|scan|injection/i.test(text);
 }
+// Refunds / discounts given back at reception come off the receipt they belong to (same patient, same day): the
+// patient's line drops (₹500 → ₹0), and the department's cash / UPI totals and its half-A4 print drop with it.
+// The receipt itself is not changed — only what Charges, the prints and the Two-Centre View add up.
+function bmhRefundTargetRow(rows, ref) {
+  if (!ref) return null;
+  const amt = Math.abs(Number(ref.amount) || 0);
+  if (ref.refundOf) { const hit = (rows || []).find(function (x) { return x && String(x.id || '') === String(ref.refundOf); }); if (hit) return hit; }
+  const refAt = Date.parse(ref.date || '') || Infinity;
+  const mine = (rows || []).filter(function (x) {
+    return x && !x.isRefund && x.collected !== false && String(x.bmhId || '') === String(ref.bmhId || '') && getNetTransactionAmount(x) > 0
+      && !isInsuranceLikeMode(x.mode || x.ins || '') && (Date.parse(x.date || '') || 0) <= refAt;
+  });
+  if (!mine.length) return null;
+  const consult = ref.refundFor === 'consultation';
+  const score = function (x) { const n = getNetTransactionAmount(x); return (consult && isConsultationTransaction(x) ? 4 : 0) + (Math.abs(n - amt) < 0.5 ? 2 : 0) + (n >= amt ? 1 : 0); };
+  mine.sort(function (a, b) { return score(b) - score(a) || (Date.parse(b.date || '') || 0) - (Date.parse(a.date || '') || 0); });
+  return mine[0];
+}
+function bmhRefundNote(ref) {
+  const amt = Math.abs(Number(ref && ref.amount) || 0);
+  const why = String((ref && (ref.refundReason || String(ref.service || '').replace(/^Refund\s*[—-]\s*/i, ''))) || '').trim();
+  return (ref && ref.refundFor === 'discount' ? 'Discount ' : ref && ref.refundFor === 'consultation' ? 'Consultation fee refunded ' : 'Refunded ') + '₹' + amt.toLocaleString('en-IN') + (why ? ' — ' + why : '');
+}
+function bmhApplyRefundsToCollectionRows(rows, dateKey, centreAllowed) {
+  const refunds = (TRANSACTIONS || []).filter(function (t) {
+    return t && t.isRefund === true && t.collected !== false && txnIsoDate(t) === dateKey && (!centreAllowed || centreAllowed(t));
+  });
+  if (!refunds.length) return rows;
+  const out = rows.slice();
+  refunds.sort(function (a, b) { return String(a.date || '').localeCompare(String(b.date || '')); }).forEach(function (ref) {
+    const target = bmhRefundTargetRow(out, ref); if (!target) return;
+    const i = out.indexOf(target);
+    const before = getNetTransactionAmount(target), amt = Math.min(before, Math.abs(Number(ref.amount) || 0));
+    out[i] = Object.assign({}, target, {
+      amount: Math.max(0, before - amt), _recoveredConsultationAmount: 0,
+      _refundedAmount: Number(target._refundedAmount || 0) + amt,
+      _refundNotes: (target._refundNotes || []).concat([bmhRefundNote(ref)])
+    });
+  });
+  return out;
+}
+function bmhRefundNotesHtml(t) {
+  return t && Array.isArray(t._refundNotes) && t._refundNotes.length ? ' · <span style="color:var(--red);font-weight:800">↩️ ' + escapeHtmlConsent(t._refundNotes.join('; ')) + '</span>' : '';
+}
 function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   const centres = Array.isArray(centreOrCentres) ? centreOrCentres : [centreOrCentres || getEffectiveCentre()];
   const cacheKey = [
@@ -13839,7 +13883,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     const synthetic = bmhPayRequestToSyntheticCollectionTxn(pr);
     if (synthetic) rows.push(synthetic);
   });
-  const result = bmhDedupeCollectionTransactions(rows);
+  const result = bmhApplyRefundsToCollectionRows(bmhDedupeCollectionTransactions(rows), dateKey, centreAllowed);
   window._bmhCollectionTransactionsForDateCache = { key: cacheKey, at: Date.now(), rows: result };
   return result.slice();
 }
@@ -42759,7 +42803,7 @@ function _renderCollectionDashboardImpl() {
         <div id="${did}" style="display:none;padding:8px 12px">
           ${dTxn.length ? dTxn.map(t=>`
             <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5);font-size:12px">
-              <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${escapeHtmlConsent(bmhSvcLabel(t)||'—')} · ${t.time||'—'}</div></div>
+              <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${escapeHtmlConsent(bmhSvcLabel(t)||'—')} · ${t.time||'—'}${bmhRefundNotesHtml(t)}</div></div>
               <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
               ${receptionQueueRestoreButtonHtml(t.bmhId, { dept: t.dept, label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
@@ -42778,7 +42822,7 @@ function _renderCollectionDashboardImpl() {
         <div style="font-size:16px">${DEPT_COLORS[normalizeDeptKeyForQueue(t.dept || '')]?.label?.split(' ')[0]||'🏥'}</div>
         <div style="flex:1">
           <div style="font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue)">Advance</span>' : ''} <span style="font-family:monospace;font-size:10px;color:var(--bmh-teal)">${t.bmhId||''}</span></div>
-          <div style="font-size:11px;color:var(--g1)">${escapeHtmlConsent(bmhSvcLabel(t)||'—')} · ${t.time||'—'}</div>
+          <div style="font-size:11px;color:var(--g1)">${escapeHtmlConsent(bmhSvcLabel(t)||'—')} · ${t.time||'—'}${bmhRefundNotesHtml(t)}</div>
         </div>
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
         <div style="font-weight:900;color:${t.collected!==false?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
@@ -52535,14 +52579,23 @@ function issueRefundAtReception() {
   const ln = document.getElementById('rc-ln')?.value||'';
   const ptName = (fn+' '+ln).trim()||'Unknown';
   if(amt<=0) { showToast('Enter refund amount','w'); return; }
+  const refundFor = document.getElementById('rc-refund-for')?.value || '';
+  if (refundFor !== 'consultation' && refundFor !== 'discount') { showToast('Choose what the refund is for: Consultation fee or Discount','w'); try { document.getElementById('rc-refund-for').focus(); } catch (e) {} return; }
   const txnId = 'TXN'+Date.now();
+  const nowIso = new Date().toISOString();
+  const refCentre = (typeof getEffectiveCentre === 'function' && getEffectiveCentre()) || CURRENT_USER?.centre || 'CHD';
+  // the receipt this money goes back against: today's receipt of this patient (the consultation one for a fee refund)
+  const today = localDateKey(new Date());
+  const target = bmhRefundTargetRow((TRANSACTIONS || []).filter(function (t) { return t && txnIsoDate(t) === today; }), { bmhId: bmhId, amount: amt, refundFor: refundFor, date: nowIso });
+  const ptRec = PATIENTS.find(p=>p.bmhId===bmhId);
   const txn = {
-    id:txnId, patient:ptName, bmhId, service:'Refund — '+reason, amount:-Math.abs(amt),
+    id:txnId, patient:ptName, bmhId, service:(refundFor === 'discount' ? 'Discount refund — ' : 'Consultation fee refund — ')+reason, amount:-Math.abs(amt),
     mode:document.getElementById('rc-refund-mode')?.value||'Cash',
-    collected:true, dept:'reception',
+    collected:true, dept:(target && target.dept) || (ptRec && ptRec.dept) || 'reception',
     time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    date:new Date().toISOString(), centre:CURRENT_USER?.centre||'CHD',
-    createdBy:CURRENT_USER?.name||'Reception', isRefund:true
+    date:nowIso, centre:(target && target.centre) || refCentre,
+    createdBy:CURRENT_USER?.name||'Reception', isRefund:true,
+    refundFor: refundFor, refundReason: reason, refundOf: target ? target.id : ''
   };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase&&saveTransactionToFirebase(txn);
@@ -52553,6 +52606,8 @@ function issueRefundAtReception() {
   // Reset refund fields
   const ra=document.getElementById('rc-refund-amt'); if(ra) ra.value='';
   const rr=document.getElementById('rc-refund-reason'); if(rr) rr.value='';
+  const rf=document.getElementById('rc-refund-for'); if(rf) rf.value='';
+  try { bmhMarkReceptionFinancialDataDirty('refund'); } catch (e) {}
   renderCollectionDashboard&&renderCollectionDashboard();
 }
 
