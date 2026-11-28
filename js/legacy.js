@@ -43484,9 +43484,18 @@ function applyPatientsPayload(data, opts) {
     window._bmhPatientsApplyTimer = null;
   }
   window._bmhPatientsHydrating = true;
+  // a full download takes a while: a patient checked in / updated live while it was downloading arrives here with the
+  // older copy from the download. Keep whichever copy is newer, so a live check-in isn't wiped (admin queue gap).
+  const patientRowStamp = function (r) {
+    if (!r) return 0;
+    const ck = typeof r.checkinAt === 'number' ? r.checkinAt : (Date.parse(r.checkinAt || '') || 0);
+    return Math.max(Date.parse(r.updatedAt || '') || 0, Date.parse(r.lastUpdated || '') || 0, ck, Date.parse(r.seenAt || '') || 0);
+  };
   const finish = function () {
-    normalized.forEach(function (row) {
-      preserveNewerPatientPurpose(row, existingPurposeById.get(String(row?.bmhId || '')));
+    normalized.forEach(function (row, rowIndex) {
+      const existing = existingPurposeById.get(String(row?.bmhId || ''));
+      if (existing && patientRowStamp(existing) > patientRowStamp(row)) { normalized[rowIndex] = existing; return; }
+      preserveNewerPatientPurpose(row, existing);
     });
     overlayPendingLocalPatientQueueWrites(normalized);
     const normalizedById = new Map(normalized.map(function (row, rowIndex) {
