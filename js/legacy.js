@@ -49078,7 +49078,13 @@ function saveAttendanceRowToCloud(dateKey, userKey, row) {
     syncError: '',
     syncedAt: new Date().toISOString()
   });
-  return bmhAttendanceWithTimeout(fbSet(getAttendancePathForDate(dateKey, userKey), synced), 15000).then(function () {
+  // merge, never replace: each punch is written on its own (events/in, events/out …), so a punch saved from a phone or
+  // browser that could not read the earlier punches in time no longer wipes them from the day's record
+  const mergeUpdates = {};
+  Object.keys(synced).forEach(function (k) { if (k !== 'events' && synced[k] !== undefined) mergeUpdates[sanitizeFirebaseKey(k)] = sanitizeFirebaseValue(synced[k]); });
+  const evs = synced.events && typeof synced.events === 'object' ? synced.events : {};
+  Object.keys(evs).forEach(function (k) { if (evs[k]) mergeUpdates['events/' + k] = sanitizeFirebaseValue(evs[k]); });
+  return bmhAttendanceWithTimeout(window.FBDB.ref(getAttendancePathForDate(dateKey, userKey)).update(mergeUpdates), 15000).then(function () {
     const local = getLocalAttendanceForDate(dateKey, userKey);
     if (!local || attendanceRowTimestamp(local) <= attendanceRowTimestamp(row)) {
       setAttendanceLocalForDate(dateKey, synced, userKey);
@@ -49125,10 +49131,20 @@ function fetchAttendanceForDate(dateKey, userKey) {
   const dk = dateKey || todayKey();
   const uk = userKey || attendanceUserKey();
   if (!window.FBDB) return Promise.resolve(getLocalAttendanceForDate(dk, uk));
-  return bmhAttendanceWithTimeout(window.FBDB.ref(getAttendancePathForDate(dk, uk)).once('value'), 3000).then(function (snap) {
+  return bmhAttendanceWithTimeout(window.FBDB.ref(getAttendancePathForDate(dk, uk)).once('value'), 10000).then(function (snap) {
     const remote = snap.val();
     const local = getLocalAttendanceForDate(dk, uk);
-    const row = local && (!remote || local.syncStatus === 'pending' || attendanceRowTimestamp(local) >= attendanceRowTimestamp(remote)) ? local : (remote || local);
+    let row = local && (!remote || local.syncStatus === 'pending' || attendanceRowTimestamp(local) >= attendanceRowTimestamp(remote)) ? local : (remote || local);
+    // punches from both copies are kept (a punch made on another phone / browser is not dropped)
+    if (row && remote && local) {
+      const other = row === local ? remote : local;
+      const evs = Object.assign({}, other.events || {}, row.events || {});
+      row = Object.assign({}, row, { events: evs });
+      // a punch this browser holds that the cloud lost is put back
+      const missing = {};
+      Object.keys(local.events || {}).forEach(function (k) { if (local.events[k] && !(remote.events && remote.events[k])) missing['events/' + k] = sanitizeFirebaseValue(local.events[k]); });
+      if (Object.keys(missing).length) { try { window.FBDB.ref(getAttendancePathForDate(dk, uk)).update(missing).catch(function () {}); } catch (e) {} }
+    }
     if (row) setAttendanceLocalForDate(dk, row, uk);
     return row;
   }).catch(function () { return getLocalAttendanceForDate(dk, uk); });
