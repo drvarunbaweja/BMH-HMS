@@ -52365,6 +52365,10 @@ async function saveUpdatedPatientDetails() {
     referredBy: refName || (function () { var el = document.getElementById('upd-ref-source'); var v = el ? String(el.value || '') : ''; return v && !/^__/.test(v) ? v : ''; })() || (p.referredBy && p.referredBy !== p.refSource ? p.referredBy : '') || '',
     consultationFee: noFee ? 0 : consultationFee,
     consultationNoFee: noFee,
+    // the fee type / label / mode follow the No-fee tick too (they kept saying "No Fee Consultation" after a fee was entered)
+    consultationFeeType: noFee ? 'no-fee' : (String(p.consultationFeeType || '').toLowerCase() === 'no-fee' ? '' : (p.consultationFeeType || '')),
+    consultationFeeLabel: noFee ? 'No Fee Consultation' : (/no\s*fee/i.test(String(p.consultationFeeLabel || '')) ? '' : (p.consultationFeeLabel || '')),
+    consultationPaymentMode: noFee ? 'No Fee' : (isInsuranceLikeMode(payMode || insName) ? payMode : (/no\s*fee/i.test(String(p.consultationPaymentMode || '')) ? (payMode || 'Cash') : (p.consultationPaymentMode || payMode || 'Cash'))),
     ins: isInsuranceLikeMode(payMode || insName) ? (insName || payMode) : '',
     policy: policyNo,
     claimedAmount: isInsuranceLikeMode(payMode || insName) ? claimedAmountInput : 0,
@@ -52379,7 +52383,7 @@ async function saveUpdatedPatientDetails() {
   const bmhEditBillingChanged = (Number(p.consultationFee || 0) !== Number(noFee ? 0 : consultationFee)) || (!!p.consultationNoFee !== !!noFee)
     || (String(p.ins || '') !== String(updates.ins || '')) || (String(p.policy || '') !== String(policyNo || '')) || (Number(p.claimedAmount || 0) !== Number(updates.claimedAmount || 0));
   const bmhEditBillingSync = bmhEditIsReception && bmhEditBillingChanged;
-  if (!bmhEditIsReception) ['consultationFee', 'consultationNoFee', 'ins', 'policy', 'claimedAmount', 'advance', 'advancePurpose'].forEach(function (k) { delete updates[k]; });
+  if (!bmhEditIsReception) ['consultationFee', 'consultationNoFee', 'consultationFeeType', 'consultationFeeLabel', 'consultationPaymentMode', 'ins', 'policy', 'claimedAmount', 'advance', 'advancePurpose'].forEach(function (k) { delete updates[k]; });
   // Update initials too
   updates.initials = computePatientInitials(updates.name);
   Object.assign(p, updates);
@@ -52396,25 +52400,41 @@ async function saveUpdatedPatientDetails() {
   if (bmhEditBillingSync) try {
     const today = localDateKey(new Date());
     const chargeRows = window.BMH_PATIENT_CHARGES[bid] || [];
+    // today's check-in receipt: named after the consultation, or after the visit's purpose (e.g. "Fundus Examination (no fee)")
+    const isCheckinReceipt = function (txn) {
+      if (/consult|follow-up/i.test(String(txn.service || txn.for || ''))) return true;
+      const cats = Array.isArray(txn.billCats) ? txn.billCats : [];
+      return String(txn.source || '').toLowerCase() === 'reception' && (cats.indexOf('consultation') >= 0 || txn.noFee === true || !!String(txn.consultationFeeType || '').trim() || 'consultationFeeLabel' in txn);
+    };
+    const checkinTxnIds = new Set();
+    (TRANSACTIONS || []).forEach(function (txn) {
+      if (txn.bmhId === bid && txn.collected !== false && localDateKey(txn.date) === today && isCheckinReceipt(txn)
+        && !(txn.billId || txn.billNo || txn.payRequestId || (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length))) checkinTxnIds.add(String(txn.id || ''));
+    });
     chargeRows.forEach(function (row) {
       if (String(row.source || '').toLowerCase() !== 'reception') return;
       if (localDateKey(row.ts || row.date) !== today) return;
-      const isConsult = /consult|follow-up/i.test(String(row.desc || row.name || ''));
+      const isConsult = /consult|follow-up/i.test(String(row.desc || row.name || '')) || checkinTxnIds.has(String(row.ref || ''));
       if (!isConsult) return;
       row.rate = noFee ? 0 : consultationFee;
       row.amount = (Number(row.qty) || 1) * (Number(row.rate) || 0);
       row.desc = String(row.desc || row.name || '').replace(/\s*\(no fee\)\s*/ig, '').trim() + (noFee ? ' (no fee)' : '');
+      row.noFee = noFee;
+      if (!noFee && Number(row.paidAmount || 0) < row.amount && checkinTxnIds.has(String(row.ref || ''))) row.paidAmount = row.amount; // paid with the check-in receipt
     });
     (TRANSACTIONS || []).forEach(function (txn) {
       if (txn.bmhId !== bid || txn.collected === false) return;
       if (localDateKey(txn.date) !== today) return;
-      if (!/consult|follow-up/i.test(String(txn.service || txn.for || ''))) return;
+      if (!isCheckinReceipt(txn)) return;
       // only the reception consultation receipt — never a bill payment, balance payment, advance or anything from Billing
       if (txn.billId || txn.billNo || txn.payRequestId || (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length)) return;
       if (/billing|due-payment|advance|refund/i.test(String(txn.type || '')) || String(txn.source || '').toLowerCase() === 'billing') return;
       if (Number(txn.amount || 0) === (noFee ? 0 : consultationFee) && !!txn.noFee === !!noFee) return;
       txn.amount = noFee ? 0 : consultationFee;
       txn.noFee = noFee;
+      txn.mode = noFee ? 'No Fee' : (/no\s*fee/i.test(String(txn.mode || '')) ? (payMode || 'Cash') : (txn.mode || payMode || 'Cash'));
+      txn.consultationFeeType = noFee ? 'no-fee' : '';
+      txn.consultationFeeLabel = noFee ? 'No Fee Consultation' : '';
       txn.service = String(txn.service || txn.for || '').replace(/\s*\(no fee\)\s*/ig, '').trim() + (noFee ? ' (no fee)' : '');
       saveTransactionToFirebase && saveTransactionToFirebase(txn);
     });
