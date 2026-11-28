@@ -7168,6 +7168,7 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Reception') {
+    // reception computers always get Attendance: the kiosk there marks housekeeping staff's attendance
     nav_el.innerHTML = `
       <div class="ngrp">Reception</div>
       ${allowNav('reception', `<div class="ni active" onclick="nav('reception',this)"><div class="ni-ic">🧾</div>Reception<span class="nbadge pulse" id="nb-rec">0</span></div>`)}
@@ -7183,7 +7184,7 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ngrp">Reports</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
       ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
-      ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}
+      <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>
       <div class="ngrp">Settings</div>
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`)}`;
   } else if(role==='Lab') {
