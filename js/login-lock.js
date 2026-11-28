@@ -18,6 +18,11 @@
   window.__bmhLoginLock = true;
 
   var STRICT = ['drvarun']; // logins that open only with their own saved password
+  // v4.4 (Dr Varun 28 Nov): other Dr Varun logins open only with the drvarun password
+  var ALIAS = { 'drvarun@bawejahospital.com': 'drvarun' };
+  // pages of these logins that were signed in before v4.4 (no mark) are signed out when they load it — staff were
+  // using them with the shared default; a sign-in with the drvarun password from v4.4 on carries the mark
+  var MARK = 'bmh_session_lock216';
   var SKEY = 'bmh_session_at';
   var stats = { strictChecks: 0, strictRejects: 0, signedOut: 0 };
 
@@ -33,6 +38,14 @@
     if (typeof orig !== 'function' || orig.__bmhStrict) return false;
     var w = function (user, profile, pass) {
       var u = String(user || '').trim().toLowerCase();
+      if (ALIAS[u]) {
+        stats.strictChecks++;
+        var udb = null; try { udb = (typeof USER_DB !== 'undefined') ? USER_DB : window.USER_DB; } catch (e) { udb = window.USER_DB; }
+        var tp = udb && udb[ALIAS[u]];
+        var okA = !!(tp && tp.pwChangedAt && typeof tp.pw === 'string' && tp.pw !== '' && pass === tp.pw);
+        if (!okA) stats.strictRejects++;
+        return okA;
+      }
       if (STRICT.indexOf(u) < 0) return orig.apply(this, arguments);
       stats.strictChecks++;
       // only the password saved from Settings (it carries pwChangedAt); never a default, never the old built-in one
@@ -52,7 +65,7 @@
     var w = function () {
       var t0 = serverNow(), before = uname();
       // note the sign-in time before signing in, so a sign-out set earlier can never catch this new sign-in
-      if (!before) { try { sessionStorage.setItem(SKEY, String(t0)); } catch (e) {} }
+      if (!before) { try { sessionStorage.setItem(SKEY, String(t0)); sessionStorage.setItem(MARK, '1'); } catch (e) {} }
       var r = orig.apply(this, arguments);
       var n = 0, iv = setInterval(function () {
         n++;
@@ -66,6 +79,7 @@
     window.loginUser = w;
     return true;
   }
+  function hasMark() { try { return sessionStorage.getItem(MARK) === '1'; } catch (e) { return false; } }
   function sessionAt() { try { return Number(sessionStorage.getItem(SKEY) || 0) || 0; } catch (e) { return 0; } }
 
   // ── 2b. listen for "sign out everywhere" for the current login ──
@@ -79,14 +93,16 @@
     ref = db().ref('security/signOut/' + keyOf(u));
     cb = function (s) {
       var t = Number(s && s.val ? s.val() : 0) || 0;
-      if (!t || uname() !== u) return;
+      if (uname() !== u) return;
+      if (ALIAS[u] && !hasMark()) { signOutHere(); return; }
+      if (!t) return;
       if (t > sessionAt()) signOutHere();
     };
     ref.on('value', cb, function () {});
   }
   function signOutHere() {
     stats.signedOut++;
-    try { sessionStorage.removeItem(SKEY); } catch (e) {}
+    try { sessionStorage.removeItem(SKEY); sessionStorage.removeItem(MARK); } catch (e) {}
     try { if (typeof window.logoutUser === 'function') window.logoutUser(); } catch (e) { console.warn('[login-lock] sign out', e); }
     listening = '';
     setTimeout(function () {
@@ -101,6 +117,8 @@
     // keep this page signed in: its time is set just after the new sign-out time
     try { sessionStorage.setItem(SKEY, String(serverNow() + 60000)); } catch (e) {}
     var r = db().ref('security/signOut/' + keyOf(u));
+    // the button also signs out the other logins that open with this login's password
+    Object.keys(ALIAS).forEach(function (a) { if (ALIAS[a] === u) { try { db().ref('security/signOut/' + keyOf(a)).set(firebase.database.ServerValue.TIMESTAMP); } catch (e) {} } });
     r.set(firebase.database.ServerValue.TIMESTAMP).then(function () {
       return r.once('value');
     }).then(function (s) {
