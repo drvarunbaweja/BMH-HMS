@@ -1980,6 +1980,7 @@
         timer = setInterval(tick, 500);
         tick();
       }
+      function bmhWhenSignedIn(fn) { /* v4.6: wait for the TV's silent sign-in (tv-signin.js) before reading the queue, at most 8 s */ var done = false; function go() { if (done) return; done = true; fn(); } try { firebase.auth().onAuthStateChanged(function (u) { if (u) go(); }); } catch (e) {} setTimeout(go, 8000); }
       function connect() {
         try {
           firebase.initializeApp(cfg);
@@ -1989,7 +1990,7 @@
             document.getElementById('live-dot').classList.toggle('on', on);
             document.getElementById('live-text').textContent = on ? 'Live Queue' : 'Offline';
           });
-          db.ref('patients').orderByChild('queueDate').equalTo(todayKey()).on('value', function (snap) {
+          bmhWhenSignedIn(function () { db.ref('patients').orderByChild('queueDate').equalTo(todayKey()).on('value', function (snap) {
             var val = snap.val() || {};
             rows = Object.keys(val).map(function (key) {
               var row = val[key] || {};
@@ -1999,9 +2000,9 @@
             if (activeMode === 'queue' && !hasActiveQueueRows()) setPanel('media');
             else if (activeMode === 'queue') renderQueue();
           }, function (err) {
-            document.getElementById('live-text').textContent = 'Queue unavailable';
+            document.getElementById('live-text').textContent = 'Queue unavailable'; setTimeout(function () { location.reload(); }, 60000); /* v4.6: try again in a minute */
             document.getElementById('queue-list').innerHTML = '<div class="empty-queue">Queue unavailable.<br><span style="font-size:.72em;color:var(--teal)">' + safeText(err && err.message || 'Please check network') + '</span></div>';
-          });
+          }); });
         } catch (e) {
           document.getElementById('live-text').textContent = 'Connection failed';
           document.getElementById('queue-list').innerHTML = '<div class="empty-queue">Connection failed.<br><span style="font-size:.72em;color:var(--teal)">' + safeText(e.message || e) + '</span></div>';

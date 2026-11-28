@@ -957,6 +957,7 @@ function renderQueue() {
 }
 
 /* ── Firebase connection ─────────────────────────── */
+function bmhWhenSignedIn(fn) { /* v4.6: wait for the TV's silent sign-in (tv-signin.js) before reading the queue, at most 8 s */ var done = false; function go() { if (done) return; done = true; fn(); } try { firebase.auth().onAuthStateChanged(function (u) { if (u) go(); }); } catch (e) {} setTimeout(go, 8000); }
 function connectFirebase() {
   try {
     if (!firebase.apps.length) firebase.initializeApp(FB_CFG);
@@ -970,7 +971,7 @@ function connectFirebase() {
     });
 
     /* Main patient listener — same query as existing queue-display.html */
-    db.ref('patients').orderByChild('queueDate').equalTo(todayKey())
+    bmhWhenSignedIn(function () { db.ref('patients').orderByChild('queueDate').equalTo(todayKey())
       .on('value', function(snap) {
         var val = snap.val() || {};
         allRows = Object.keys(val).map(function(k) {
@@ -980,11 +981,11 @@ function connectFirebase() {
         });
         renderQueue();
       }, function(err) {
-        document.getElementById('live-text').textContent = 'Queue unavailable';
+        document.getElementById('live-text').textContent = 'Queue unavailable'; setTimeout(function () { location.reload(); }, 60000); /* v4.6: try again in a minute */
         document.getElementById('q-list').innerHTML =
           '<div class="q-empty"><p>Queue unavailable</p>'
           + '<span>' + esc(err && err.message || 'Check network connection') + '</span></div>';
-      });
+      }); });
 
   } catch(e) {
     document.getElementById('live-text').textContent = 'Connection error';
