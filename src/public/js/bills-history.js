@@ -224,6 +224,7 @@
       + ((e.kind === 'bill' ? e.paid : (e.adj ? 0 : e.amount)) !== 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryReprint(\'' + k + '\',\'receipt\')">🧾 Receipt</button>' : '')
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhBillHistoryPatient(\'' + jsArg(e.bmhId) + '\')">History</button>'
       + (e.kind === 'bill' && window.bmhBillEditOpen && (!window.bmhBillEditCan || window.bmhBillEditCan()) ? '<button type="button" class="btn btn-outline btn-sm" title="Edit this bill (reason required, recorded)" onclick="bmhBillEditOpen(\'' + k + '\')">✏️ Edit</button>' : '')
+      + (e.kind === 'receipt' && !e.adj && !e.balance && !e.refund && window.bmhReceiptEditOpen && window.bmhReceiptEditCan && window.bmhReceiptEditCan() ? '<button type="button" class="btn btn-outline btn-sm" title="Edit this receipt — discount, amount, mode (admin, reason required, recorded)" onclick="bmhReceiptEditOpen(\'' + k + '\')">✏️ Edit</button>' : '')
       + (e.kind === 'bill' && isAdmin() ? '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" title="Delete this bill (admin)" onclick="bmhBillHistoryVoid(\'' + k + '\')">🗑 Delete</button>' : '')
       + '</div></div>';
   }
